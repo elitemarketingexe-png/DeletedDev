@@ -33,7 +33,8 @@ class PlaybackStateHolderTest {
         userPreferencesRepository = userPreferencesRepository,
         castStateHolder = castStateHolder,
         queueStateHolder = queueStateHolder,
-        appContext = appContext
+        appContext = appContext,
+        appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined)
     )
 
     private fun snapshot(

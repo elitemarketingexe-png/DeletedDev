@@ -3381,15 +3381,8 @@ class PlayerViewModel @Inject constructor(
                 syncDisplayedMediaItemIfChanged(playerCtrl)
             }
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
-                // IMPORTANT: We don't use ExoPlayer's shuffle mode anymore
-                // Instead, we manually shuffle the queue to fix crossfade issues
-                // If ExoPlayer's shuffle gets enabled (e.g., from media button), turn it off and use our toggle
-                if (shuffleModeEnabled) {
-                    playerCtrl.shuffleModeEnabled = false
-                    // Trigger our manual shuffle instead
-                    if (!playbackStateHolder.stablePlayerState.value.isShuffleEnabled) {
-                        toggleShuffle()
-                    }
+                if (playbackStateHolder.stablePlayerState.value.isShuffleEnabled != shuffleModeEnabled) {
+                    toggleShuffle()
                 }
             }
             override fun onRepeatModeChanged(repeatMode: Int) {
@@ -3739,6 +3732,10 @@ class PlayerViewModel @Inject constructor(
                         preparedPlaybackQueue.mediaItems,
                         preparedPlaybackQueue.startIndex,
                         0L
+                    )
+                    enginePlayer.shuffleModeEnabled = playbackStateHolder.stablePlayerState.value.isShuffleEnabled
+                    (enginePlayer as? androidx.media3.exoplayer.ExoPlayer)?.setShuffleOrder(
+                        androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(IntArray(preparedPlaybackQueue.mediaItems.size) { it }, System.currentTimeMillis())
                     )
                     enginePlayer.prepare()
                     enginePlayer.play()

@@ -25,6 +25,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import com.unshoo.pixelmusic.data.model.Song
 import com.google.android.gms.cast.MediaStatus
+import com.unshoo.pixelmusic.di.AppScope
 import timber.log.Timber
 import com.unshoo.pixelmusic.utils.QueueUtils
 import com.unshoo.pixelmusic.utils.MediaItemBuilder
@@ -36,7 +37,8 @@ class PlaybackStateHolder @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val castStateHolder: CastStateHolder,
     private val queueStateHolder: QueueStateHolder,
-    @param:ApplicationContext private val appContext: Context
+    @param:ApplicationContext private val appContext: Context,
+    @AppScope private val appScope: CoroutineScope
 ) {
     companion object {
         private const val TAG = "PlaybackStateHolder"
@@ -63,7 +65,7 @@ class PlaybackStateHolder @Inject constructor(
         private const val SHUFFLE_TOGGLE_COOLDOWN_MS = 400L
     }
 
-    private var scope: CoroutineScope? = null
+    private val scope: CoroutineScope = appScope
     
     // MediaController
     var mediaController: MediaController? = null
@@ -130,8 +132,7 @@ class PlaybackStateHolder @Inject constructor(
     }
 
     fun initialize(coroutineScope: CoroutineScope) {
-        this.scope = coroutineScope
-        scope?.launch {
+        coroutineScope.launch {
             val snapshot = runCatching {
                 userPreferencesRepository.getPlaybackQueueSnapshotOnce()
             }.getOrNull() ?: return@launch
@@ -755,6 +756,13 @@ class PlaybackStateHolder @Inject constructor(
                         // Apply shuffled queue atomically and smoothly
                         applyNewQueueToPlayer(shuffledQueue, safeCurrentIndex)
 
+                        withContext(Dispatchers.Main) {
+                            player.shuffleModeEnabled = true
+                            (player as? androidx.media3.exoplayer.ExoPlayer)?.setShuffleOrder(
+                                androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(IntArray(shuffledQueue.size) { it }, System.currentTimeMillis())
+                            )
+                        }
+
                         updateQueueCallback(shuffledQueue)
                         _stablePlayerState.update { it.copy(isShuffleEnabled = true) }
 
@@ -801,6 +809,10 @@ class PlaybackStateHolder @Inject constructor(
 
                         // Apply original queue atomically and smoothly
                         applyNewQueueToPlayer(cappedOriginalQueue, safeOriginalIndex)
+
+                        withContext(Dispatchers.Main) {
+                            player.shuffleModeEnabled = false
+                        }
 
                         updateQueueCallback(cappedOriginalQueue)
                         _stablePlayerState.update { it.copy(isShuffleEnabled = false) }

@@ -410,12 +410,12 @@ fun HomeScreen(
                         YourMixHeader(
                             song = yourMixSong,
                             isShuffleEnabled = isShuffleEnabled,
-                            onPlayShuffled = {
-                                val songsToUse = quickPicks.ifEmpty { yourMixSongs }
-                                if (songsToUse.isNotEmpty()) {
-                                    playerViewModel.playQuickPicksRadio(songsToUse)
-                                }
-                            }
+                             onPlayShuffled = {
+                                 val songsToUse = quickPicks.ifEmpty { yourMixSongs }
+                                 if (songsToUse.isNotEmpty()) {
+                                     playerViewModel.playSongsShuffled(songsToUse, "Your Mix")
+                                 }
+                             }
                         )
                     }
                 }

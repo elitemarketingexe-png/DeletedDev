@@ -1331,6 +1331,7 @@ class MusicService : MediaLibraryService() {
         override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
             Timber.tag("MusicService")
                 .d("playerListener.onShuffleModeEnabledChanged: $shuffleModeEnabled")
+            clearLastShuffleTimelineCache()
             if (shuffleModeEnabled) {
                 applyCurrentFirstShuffleOrder()
             }
@@ -2968,22 +2969,30 @@ class MusicService : MediaLibraryService() {
     }
 
     private var isApplyingShuffleOrder = false
+    private var lastShuffleTimelineSize = -1
+    private var lastShuffleFirstItemId: String? = null
+    private var lastShuffleMediaItemIds: List<String>? = null
+
+    private fun clearLastShuffleTimelineCache() {
+        lastShuffleTimelineSize = -1
+        lastShuffleFirstItemId = null
+        lastShuffleMediaItemIds = null
+    }
+
+    private fun getMediaItemIds(player: Player): List<String> {
+        val count = player.mediaItemCount
+        return List(count) { idx -> player.getMediaItemAt(idx).mediaId }
+    }
+
     private fun applyCurrentFirstShuffleOrder() {
         if (isApplyingShuffleOrder) return
         val player = mediaSession?.player ?: engine.masterPlayer
         val count = player.mediaItemCount
         if (count <= 1) return
+
         isApplyingShuffleOrder = true
         try {
-            val currentIndex = player.currentMediaItemIndex.coerceIn(0, count - 1)
             val shuffledIndices = IntArray(count) { it }
-            shuffledIndices.shuffle()
-            val currentPos = shuffledIndices.indexOf(currentIndex)
-            if (currentPos >= 0 && currentPos != 0) {
-                val temp = shuffledIndices[0]
-                shuffledIndices[0] = currentIndex
-                shuffledIndices[currentPos] = temp
-            }
             (player as? androidx.media3.exoplayer.ExoPlayer)?.setShuffleOrder(
                 androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(shuffledIndices, System.currentTimeMillis())
             )

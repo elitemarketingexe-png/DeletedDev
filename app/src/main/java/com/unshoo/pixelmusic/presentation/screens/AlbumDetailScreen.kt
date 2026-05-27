@@ -369,8 +369,7 @@ fun AlbumDetailScreen(
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
                                 if (songs.isNotEmpty()) {
-                                    val randomSong = songs.random()
-                                    playerViewModel.showAndPlaySong(randomSong, songs)
+                                    playerViewModel.playSongsShuffled(songs, album.title)
                                 }
                             }
                         )
@@ -389,8 +388,7 @@ fun AlbumDetailScreen(
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
                                 if (songs.isNotEmpty()) {
-                                    val randomSong = songs.random()
-                                    playerViewModel.showAndPlaySong(randomSong, songs)
+                                    playerViewModel.playSongsShuffled(songs, album.title)
                                 }
                             }
                         )

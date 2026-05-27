@@ -568,7 +568,7 @@ fun ArtistDetailScreen(
                                         artist.name
                                     )
                                 } else if (songs.isNotEmpty()) {
-                                    playerViewModel.playSongs(songs, songs.first(), artist.name)
+                                    playerViewModel.playSongsShuffled(songs, artist.name)
                                 }
                             },
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
@@ -593,7 +593,7 @@ fun ArtistDetailScreen(
                                         artist.name
                                     )
                                 } else if (songs.isNotEmpty()) {
-                                    playerViewModel.playSongs(songs, songs.first(), artist.name)
+                                    playerViewModel.playSongsShuffled(songs, artist.name)
                                 }
                             },
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
