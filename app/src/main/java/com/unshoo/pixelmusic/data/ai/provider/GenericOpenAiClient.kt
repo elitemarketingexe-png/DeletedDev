@@ -82,7 +82,7 @@ class GenericOpenAiClient(
                 .addHeader("Content-Type", "application/json")
             
             if (providerName.equals("OpenRouter", ignoreCase = true)) {
-                requestBuilder.addHeader("HTTP-Referer", "https://github.com/theovilardo/PixelMusic")
+                requestBuilder.addHeader("HTTP-Referer", "https://github.com/ianshulyadav/PixelMusic")
                 requestBuilder.addHeader("X-Title", "PixelMusic")
             }
 
