@@ -101,7 +101,8 @@ object LyricCleaner {
 fun ShareBottomSheet(
     song: Song,
     onDismiss: () -> Unit,
-    onAddToPlaylist: () -> Unit
+    onAddToPlaylist: () -> Unit,
+    colorScheme: ColorScheme = MaterialTheme.colorScheme
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -133,11 +134,12 @@ fun ShareBottomSheet(
     val instagramInstalled = remember { isPackageInstalled(context, INSTAGRAM_PACKAGE) }
 
     // Primary player theme colors
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
-    val primaryContainerColor = MaterialTheme.colorScheme.primaryContainer
-    val onPrimaryContainerColor = MaterialTheme.colorScheme.onPrimaryContainer
-    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val primaryColor = colorScheme.primary
+    val onPrimaryColor = colorScheme.onPrimary
+    val primaryContainerColor = colorScheme.primaryContainer
+    val onPrimaryContainerColor = colorScheme.onPrimaryContainer
+    val secondaryColor = colorScheme.secondary
+    val tertiaryColor = colorScheme.tertiary
     val cardShape = AbsoluteSmoothCornerShape(
         cornerRadiusTR = 24.dp, smoothnessAsPercentBR = 60,
         cornerRadiusBR = 24.dp, smoothnessAsPercentTL = 60,
@@ -170,36 +172,52 @@ fun ShareBottomSheet(
         file
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = AbsoluteSmoothCornerShape(
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = MaterialTheme.typography,
+        shapes = MaterialTheme.shapes
+    ) {
+        val sheetShape = AbsoluteSmoothCornerShape(
             cornerRadiusTR = 28.dp, smoothnessAsPercentBR = 60,
             cornerRadiusBR = 0.dp, smoothnessAsPercentTL = 60,
             cornerRadiusTL = 28.dp, smoothnessAsPercentBL = 60,
             cornerRadiusBL = 0.dp, smoothnessAsPercentTR = 60
-        ),
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp, bottom = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
+        )
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = sheetState,
+            containerColor = Color.Transparent,
+            shape = sheetShape,
+            dragHandle = {
                 Box(
                     modifier = Modifier
-                        .width(40.dp)
-                        .height(4.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
-                )
+                        .fillMaxWidth()
+                        .padding(top = 12.dp, bottom = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+                    )
+                }
             }
-        }
-    ) {
+        ) {
         CompositionLocalProvider(LocalOverscrollFactory provides null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clip(sheetShape)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                colorScheme.surfaceContainerLow,
+                                colorScheme.surfaceContainerLowest
+                            )
+                        )
+                    )
                     .verticalScroll(rememberScrollState())
                     .padding(bottom = 32.dp)
             ) {
@@ -303,9 +321,7 @@ fun ShareBottomSheet(
                             isLyricsMode = mode == 1,
                             selectedLyrics = lyricsList,
                             themeStyle = activeThemeStyle,
-                            primaryColor = primaryColor,
-                            primaryContainerColor = primaryContainerColor,
-                            onPrimaryContainerColor = onPrimaryContainerColor,
+                            colorScheme = colorScheme,
                             cardShape = cardShape
                         )
                     }
@@ -401,8 +417,8 @@ fun ShareBottomSheet(
                                                     brush = Brush.linearGradient(
                                                         colors = listOf(
                                                             primaryColor,
-                                                            MaterialTheme.colorScheme.secondary,
-                                                            MaterialTheme.colorScheme.tertiary
+                                                            secondaryColor,
+                                                            tertiaryColor
                                                         )
                                                     )
                                                 )
@@ -649,6 +665,7 @@ fun ShareBottomSheet(
             }
         }
     }
+    }
 
     // Capture overlay
     if (isCapturing) {
@@ -673,12 +690,15 @@ private fun ShareableCard(
     isLyricsMode: Boolean,
     selectedLyrics: List<String>,
     themeStyle: ShareThemeStyle,
-    primaryColor: Color,
-    primaryContainerColor: Color,
-    onPrimaryContainerColor: Color,
+    colorScheme: ColorScheme,
     cardShape: Shape
 ) {
     val cardRatio = 9f / 16f
+    val primaryColor = colorScheme.primary
+    val primaryContainerColor = colorScheme.primaryContainer
+    val onPrimaryContainerColor = colorScheme.onPrimaryContainer
+    val secondaryColor = colorScheme.secondary
+    val tertiaryColor = colorScheme.tertiary
 
     Box(
         modifier = modifier
@@ -755,8 +775,8 @@ private fun ShareableCard(
                             brush = Brush.linearGradient(
                                 colors = listOf(
                                     primaryColor,
-                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f),
-                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)
+                                    secondaryColor.copy(alpha = 0.8f),
+                                    tertiaryColor.copy(alpha = 0.6f)
                                 )
                             )
                         )
@@ -780,7 +800,7 @@ private fun ShareableCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 32.dp),
+                .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -801,8 +821,7 @@ private fun ShareableCard(
                 if (!isLyricsMode) {
                     // SONG SHARE CARD
                     Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(10.dp),
                         horizontalAlignment = Alignment.Start
                     ) {
                         // Square Album Art
@@ -810,8 +829,8 @@ private fun ShareableCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .aspectRatio(1f)
-                                .shadow(12.dp, shape = RoundedCornerShape(16.dp), clip = true)
-                                .clip(RoundedCornerShape(16.dp))
+                                .shadow(8.dp, shape = RoundedCornerShape(12.dp), clip = true)
+                                .clip(RoundedCornerShape(12.dp))
                         ) {
                             SmartImage(
                                 model = song.albumArtUriString,
@@ -821,16 +840,18 @@ private fun ShareableCard(
                             )
                         }
 
+                        Spacer(Modifier.height(8.dp))
+
                         // Song Details
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = song.title,
                                 fontFamily = GoogleSansRounded,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp,
+                                fontSize = 17.sp,
                                 color = Color.White,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -839,40 +860,33 @@ private fun ShareableCard(
                                 text = song.displayArtist,
                                 fontFamily = GoogleSansRounded,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 14.sp,
+                                fontSize = 12.sp,
                                 color = Color.White.copy(alpha = 0.65f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
 
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(8.dp))
 
                         // Official Branding Row
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Box(
+                            Icon(
+                                painter = painterResource(R.mipmap.ic_launcher),
+                                contentDescription = null,
+                                tint = Color.Unspecified,
                                 modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(primaryColor)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.rounded_music_note_24),
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier
-                                        .padding(4.dp)
-                                        .fillMaxSize()
-                                )
-                            }
+                                    .size(18.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                            )
                             Text(
                                 text = "PixelMusic",
                                 fontFamily = GoogleSansRounded,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
+                                fontSize = 11.sp,
                                 color = Color.White
                             )
                         }
@@ -880,8 +894,7 @@ private fun ShareableCard(
                 } else {
                     // LYRICS SHARE CARD
                     Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        modifier = Modifier.padding(12.dp)
                     ) {
                         // Card Header
                         Row(
@@ -893,15 +906,15 @@ private fun ShareableCard(
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(6.dp))
                             )
                             Column {
                                 Text(
                                     text = song.title,
                                     fontFamily = GoogleSansRounded,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
+                                    fontSize = 13.sp,
                                     color = Color.White,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -910,7 +923,7 @@ private fun ShareableCard(
                                     text = song.displayArtist,
                                     fontFamily = GoogleSansRounded,
                                     fontWeight = FontWeight.Medium,
-                                    fontSize = 12.sp,
+                                    fontSize = 11.sp,
                                     color = Color.White.copy(alpha = 0.6f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -918,35 +931,37 @@ private fun ShareableCard(
                             }
                         }
 
+                        Spacer(Modifier.height(8.dp))
+
                         HorizontalDivider(color = Color.White.copy(alpha = 0.12f), thickness = 1.dp)
+
+                        Spacer(Modifier.height(8.dp))
 
                         // Verses Quote Block
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             if (selectedLyrics.isEmpty()) {
                                 Text(
                                     text = "Select lyrics below to share...",
                                     fontFamily = GoogleSansRounded,
                                     fontStyle = FontStyle.Italic,
-                                    fontSize = 16.sp,
+                                    fontSize = 14.sp,
                                     color = Color.White.copy(alpha = 0.4f),
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             } else {
                                 val fontSize = when (selectedLyrics.size) {
-                                    1 -> 24.sp
-                                    2, 3 -> 20.sp
-                                    else -> 17.sp
+                                    1 -> 20.sp
+                                    2, 3 -> 16.sp
+                                    else -> 13.sp
                                 }
                                 val lineHeight = when (selectedLyrics.size) {
-                                    1 -> 32.sp
-                                    2, 3 -> 28.sp
-                                    else -> 24.sp
+                                    1 -> 26.sp
+                                    2, 3 -> 22.sp
+                                    else -> 18.sp
                                 }
                                 selectedLyrics.forEach { line ->
                                     Text(
@@ -964,31 +979,26 @@ private fun ShareableCard(
 
                         Spacer(Modifier.weight(1f))
 
+                        Spacer(Modifier.height(8.dp))
+
                         // App Branding Row
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Box(
+                            Icon(
+                                painter = painterResource(R.mipmap.ic_launcher),
+                                contentDescription = null,
+                                tint = Color.Unspecified,
                                 modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(primaryColor)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.rounded_music_note_24),
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier
-                                        .padding(4.dp)
-                                        .fillMaxSize()
-                                )
-                            }
+                                    .size(18.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                            )
                             Text(
                                 text = "PixelMusic",
                                 fontFamily = GoogleSansRounded,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
+                                fontSize = 11.sp,
                                 color = Color.White
                             )
                         }
@@ -999,33 +1009,54 @@ private fun ShareableCard(
             Spacer(Modifier.height(16.dp))
 
             // ── 3. Snapchat Replicated Link Clip Pill ────────────────────────
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color.Black.copy(alpha = 0.35f))
-                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Link,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(14.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.Black.copy(alpha = 0.35f))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                        .clickable {
+                            try {
+                                uriHandler.openUri(GITHUB_LINK)
+                            } catch (e: Exception) {
+                                // Fallback
+                            }
+                        }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Link,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "PixelMusic",
+                        fontFamily = GoogleSansRounded,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = Color.White
+                    )
+                    Icon(
+                        imageVector = Icons.Rounded.ChevronRight,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
                 Text(
-                    text = "PixelMusic",
+                    text = "github.com/ianshulyadav",
                     fontFamily = GoogleSansRounded,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = Color.White
-                )
-                Icon(
-                    imageVector = Icons.Rounded.ChevronRight,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.size(16.dp)
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 9.sp,
+                    color = Color.White.copy(alpha = 0.4f),
+                    textAlign = TextAlign.Center
                 )
             }
         }
@@ -1235,7 +1266,7 @@ private fun shareToInstagramStory(
     bottomColorHex: String? = null
 ) {
     val intent = Intent("com.instagram.share.ADD_TO_STORY").apply {
-        setDataAndType(imageUri, "image/png")
+        type = "image/png"
         putExtra("interactive_asset_uri", imageUri)
         putExtra("content_url", GITHUB_LINK)
         if (topColorHex != null) {

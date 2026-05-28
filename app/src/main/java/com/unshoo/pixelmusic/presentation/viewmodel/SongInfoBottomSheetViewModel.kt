@@ -219,10 +219,11 @@ class SongInfoBottomSheetViewModel @Inject constructor(
     }
 
     fun loadDownloadState(song: Song) {
+        _isSongDownloaded.value = false
+        _isSongDownloading.value = false
+
         val youtubeId = song.youtubeId
         if (youtubeId == null) {
-            _isSongDownloaded.value = false
-            _isSongDownloading.value = false
             return
         }
 

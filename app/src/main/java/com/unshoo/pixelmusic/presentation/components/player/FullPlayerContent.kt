@@ -1021,7 +1021,8 @@ fun FullPlayerContent(
                 showShareSheet = false
                 showSongInfoBottomSheet = true
                 onShowQueueClicked()
-            }
+            },
+            colorScheme = LocalMaterialTheme.current
         )
     }
 
