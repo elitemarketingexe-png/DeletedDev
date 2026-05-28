@@ -86,6 +86,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v5
@@ -172,7 +174,7 @@ jobs:
               changelog = '<blockquote>New nightly build</blockquote>'
 
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write('changelog<<EOF\n' + changelog + 'EOF\n')
+              f.write('changelog<<EOF\n' + changelog + '\nEOF\n')
           "
 
       - name: Publish Nightly to Telegram Channel
