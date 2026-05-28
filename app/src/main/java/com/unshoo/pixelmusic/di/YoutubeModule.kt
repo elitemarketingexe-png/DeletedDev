@@ -18,6 +18,12 @@ object YoutubeModule {
 
     @Provides
     @Singleton
+    fun provideExoCache(@ApplicationContext context: Context): com.unshoo.pixelmusic.data.remote.youtube.ExoCache {
+        return com.unshoo.pixelmusic.data.remote.youtube.ExoCache(context)
+    }
+
+    @Provides
+    @Singleton
     fun provideDatastoreRepository(@ApplicationContext context: Context): DatastoreRepository {
         return DatastoreRepository(context)
     }

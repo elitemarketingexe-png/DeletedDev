@@ -20,6 +20,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -78,7 +79,8 @@ class DualPlayerEngine @Inject constructor(
 
     private val gdriveStreamProxy: com.unshoo.pixelmusic.data.gdrive.GDriveStreamProxy,
     private val telegramCacheManager: com.unshoo.pixelmusic.data.telegram.TelegramCacheManager,
-    private val connectivityStateHolder: com.unshoo.pixelmusic.presentation.viewmodel.ConnectivityStateHolder
+    private val connectivityStateHolder: com.unshoo.pixelmusic.presentation.viewmodel.ConnectivityStateHolder,
+    private val exoCache: com.unshoo.pixelmusic.data.remote.youtube.ExoCache
 ) {
     private companion object {
         private const val AUDIO_OFFLOAD_BUFFERING_FALLBACK_MS = 4_000L
@@ -663,23 +665,25 @@ class DualPlayerEngine @Inject constructor(
             }
         }
         
-        val dataSourceFactory = DefaultDataSource.Factory(context)
-        val resolvingFactory = ResolvingDataSource.Factory(dataSourceFactory, resolver)
+        val baseDataSourceFactory = DefaultDataSource.Factory(context)
+        val cacheDataSourceFactory = CacheDataSource.Factory()
+            .setCache(exoCache.cache)
+            .setUpstreamDataSourceFactory(baseDataSourceFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+        val resolvingFactory = ResolvingDataSource.Factory(cacheDataSourceFactory, resolver)
         val extractorsFactory = DefaultExtractorsFactory()
             .setMp4ExtractorFlags(Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
 
         val loadControl = DefaultLoadControl.Builder()
-            // ── Tuned for instant YouTube playback ───────────────────────────
-            // minBufferMs: Reduced from 15s to 2s for faster cold-start
-            // bufferForPlaybackMs: Start playback after 500ms buffer (instant feel)
-            // bufferForPlaybackAfterRebufferMs: After stall restart after 1s (user req: min 1s)
+            // ── Spotify-like playback optimization ───────────────────────────
             .setBufferDurationsMs(
-                /* minBufferMs                   = */ 20_000,   // robust background reserve (20s) preventing stalls on slow network
-                /* maxBufferMs                   = */ 50_000,  // buffer up to 50 s
-                /* bufferForPlaybackMs           = */ 500,     // start after 0.5 s (instant feel)
-                /* bufferForPlaybackAfterRebufferMs = */ 1_500 // after stall: restart after 1.5 s
+                /* minBufferMs                      = */ 30_000, // Robust buffer (30s) preventing stalls on slow network
+                /* maxBufferMs                      = */ 60_000, // Buffer up to 60s
+                /* bufferForPlaybackMs              = */ 500,    // Start play after 0.5s for instant startup
+                /* bufferForPlaybackAfterRebufferMs = */ 2_000   // After stall, buffer 2.0s before resuming
             )
-            .setBackBuffer(15_000, /* retainBackBufferFromKeyframe = */ true)
+            .setBackBuffer(30_000, /* retainBackBufferFromKeyframe = */ true) // Cache 30s backwards for instant replay seeking
             .build()
 
         return ExoPlayer.Builder(context, renderersFactory)

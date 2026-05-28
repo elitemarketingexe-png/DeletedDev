@@ -1,10 +1,17 @@
 package com.unshoo.pixelmusic.data.remote.youtube
 
 import android.content.Context
+import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.FileDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheWriter
 import com.unshoo.pixelmusic.data.model.youtube.Song
 import com.unshoo.pixelmusic.data.remote.youtube.UmihiHelper.printd
 import com.unshoo.pixelmusic.data.remote.youtube.UmihiHelper.printe
@@ -37,6 +44,7 @@ object QueuePreloadManager {
     private var appContext: Context? = null
     private var datastoreRepository: DatastoreRepository? = null
     private var playerRef: Player? = null
+    private var exoCache: ExoCache? = null
 
     private val playerListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -48,12 +56,14 @@ object QueuePreloadManager {
         player: Player,
         context: Context,
         datastoreRepo: DatastoreRepository,
-        coroutineScope: CoroutineScope
+        coroutineScope: CoroutineScope,
+        exoCacheInstance: ExoCache
     ) {
         scope = coroutineScope
         appContext = context.applicationContext
         datastoreRepository = datastoreRepo
         playerRef = player
+        exoCache = exoCacheInstance
         player.addListener(playerListener)
         printd("QueuePreloadManager attached")
     }
@@ -65,6 +75,7 @@ object QueuePreloadManager {
         scope = null
         appContext = null
         datastoreRepository = null
+        exoCache = null
     }
 
     fun updatePlayer(newPlayer: Player) {
@@ -118,11 +129,17 @@ object QueuePreloadManager {
                 )
 
                 // 1. Preload stream URL (saves to DB so next play is instant)
+                var streamUrl: String? = null
                 try {
-                    YoutubeHelper.getSongPlayerUrl(ctx, song, allowLocal = false)
+                    streamUrl = YoutubeHelper.getSongPlayerUrl(ctx, song, allowLocal = false)
                     printd("QueuePreloadManager: preloaded stream URL for $videoId")
                 } catch (e: Exception) {
                     printe("QueuePreloadManager: failed to preload stream for $videoId: ${e.message}")
+                }
+
+                // 1b. Prefetch first 512KB of the audio stream
+                if (!streamUrl.isNullOrBlank() && streamUrl.startsWith("http")) {
+                    prefetchAudioBytes(ctx, videoId, streamUrl)
                 }
 
                 // 2. Preload album art to thumbnail cache directory
@@ -149,6 +166,38 @@ object QueuePreloadManager {
                 // Small delay between preloads to avoid hammering the network
                 delay(500)
             }
+        }
+    }
+
+    private fun prefetchAudioBytes(ctx: Context, videoId: String, streamUrl: String) {
+        val cache = exoCache?.cache ?: return
+        try {
+            val uri = Uri.parse(streamUrl)
+            val baseDataSourceFactory = DefaultDataSource.Factory(ctx)
+            val cacheDataSourceFactory = CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(baseDataSourceFactory)
+                .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+            val dataSource = cacheDataSourceFactory.createDataSource()
+            val dataSpec = DataSpec.Builder()
+                .setUri(uri)
+                .setPosition(0)
+                .setLength(512 * 1024)
+                .build()
+
+            val cacheWriter = CacheWriter(
+                dataSource,
+                dataSpec,
+                null,
+                null
+            )
+
+            printd("QueuePreloadManager: starting audio prefetch (512KB) for $videoId")
+            cacheWriter.cache()
+            printd("QueuePreloadManager: completed audio prefetch (512KB) for $videoId")
+        } catch (e: Exception) {
+            printe("QueuePreloadManager: failed to prefetch audio bytes for $videoId: ${e.message}")
         }
     }
 }

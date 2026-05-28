@@ -135,7 +135,10 @@ data class SettingsUiState(
     val hideVideo: Boolean = false,
     val topSize: String = "50",
     val discover: QuickPicks = QuickPicks.QUICK_PICKS,
-    val quickPicksDisplayMode: QuickPicksDisplayMode = QuickPicksDisplayMode.LIST
+    val quickPicksDisplayMode: QuickPicksDisplayMode = QuickPicksDisplayMode.LIST,
+    val ytUsername: String = "",
+    val ytHandle: String = "",
+    val ytAvatarUrl: String = ""
 )
 
 data class FailedSongInfo(
@@ -815,6 +818,21 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.quickPicksDisplayModeFlow.collect { value ->
                 _uiState.update { it.copy(quickPicksDisplayMode = value) }
+            }
+        }
+        viewModelScope.launch {
+            datastoreRepository.ytUsername.collect { value ->
+                _uiState.update { it.copy(ytUsername = value) }
+            }
+        }
+        viewModelScope.launch {
+            datastoreRepository.ytHandle.collect { value ->
+                _uiState.update { it.copy(ytHandle = value) }
+            }
+        }
+        viewModelScope.launch {
+            datastoreRepository.ytAvatarUrl.collect { value ->
+                _uiState.update { it.copy(ytAvatarUrl = value) }
             }
         }
     }

@@ -40,6 +40,9 @@ open class DatastoreRepository(private val context: Context) {
         val PRELOAD_QUEUE_ENABLED = booleanPreferencesKey("preload_queue_enabled")
         val PRELOAD_QUEUE_SIZE = intPreferencesKey("preload_queue_size")
         val PERSISTENT_QUEUE = stringPreferencesKey("persistent_queue")
+        val YT_USERNAME = stringPreferencesKey("yt_username")
+        val YT_HANDLE = stringPreferencesKey("yt_handle")
+        val YT_AVATAR_URL = stringPreferencesKey("yt_avatar_url")
     }
 
     suspend fun <T> save(key: Preferences.Key<T>, value: T) {
@@ -105,6 +108,26 @@ open class DatastoreRepository(private val context: Context) {
 
     val dataSyncId = context.youtubeDataStore.data.map {
         it[PreferenceKeys.DATA_SYNC_ID] ?: ""
+    }
+
+    val ytUsername = context.youtubeDataStore.data.map {
+        it[PreferenceKeys.YT_USERNAME] ?: ""
+    }
+
+    val ytHandle = context.youtubeDataStore.data.map {
+        it[PreferenceKeys.YT_HANDLE] ?: ""
+    }
+
+    val ytAvatarUrl = context.youtubeDataStore.data.map {
+        it[PreferenceKeys.YT_AVATAR_URL] ?: ""
+    }
+
+    suspend fun saveYtProfile(name: String, handle: String, avatarUrl: String) {
+        context.youtubeDataStore.edit {
+            it[PreferenceKeys.YT_USERNAME] = name
+            it[PreferenceKeys.YT_HANDLE] = handle
+            it[PreferenceKeys.YT_AVATAR_URL] = avatarUrl
+        }
     }
 
     suspend fun saveCookies(cookies: Cookies) {

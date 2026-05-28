@@ -97,6 +97,7 @@ import com.unshoo.pixelmusic.di.AppScope
 import com.unshoo.pixelmusic.presentation.viewmodel.ListeningStatsTracker
 import com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager
 import com.unshoo.pixelmusic.data.remote.youtube.QueuePreloadManager
+import com.unshoo.pixelmusic.data.remote.youtube.ExoCache
 import com.unshoo.pixelmusic.data.remote.youtube.DatastoreRepository as YoutubeDatastoreRepository
 import kotlin.math.abs
 import java.io.ByteArrayOutputStream
@@ -149,6 +150,8 @@ class MusicService : MediaLibraryService() {
     lateinit var appScope: CoroutineScope
     @Inject
     lateinit var youtubeDatastoreRepository: YoutubeDatastoreRepository
+    @Inject
+    lateinit var exoCache: ExoCache
     @Inject
     lateinit var engagementDao: com.unshoo.pixelmusic.data.database.EngagementDao
 
@@ -419,7 +422,7 @@ class MusicService : MediaLibraryService() {
 
         // Attach YouTube radio-mode auto-queue and stream-URL preloader
         AutoQueueManager.attach(engine.masterPlayer, this, youtubeDatastoreRepository, serviceScope, musicDao, engagementDao)
-        QueuePreloadManager.attach(engine.masterPlayer, this, youtubeDatastoreRepository, serviceScope)
+        QueuePreloadManager.attach(engine.masterPlayer, this, youtubeDatastoreRepository, serviceScope, exoCache)
 
         controller.initialize()
         initializeCastWearSync()

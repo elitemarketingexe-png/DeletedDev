@@ -63,6 +63,9 @@ android {
                 "META-INF/LICENSE.txt"
             )
         }
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     defaultConfig {

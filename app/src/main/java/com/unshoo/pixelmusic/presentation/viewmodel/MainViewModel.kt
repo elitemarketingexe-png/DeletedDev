@@ -31,6 +31,29 @@ class MainViewModel @Inject constructor(
                 val rawCookie = cookies.toRawCookie()
                 unshoo.ianshulyadav.pixelmusic.innertube.YouTube.cookie = rawCookie
                 LogUtils.d(this@MainViewModel, "MainViewModel: Syncing cookies to YouTube singleton. Size = ${rawCookie.length}")
+                if (rawCookie.isNotEmpty()) {
+                    viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        try {
+                            unshoo.ianshulyadav.pixelmusic.innertube.YouTube.accountInfo()
+                                .onSuccess { info ->
+                                    datastoreRepository.saveYtProfile(
+                                        name = info.name,
+                                        handle = info.channelHandle ?: "",
+                                        avatarUrl = info.thumbnailUrl ?: ""
+                                    )
+                                }
+                                .onFailure { e ->
+                                    LogUtils.e(this@MainViewModel, e, "Failed to fetch YouTube account info")
+                                }
+                        } catch (e: Exception) {
+                            LogUtils.e(this@MainViewModel, e, "Error fetching YouTube account info")
+                        }
+                    }
+                } else {
+                    viewModelScope.launch {
+                        datastoreRepository.saveYtProfile("", "", "")
+                    }
+                }
             }
         }
         viewModelScope.launch {

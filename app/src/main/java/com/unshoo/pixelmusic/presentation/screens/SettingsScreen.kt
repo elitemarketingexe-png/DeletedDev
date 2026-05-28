@@ -80,6 +80,9 @@ import com.unshoo.pixelmusic.presentation.model.SettingsCategory
 import com.unshoo.pixelmusic.presentation.navigation.Screen
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.SettingsViewModel
+import com.unshoo.pixelmusic.presentation.viewmodel.SettingsUiState
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -212,6 +215,7 @@ fun SettingsScreen(
         ) {
             item {
                 ProfileHeaderCard(
+                    uiState = uiState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 4.dp)
@@ -515,7 +519,10 @@ private fun getCategoryColors(category: SettingsCategory, isDark: Boolean): Pair
 }
 
 @Composable
-private fun ProfileHeaderCard(modifier: Modifier = Modifier) {
+private fun ProfileHeaderCard(
+    uiState: SettingsUiState,
+    modifier: Modifier = Modifier
+) {
     val primary = MaterialTheme.colorScheme.primary
     val onPrimary = MaterialTheme.colorScheme.onPrimary
     val primaryContainer = MaterialTheme.colorScheme.primaryContainer
@@ -531,6 +538,11 @@ private fun ProfileHeaderCard(modifier: Modifier = Modifier) {
         )
     }
 
+    val hasProfile = uiState.ytUsername.isNotEmpty()
+    val nameText = if (hasProfile) uiState.ytUsername else "Guest User"
+    val handleText = if (hasProfile) uiState.ytHandle else "Sign in to sync"
+    val avatarUrl = if (hasProfile) uiState.ytAvatarUrl else ""
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(28.dp),
@@ -544,7 +556,7 @@ private fun ProfileHeaderCard(modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Avatar circle with gradient and initial letter
+            // Avatar circle with gradient and initial letter OR AsyncImage
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -552,12 +564,22 @@ private fun ProfileHeaderCard(modifier: Modifier = Modifier) {
                     .clip(CircleShape)
                     .background(avatarGradient)
             ) {
-                Text(
-                    text = "A",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = onPrimary
-                )
+                if (avatarUrl.isNotEmpty()) {
+                    AsyncImage(
+                        model = avatarUrl,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    val initial = nameText.firstOrNull()?.toString()?.uppercase() ?: "G"
+                    Text(
+                        text = initial,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = onPrimary
+                    )
+                }
             }
 
             // Name + handle
@@ -566,7 +588,7 @@ private fun ProfileHeaderCard(modifier: Modifier = Modifier) {
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
-                    text = "Yo! ANSHU",
+                    text = nameText,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = onSurface,
@@ -574,7 +596,7 @@ private fun ProfileHeaderCard(modifier: Modifier = Modifier) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "@Yo_Anshu",
+                    text = handleText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = onSurfaceVariant,
                     maxLines = 1,
