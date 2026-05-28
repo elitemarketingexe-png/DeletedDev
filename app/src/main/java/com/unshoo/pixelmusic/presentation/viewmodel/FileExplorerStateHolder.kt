@@ -417,7 +417,18 @@ class FileExplorerStateHolder(
                         )
                     }
                     .sortedWith(compareBy({ it.file.name.lowercase() }))
-                val enrichedEntries = mediaStoreEntries
+                
+                val enrichedEntries = if (currentEntries.isNotEmpty()) {
+                    currentEntries.map { raw ->
+                        val key = raw.canonicalPath
+                        raw.copy(
+                            directAudioCount = index.directAudioCountByPath[key] ?: 0,
+                            totalAudioCount = index.totalAudioCountByPath[key] ?: 0
+                        )
+                    }
+                } else {
+                    mediaStoreEntries
+                }
 
                 directoryChildrenCache[targetKey] = enrichedEntries
                 resolvedDirectoryKeys.add(targetKey)
@@ -428,6 +439,22 @@ class FileExplorerStateHolder(
                 }
             } catch (error: CancellationException) {
                 throw error
+            } catch (e: Exception) {
+                android.util.Log.e("FileExplorerStateHolder", "Error enriching directory entries", e)
+                if (currentEntries.isNotEmpty()) {
+                    val enrichedEntries = currentEntries.map { raw ->
+                        raw.copy(
+                            directAudioCount = 0,
+                            totalAudioCount = 0
+                        )
+                    }
+                    directoryChildrenCache[targetKey] = enrichedEntries
+                    resolvedDirectoryKeys.add(targetKey)
+                    if (normalizePath(_currentPath.value) == targetKey) {
+                        _rawCurrentDirectoryChildren.value = enrichedEntries
+                        _isCurrentDirectoryResolved.value = true
+                    }
+                }
             } finally {
                 countEnrichmentJobs.remove(targetKey)
             }
@@ -458,52 +485,53 @@ class FileExplorerStateHolder(
         val childrenByParent = mutableMapOf<String, MutableSet<String>>()
         val directAudioCountByPath = mutableMapOf<String, Int>()
         val totalAudioCountByPath = mutableMapOf<String, Int>()
-        val storageRoots = (_availableStorages.value.ifEmpty { StorageUtils.getAvailableStorages(context) })
-            .map { normalizePath(it.path) }
-            .sortedByDescending { it.length }
+        
+        try {
+            val storageRoots = (_availableStorages.value.ifEmpty { StorageUtils.getAvailableStorages(context) })
+                .map { normalizePath(it.path) }
+                .toMutableList()
+            if (storageRoots.isEmpty()) {
+                storageRoots.add(normalizePath(Environment.getExternalStorageDirectory()))
+            }
+            storageRoots.sortByDescending { it.length }
 
-        if (storageRoots.isEmpty()) {
-            return@withContext MediaStoreDirectoryIndex(
-                childrenByParent = emptyMap(),
-                directAudioCountByPath = emptyMap(),
-                totalAudioCountByPath = emptyMap()
-            )
-        }
+            val minDurationMs = userPreferencesRepository.minSongDurationFlow.first()
+            val (selection, selectionArgs) = buildLocalAudioSelection(minDurationMs)
+            val projection = arrayOf(MediaStore.Audio.Media.DATA)
 
-        val minDurationMs = userPreferencesRepository.minSongDurationFlow.first()
-        val (selection, selectionArgs) = buildLocalAudioSelection(minDurationMs)
-        val projection = arrayOf(MediaStore.Audio.Media.DATA)
+            context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selection,
+                selectionArgs,
+                null
+            )?.use { cursor ->
+                val dataIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                while (cursor.moveToNext()) {
+                    val songPath = cursor.getString(dataIndex) ?: continue
+                    val parentFile = File(songPath).parentFile ?: continue
+                    val parentPath = normalizePath(parentFile)
+                    val storageRoot = storageRoots.firstOrNull { parentPath == it || parentPath.startsWith("$it/") } ?: continue
 
-        context.contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selection,
-            selectionArgs,
-            null
-        )?.use { cursor ->
-            val dataIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-            while (cursor.moveToNext()) {
-                val songPath = cursor.getString(dataIndex) ?: continue
-                val parentFile = File(songPath).parentFile ?: continue
-                val parentPath = normalizePath(parentFile)
-                val storageRoot = storageRoots.firstOrNull { parentPath == it || parentPath.startsWith("$it/") } ?: continue
+                    if (parentPath.contains("/.")) continue
 
-                if (parentPath.contains("/.")) continue
+                    directAudioCountByPath[parentPath] = (directAudioCountByPath[parentPath] ?: 0) + 1
 
-                directAudioCountByPath[parentPath] = (directAudioCountByPath[parentPath] ?: 0) + 1
+                    var currentPath = parentPath
+                    while (true) {
+                        totalAudioCountByPath[currentPath] = (totalAudioCountByPath[currentPath] ?: 0) + 1
+                        if (currentPath == storageRoot) break
 
-                var currentPath = parentPath
-                while (true) {
-                    totalAudioCountByPath[currentPath] = (totalAudioCountByPath[currentPath] ?: 0) + 1
-                    if (currentPath == storageRoot) break
+                        val parentOfCurrent = File(currentPath).parentFile?.let(::normalizePath) ?: break
+                        if (parentOfCurrent != storageRoot && !currentPath.startsWith("$storageRoot/")) break
 
-                    val parentOfCurrent = File(currentPath).parentFile?.let(::normalizePath) ?: break
-                    if (parentOfCurrent != storageRoot && !currentPath.startsWith("$storageRoot/")) break
-
-                    childrenByParent.getOrPut(parentOfCurrent) { linkedSetOf() }.add(currentPath)
-                    currentPath = parentOfCurrent
+                        childrenByParent.getOrPut(parentOfCurrent) { linkedSetOf() }.add(currentPath)
+                        currentPath = parentOfCurrent
+                    }
                 }
             }
+        } catch (e: Exception) {
+            android.util.Log.e("FileExplorerStateHolder", "Error building MediaStore directory index", e)
         }
 
         MediaStoreDirectoryIndex(

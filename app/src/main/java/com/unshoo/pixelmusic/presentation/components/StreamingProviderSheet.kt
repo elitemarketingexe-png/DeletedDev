@@ -2,6 +2,7 @@ package com.unshoo.pixelmusic.presentation.components
 
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -210,12 +211,20 @@ private fun ProviderRow(
                         .background(iconTint.copy(alpha = if (enabled) 0.14f else 0.1f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        painter = iconPainter,
-                        contentDescription = null,
-                        modifier = Modifier.size(22.dp),
-                        tint = iconTint
-                    )
+                    if (title == "YouTube Music") {
+                        Image(
+                            painter = iconPainter,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    } else {
+                        Icon(
+                            painter = iconPainter,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                            tint = iconTint
+                        )
+                    }
                 }
             },
             trailingContent = {

@@ -88,12 +88,9 @@ jobs:
           except Exception as e:
               commits = ['New release build']
 
-          changelog = ''
-          for c in commits:
-              escaped = html.escape(c)
-              changelog += f'<blockquote>{escaped}</blockquote>\n'
-
-          if not changelog:
+          if commits:
+              changelog = '<blockquote>' + '\n'.join(html.escape(c) for c in commits) + '</blockquote>'
+          else:
               changelog = '<blockquote>New release build</blockquote>'
 
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:

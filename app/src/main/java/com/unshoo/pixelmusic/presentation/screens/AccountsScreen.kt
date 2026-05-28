@@ -61,6 +61,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -746,15 +747,13 @@ private fun YouTubeAccountCard(
             ) {
                 Surface(
                     shape = AbsoluteSmoothCornerShape(16.dp, 60),
-                    color = Color.White.copy(alpha = 0.15f)
+                    color = Color.Transparent
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.MusicNote,
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_youtube),
                         contentDescription = null,
-                        tint = Color.White,
                         modifier = Modifier
-                            .padding(10.dp)
-                            .size(20.dp)
+                            .size(40.dp)
                     )
                 }
 
@@ -792,7 +791,7 @@ private fun YouTubeAccountCard(
                 }
             }
 
-            if (isConnected && account != null) {
+            if (isConnected) {
                 Surface(
                     shape = AbsoluteSmoothCornerShape(14.dp, 60),
                     color = Color.White.copy(alpha = 0.1f)

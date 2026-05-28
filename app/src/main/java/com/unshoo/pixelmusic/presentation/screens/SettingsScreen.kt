@@ -32,19 +32,25 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Logout
+import androidx.compose.material.icons.rounded.PersonAdd
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -136,6 +142,7 @@ fun SettingsScreen(
     val useSmoothCorners by settingsViewModel.useSmoothCorners.collectAsStateWithLifecycle()
 
     var showCornerRadiusOverlay by remember { mutableStateOf(false) }
+    var showAccountDialog by remember { mutableStateOf(false) }
 
     val topBarHeight = remember { Animatable(maxTopBarHeightPx) }
     var collapseFraction by remember { mutableStateOf(0f) }
@@ -216,6 +223,13 @@ fun SettingsScreen(
             item {
                 ProfileHeaderCard(
                     uiState = uiState,
+                    onClick = {
+                        if (uiState.ytUsername.isNotEmpty()) {
+                            showAccountDialog = true
+                        } else {
+                            navController.navigateSafely(Screen.YoutubeAuth.route)
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 4.dp)
@@ -319,6 +333,188 @@ fun SettingsScreen(
                         while (true) {
                             awaitPointerEvent()
                         }
+                    }
+                }
+            )
+        }
+
+        if (showAccountDialog && uiState.ytUsername.isNotEmpty()) {
+            val nameText = uiState.ytUsername
+            val handleText = uiState.ytHandle
+            val avatarUrl = uiState.ytAvatarUrl
+            
+            val dialogPrimary = MaterialTheme.colorScheme.primary
+            val dialogSecondary = MaterialTheme.colorScheme.secondaryContainer
+            val dialogAvatarGradient = remember(dialogPrimary, dialogSecondary) {
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    colors = listOf(dialogPrimary, dialogSecondary)
+                )
+            }
+            val dialogOnPrimary = MaterialTheme.colorScheme.onPrimary
+
+            AlertDialog(
+                onDismissRequest = { showAccountDialog = false },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_youtube),
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Text(
+                            text = "YouTube Music Account",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .padding(12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(dialogAvatarGradient),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (avatarUrl.isNotEmpty()) {
+                                    AsyncImage(
+                                        model = avatarUrl,
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    val initial = nameText.firstOrNull()?.toString()?.uppercase() ?: "Y"
+                                    Text(
+                                        text = initial,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = dialogOnPrimary
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = nameText,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = handleText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
+                        Surface(
+                            onClick = {
+                                showAccountDialog = false
+                                settingsViewModel.logoutYoutube()
+                                navController.navigateSafely(Screen.YoutubeAuth.route)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.Transparent,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp, horizontal = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.PersonAdd,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "Login to a new account",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Sign in with a different YouTube account",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        Surface(
+                            onClick = {
+                                showAccountDialog = false
+                                settingsViewModel.logoutYoutube()
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.Transparent,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp, horizontal = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.Logout,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = "Log out",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    Text(
+                                        text = "Disconnect YouTube Music and clear cache",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showAccountDialog = false }) {
+                        Text("Close", fontWeight = FontWeight.Bold)
                     }
                 }
             )
@@ -521,6 +717,7 @@ private fun getCategoryColors(category: SettingsCategory, isDark: Boolean): Pair
 @Composable
 private fun ProfileHeaderCard(
     uiState: SettingsUiState,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val primary = MaterialTheme.colorScheme.primary
@@ -548,6 +745,7 @@ private fun ProfileHeaderCard(
         shape = RoundedCornerShape(28.dp),
         color = surfaceContainer,
         tonalElevation = 2.dp,
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier
@@ -610,14 +808,22 @@ private fun ProfileHeaderCard(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(primaryContainer)
+                    .background(if (hasProfile) Color.Transparent else primaryContainer)
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.AccountCircle,
-                    contentDescription = null,
-                    tint = onPrimaryContainer,
-                    modifier = Modifier.size(22.dp)
-                )
+                if (hasProfile) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_youtube),
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.AccountCircle,
+                        contentDescription = null,
+                        tint = onPrimaryContainer,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
         }
     }

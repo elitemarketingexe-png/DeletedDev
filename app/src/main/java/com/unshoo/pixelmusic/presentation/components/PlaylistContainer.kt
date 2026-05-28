@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -513,10 +514,9 @@ fun PlaylistItem(
                     }
                     if (playlist.source == "YOUTUBE") {
                         Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
+                        Image(
                             painter = painterResource(R.drawable.ic_youtube),
                             contentDescription = "YouTube",
-                            tint = Color.Unspecified,
                             modifier = Modifier.size(18.dp)
                         )
                     }

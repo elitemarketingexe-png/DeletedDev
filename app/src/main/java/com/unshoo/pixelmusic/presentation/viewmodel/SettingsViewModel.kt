@@ -45,6 +45,8 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 import com.unshoo.pixelmusic.R
@@ -840,6 +842,17 @@ class SettingsViewModel @Inject constructor(
     fun setPureYtMusicOnly(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setPureYtMusicOnly(enabled)
+        }
+    }
+
+    fun logoutYoutube() {
+        viewModelScope.launch {
+            datastoreRepository.saveCookies(com.unshoo.pixelmusic.data.model.youtube.Cookies(""))
+            datastoreRepository.saveDataSyncId("")
+            datastoreRepository.saveYtProfile("", "", "")
+            withContext(Dispatchers.IO) {
+                com.unshoo.pixelmusic.data.database.youtube.AppDatabase.clearDownloads(context)
+            }
         }
     }
 

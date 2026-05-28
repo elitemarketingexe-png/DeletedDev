@@ -36,6 +36,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
@@ -313,24 +314,27 @@ fun SearchScreen(
                                 },
                                 trailingIcon = {
                                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                        IconButton(
-                                            onClick = { playerViewModel.toggleSearchSource() },
-                                            modifier = Modifier
-                                                .size(48.dp)
-                                                .clip(CircleShape)
-                                        ) {
-                                            val iconRes = if (searchSource == com.unshoo.pixelmusic.data.preferences.SearchSource.LOCAL) {
-                                                R.drawable.rounded_library_music_24
-                                            } else {
-                                                R.drawable.ic_youtube
-                                            }
-                                            Icon(
-                                                painter = painterResource(id = iconRes),
-                                                contentDescription = "Toggle Search Source",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                        }
+                                         IconButton(
+                                             onClick = { playerViewModel.toggleSearchSource() },
+                                             modifier = Modifier
+                                                 .size(48.dp)
+                                                 .clip(CircleShape)
+                                         ) {
+                                             if (searchSource == com.unshoo.pixelmusic.data.preferences.SearchSource.LOCAL) {
+                                                 Icon(
+                                                     painter = painterResource(id = R.drawable.rounded_library_music_24),
+                                                     contentDescription = "Toggle Search Source",
+                                                     tint = MaterialTheme.colorScheme.primary,
+                                                     modifier = Modifier.size(24.dp)
+                                                 )
+                                             } else {
+                                                 Image(
+                                                     painter = painterResource(id = R.drawable.ic_youtube),
+                                                     contentDescription = "Toggle Search Source",
+                                                     modifier = Modifier.size(24.dp)
+                                                 )
+                                             }
+                                         }
                                         if (searchQuery.isNotBlank()) {
                                             IconButton(
                                                 onClick = {

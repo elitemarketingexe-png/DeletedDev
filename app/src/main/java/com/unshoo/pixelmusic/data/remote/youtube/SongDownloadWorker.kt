@@ -108,14 +108,8 @@ class SongDownloadWorker(
 
                 if (audioPath != null) {
                     val mainId = -(15_000_000_000_000L + song.youtubeId.hashCode().toLong().absoluteValue)
-                    val destinationFile = DownloadHelper.copyToPublicDownload(appContext, audioPath, song.title, song.artist)
-                    if (destinationFile != null) {
-                        val publicPath = destinationFile.absolutePath
-                        val parentDir = destinationFile.parentFile?.absolutePath ?: "/storage/emulated/0/Download/PixelMusic"
-                        musicDao.updateSongFilePathAndParent(mainId, publicPath, parentDir)
-                    } else {
-                        musicDao.updateSongFilePath(mainId, audioPath)
-                    }
+                    val parentDir = File(audioPath).parentFile?.absolutePath ?: ""
+                    musicDao.updateSongFilePathAndParent(mainId, audioPath, parentDir)
                 }
 
                 UmihiNotificationManager.showSongDownloadSuccess(appContext, song)
