@@ -57,6 +57,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import java.io.File
+import com.snapchat.kit.sdk.SnapCreative
+import com.snapchat.kit.sdk.creative.models.SnapPhotoContent
 
 private const val GITHUB_LINK = "https://github.com/ianshulyadav/PixelMusic"
 private const val SNAPCHAT_PACKAGE = "com.snapchat.android"
@@ -289,12 +291,7 @@ fun ShareBottomSheet(
                                 onClick = {
                                     captureAndShare { bitmap ->
                                         val file = saveBitmapToCache(bitmap)
-                                        val uri = FileProvider.getUriForFile(
-                                            context,
-                                            "${context.packageName}.provider",
-                                            file
-                                        )
-                                        shareToSnapchat(context, uri)
+                                        shareToSnapchat(context, file)
                                     }
                                 }
                             )
@@ -794,17 +791,17 @@ private fun isPackageInstalled(context: Context, packageName: String): Boolean {
     }
 }
 
-private fun shareToSnapchat(context: Context, imageUri: android.net.Uri) {
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "image/png"
-        putExtra(Intent.EXTRA_STREAM, imageUri)
-        `package` = SNAPCHAT_PACKAGE
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
+private fun shareToSnapchat(context: Context, imageFile: File) {
     try {
-        context.startActivity(intent)
+        val snapCreative = SnapCreative.getApi(context)
+        val mediaFactory = SnapCreative.getMediaFactory(context)
+        val snapPhotoFile = mediaFactory.getSnapPhotoFromFile(imageFile)
+        val snapPhotoContent = SnapPhotoContent(snapPhotoFile).apply {
+            attachmentUrl = GITHUB_LINK
+        }
+        snapCreative.send(snapPhotoContent)
     } catch (e: Exception) {
-        Toast.makeText(context, "Snapchat not available", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Snapchat sharing failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
     }
 }
 

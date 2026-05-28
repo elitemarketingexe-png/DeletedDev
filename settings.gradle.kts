@@ -29,6 +29,7 @@ dependencyResolutionManagement {
             }
         }
         maven("https://central.sonatype.com/repository/maven-snapshots/")
+        maven("https://storage.googleapis.com/snap-kit-build/maven")
     }
 }
 

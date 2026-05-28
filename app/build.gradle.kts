@@ -316,6 +316,10 @@ dependencies {
         exclude(group = "androidx.compose.ui")
     }
 
+    // Snapchat Creative Kit
+    implementation("com.snapchat.kit.sdk:creative:1.13.2")
+    implementation("com.snapchat.kit.sdk:core:1.13.2")
+
     // Projects
     implementation(project(":shared"))
 
