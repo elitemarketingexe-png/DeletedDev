@@ -156,10 +156,21 @@ fun HomeScreen(
         val rawName = accountsUiState.userName
         if (!rawName.isNullOrBlank()) {
             val cleanName = if (rawName.startsWith("@")) rawName.substring(1) else rawName
-            if (!cleanName.contains("@")) {
-                cleanName.split(" ").firstOrNull()?.trim()
+            val baseName = if (!cleanName.contains("@")) {
+                cleanName
             } else {
-                cleanName.substringBefore("@").split(".", "_", "-").firstOrNull()?.replaceFirstChar { it.uppercase() }
+                cleanName.substringBefore("@")
+            }
+            val formattedName = baseName.split(".", "_", "-")
+                .filter { it.isNotBlank() }
+                .joinToString(" ") { word ->
+                    word.replaceFirstChar { it.uppercase() }
+                }
+            val firstName = formattedName.split(" ").firstOrNull()?.trim().orEmpty()
+            if (firstName.length >= 3) {
+                formattedName.trim()
+            } else {
+                if (firstName.isNotEmpty()) firstName else formattedName.trim()
             }
         } else {
             null
@@ -948,70 +959,104 @@ fun HomeGreetingHeader(userName: String?) {
         val greetings = when (hour) {
             in 5..11 -> if (userName != null) {
                 listOf(
-                    "Rise and grind, $userName ☕",
-                    "Morning vibe check, $userName ✨",
-                    "Aura +100 this morning, $userName 🌅",
-                    "Wakey wakey, $userName 🎧",
-                    "New day, new tunes, $userName 🎵"
+                    "Good morning, $userName! ☀️",
+                    "Glad you're awake, $userName. 🌅",
+                    "Wakey wakey, $userName! 🎧",
+                    "Hey, morning check, $userName! ⚡",
+                    "Ready today, $userName? ☀️",
+                    "Welcome back, $userName! 🌅",
+                    "Up early, $userName? 🌅",
+                    "Morning vibe check, $userName! ✨",
+                    "Slept well, $userName? 🛌"
                 )
             } else {
                 listOf(
-                    "Rise and grind ☕",
-                    "Morning vibe check ✨",
-                    "Aura +100 this morning 🌅",
-                    "Wakey wakey 🎧",
-                    "New day, new tunes 🎵"
+                    "Good morning! ☀️",
+                    "Glad you're awake. 🌅",
+                    "Wakey wakey, sunshine! 🎧",
+                    "Hey, morning check! ⚡",
+                    "Ready today? ☀️",
+                    "Welcome back! 🌅",
+                    "Up early? 🌅",
+                    "Morning vibe check! ✨",
+                    "Slept well? 🛌"
                 )
             }
             in 12..16 -> if (userName != null) {
                 listOf(
-                    "Midday energy boost, $userName ⚡",
-                    "Sun's out, beats out, $userName ☀️",
-                    "Cruising through the day, $userName 🚙",
-                    "Vibe check, $userName 🎧",
-                    "Lunch break soundtrack, $userName 🍕"
+                    "Hey, how's your day, $userName? ☀️",
+                    "Need a break, $userName? 💆",
+                    "Glad to see you, $userName. 🍕",
+                    "Listening under the sun, $userName? ☀️",
+                    "Hope it's going well, $userName. 🌟",
+                    "Slay the afternoon, $userName! 💅",
+                    "Hey, what's playing, $userName? 🎧",
+                    "Midday vibe check, $userName! ⚡",
+                    "Hey, you got this, $userName! ⚡"
                 )
             } else {
                 listOf(
-                    "Midday energy boost ⚡",
-                    "Sun's out, beats out ☀️",
-                    "Cruising through the day 🚙",
-                    "Vibe check: immaculate 🎧",
-                    "Lunch break soundtrack 🍕"
+                    "Hey, how's your day? ☀️",
+                    "Need a break? 💆",
+                    "Glad to see you. 🍕",
+                    "Listening under the sun? ☀️",
+                    "Hope it's going well. 🌟",
+                    "Slay the afternoon! 💅",
+                    "Hey, what's playing? 🎧",
+                    "Midday vibe check! ⚡",
+                    "Hey, you got this! ⚡"
                 )
             }
             in 17..21 -> if (userName != null) {
                 listOf(
-                    "Sunset vibes, $userName 🌇",
-                    "Unwinding time, $userName 🌌",
-                    "Evening wind down, $userName 🌙",
-                    "Chill mode: ON, $userName 🛋️",
-                    "Main character energy, $userName ✨"
+                    "Welcome home, $userName! 🏡",
+                    "Unwinding, $userName? 🛋️",
+                    "Glad you made it, $userName. 💛",
+                    "Hey, let's relax, $userName. 🍵",
+                    "Time to chill, $userName. 🌃",
+                    "Sunset listening, $userName. 🌇",
+                    "How was your day, $userName? ✨",
+                    "Hope it was good, $userName! 💛",
+                    "Ready to zone out, $userName? 🛋️"
                 )
             } else {
                 listOf(
-                    "Sunset vibes 🌇",
-                    "Unwinding time 🌌",
-                    "Evening wind down 🌙",
-                    "Chill mode: ON 🛋️",
-                    "Main character energy ✨"
+                    "Welcome home! 🏡",
+                    "Unwinding? 🛋️",
+                    "Glad you made it. 💛",
+                    "Hey, let's relax. 🍵",
+                    "Time to chill. 🌃",
+                    "Sunset listening. 🌇",
+                    "How was your day? ✨",
+                    "Hope it was good! 💛",
+                    "Ready to zone out? 🛋️"
                 )
             }
             else -> if (userName != null) {
                 listOf(
-                    "Late night thoughts, $userName 🌙",
-                    "Midnight memories, $userName ✨",
-                    "Insomnia club, $userName 🌌",
                     "Under the stars, $userName 🌌",
-                    "Rest easy, $userName 💤"
+                    "Insomnia club, $userName 🌌",
+                    "Up late, $userName? 🌙",
+                    "Can't sleep, $userName? 🌌",
+                    "Still awake, $userName? 🌌",
+                    "Quiet hours, $userName. 🕯️",
+                    "Rest easy, $userName. 💤",
+                    "In the quiet, $userName. 🤍",
+                    "Midnight thoughts, $userName? 💭",
+                    "Soft music now, $userName. 🎧"
                 )
             } else {
                 listOf(
-                    "Late night thoughts 🌙",
-                    "Midnight memories ✨",
-                    "Insomnia club 🌌",
                     "Under the stars 🌌",
-                    "Rest easy 💤"
+                    "Insomnia club 🌌",
+                    "Up late? 🌙",
+                    "Can't sleep? 🌌",
+                    "Still awake? 🌌",
+                    "Quiet hours. 🕯️",
+                    "Rest easy. 💤",
+                    "In the quiet. 🤍",
+                    "Midnight thoughts? 💭",
+                    "Soft music now. 🎧"
                 )
             }
         }

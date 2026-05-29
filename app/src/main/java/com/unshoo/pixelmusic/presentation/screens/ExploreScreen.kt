@@ -493,39 +493,28 @@ fun ExploreTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
             .statusBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(start = 24.dp, top = 12.dp, end = 20.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Explore,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
-            )
-            Text(
-                text = "Explore",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = GoogleSansRounded
-                ),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
+        Text(
+            text = "Explore",
+            fontFamily = GoogleSansRounded,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 40.sp,
+            letterSpacing = 1.sp
+        )
 
         FilledIconButton(
             onClick = onSettingsClick,
             modifier = Modifier.size(40.dp),
             shape = CircleShape,
             colors = IconButtonDefaults.filledIconButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.onSurface
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
             )
         ) {
             Icon(
@@ -536,6 +525,7 @@ fun ExploreTopBar(
         }
     }
 }
+
 
 @Composable
 fun SectionHeader(

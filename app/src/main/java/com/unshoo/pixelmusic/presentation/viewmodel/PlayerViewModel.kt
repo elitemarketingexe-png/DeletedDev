@@ -328,7 +328,7 @@ class PlayerViewModel @Inject constructor(
     val quickPicksDisplayMode: StateFlow<com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode> = userPreferencesRepository.quickPicksDisplayModeFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.LIST
+        initialValue = com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.CARD
     )
 
     fun toggleSearchSource() {

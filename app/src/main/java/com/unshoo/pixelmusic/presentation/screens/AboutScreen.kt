@@ -3,6 +3,7 @@ package com.unshoo.pixelmusic.presentation.screens
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -346,6 +347,121 @@ private fun AboutHeroCard(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 CommunitySignalsRow()
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                SocialLinksRow()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SocialLinksRow() {
+    val context = LocalContext.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // Telegram button
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .clickable {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/PixelMusicApp"))
+                    try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
+                },
+            shape = AbsoluteSmoothCornerShape(16.dp, 60),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                    modifier = Modifier.size(30.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Icon(
+                            painter = painterResource(R.drawable.telegram),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                }
+                Column {
+                    Text(
+                        text = "Telegram",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "t.me/PixelMusicApp",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.65f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+
+        // GitHub button
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .clickable {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ianshulyadav/PixelMusic"))
+                    try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
+                },
+            shape = AbsoluteSmoothCornerShape(16.dp, 60),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                    modifier = Modifier.size(30.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Icon(
+                            painter = painterResource(R.drawable.github),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                }
+                Column {
+                    Text(
+                        text = "GitHub",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "ianshulyadav/PixelMusic",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }

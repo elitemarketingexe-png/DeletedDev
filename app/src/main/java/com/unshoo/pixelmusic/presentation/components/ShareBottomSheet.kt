@@ -219,6 +219,7 @@ fun ShareBottomSheet(
                             )
                         )
                     )
+                    .navigationBarsPadding()
                     .verticalScroll(rememberScrollState())
                     .padding(bottom = 32.dp)
             ) {
