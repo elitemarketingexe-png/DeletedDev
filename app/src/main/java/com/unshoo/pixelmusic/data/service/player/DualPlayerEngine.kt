@@ -161,7 +161,7 @@ class DualPlayerEngine @Inject constructor(
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
                 Timber.tag("TransitionDebug").d("AudioFocus LOSS_TRANSIENT. Pausing.")
-                isFocusLossPause = true
+                isFocusLossPause = playerA.playWhenReady || (transitionRunning && playerB.playWhenReady)
                 playerA.playWhenReady = false
                 playerB.playWhenReady = false
             }

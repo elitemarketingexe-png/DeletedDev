@@ -29,6 +29,7 @@ class PlaylistPreferencesRepository @Inject constructor(
     private val musicDao: MusicDao,
     @ApplicationContext private val context: Context
 ) {
+    private val coverPrefs = context.getSharedPreferences("playlist_cover_customizations", Context.MODE_PRIVATE)
     private val migrationMutex = Mutex()
     @Volatile
     private var migrationChecked = false
@@ -46,15 +47,33 @@ class PlaylistPreferencesRepository @Inject constructor(
         AppDatabase.getInstance(context).playlistRepository().observeAll()
     ) { localPlaylists, ytPlaylists ->
         val mappedYtPlaylists = ytPlaylists.map { ytPlaylist ->
+            val pId = ytPlaylist.info.id
+            val defaultCoverImage = ytPlaylist.info.coverPath ?: ytPlaylist.info.coverHref
+            val savedCoverImageUri = coverPrefs.getString("${pId}_coverImageUri", null)
+            val coverColor = if (coverPrefs.contains("${pId}_coverColorArgb")) coverPrefs.getInt("${pId}_coverColorArgb", 0) else null
+            val coverIcon = coverPrefs.getString("${pId}_coverIconName", null)
+            val coverShape = coverPrefs.getString("${pId}_coverShapeType", null)
+            val detail1 = if (coverPrefs.contains("${pId}_coverShapeDetail1")) coverPrefs.getFloat("${pId}_coverShapeDetail1", 0f) else null
+            val detail2 = if (coverPrefs.contains("${pId}_coverShapeDetail2")) coverPrefs.getFloat("${pId}_coverShapeDetail2", 0f) else null
+            val detail3 = if (coverPrefs.contains("${pId}_coverShapeDetail3")) coverPrefs.getFloat("${pId}_coverShapeDetail3", 0f) else null
+            val detail4 = if (coverPrefs.contains("${pId}_coverShapeDetail4")) coverPrefs.getFloat("${pId}_coverShapeDetail4", 0f) else null
+
             Playlist(
-                id = ytPlaylist.info.id,
+                id = pId,
                 name = if (ytPlaylist.info.isDownloadedPlaylist) "Downloaded Songs" else ytPlaylist.info.title,
                 songIds = ytPlaylist.songs.map { "youtube_${it.youtubeId}" },
                 createdAt = ytPlaylist.info.lastSyncTimestamp,
                 lastModified = ytPlaylist.info.lastSyncTimestamp,
                 isAiGenerated = false,
                 isQueueGenerated = false,
-                coverImageUri = ytPlaylist.info.coverPath ?: ytPlaylist.info.coverHref,
+                coverImageUri = savedCoverImageUri ?: defaultCoverImage,
+                coverColorArgb = coverColor,
+                coverIconName = coverIcon,
+                coverShapeType = coverShape,
+                coverShapeDetail1 = detail1,
+                coverShapeDetail2 = detail2,
+                coverShapeDetail3 = detail3,
+                coverShapeDetail4 = detail4,
                 source = "YOUTUBE"
             )
         }
@@ -121,6 +140,16 @@ class PlaylistPreferencesRepository @Inject constructor(
             localPlaylistDao.deletePlaylist(playlistId)
             clearPlaylistSongOrderMode(playlistId)
         }
+        coverPrefs.edit().apply {
+            remove("${playlistId}_coverImageUri")
+            remove("${playlistId}_coverColorArgb")
+            remove("${playlistId}_coverIconName")
+            remove("${playlistId}_coverShapeType")
+            remove("${playlistId}_coverShapeDetail1")
+            remove("${playlistId}_coverShapeDetail2")
+            remove("${playlistId}_coverShapeDetail3")
+            remove("${playlistId}_coverShapeDetail4")
+        }.apply()
     }
 
     suspend fun renamePlaylist(playlistId: String, newName: String) {
@@ -154,6 +183,16 @@ class PlaylistPreferencesRepository @Inject constructor(
                 }
                 playlistRepository.insertCrossRefs(refs)
             }
+            coverPrefs.edit().apply {
+                putString("${playlist.id}_coverImageUri", playlist.coverImageUri)
+                if (playlist.coverColorArgb != null) putInt("${playlist.id}_coverColorArgb", playlist.coverColorArgb) else remove("${playlist.id}_coverColorArgb")
+                putString("${playlist.id}_coverIconName", playlist.coverIconName)
+                putString("${playlist.id}_coverShapeType", playlist.coverShapeType)
+                if (playlist.coverShapeDetail1 != null) putFloat("${playlist.id}_coverShapeDetail1", playlist.coverShapeDetail1) else remove("${playlist.id}_coverShapeDetail1")
+                if (playlist.coverShapeDetail2 != null) putFloat("${playlist.id}_coverShapeDetail2", playlist.coverShapeDetail2) else remove("${playlist.id}_coverShapeDetail2")
+                if (playlist.coverShapeDetail3 != null) putFloat("${playlist.id}_coverShapeDetail3", playlist.coverShapeDetail3) else remove("${playlist.id}_coverShapeDetail3")
+                if (playlist.coverShapeDetail4 != null) putFloat("${playlist.id}_coverShapeDetail4", playlist.coverShapeDetail4) else remove("${playlist.id}_coverShapeDetail4")
+            }.apply()
         } else {
             val updated = playlist.copy(lastModified = System.currentTimeMillis())
             localPlaylistDao.upsertPlaylist(updated.toEntity())

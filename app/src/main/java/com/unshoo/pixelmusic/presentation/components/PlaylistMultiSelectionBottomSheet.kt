@@ -308,7 +308,7 @@ private fun StackedPlaylistCovers(
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    if (playlist.coverImageUri != null) {
+                    if (!playlist.coverImageUri.isNullOrBlank()) {
                         AsyncImage(
                             model = playlist.coverImageUri,
                             contentDescription = playlist.name,

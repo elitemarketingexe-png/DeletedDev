@@ -218,6 +218,7 @@ fun PlaylistDetailScreen(
     val navBarCompactMode by playerViewModel.navBarCompactMode.collectAsStateWithLifecycle()
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
     var showPlaylistBottomSheet by remember { mutableStateOf(false) }
+    var playlistSheetSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     var localReorderableSongs by remember(songsInPlaylist) { mutableStateOf(songsInPlaylist) }
 
     val listState = rememberLazyListState()
@@ -910,7 +911,9 @@ fun PlaylistDetailScreen(
                     playerViewModel.sendToast(toastPlayingNext)
                 },
                 onAddToPlayList = {
-                    showPlaylistBottomSheet = true;
+                    playlistSheetSongs = listOf(currentSong)
+                    showSongInfoBottomSheet = false
+                    showPlaylistBottomSheet = true
                 },
                 onDeleteFromDevice = playerViewModel::deleteFromDevice,
                 onNavigateToAlbum = {
@@ -959,21 +962,22 @@ fun PlaylistDetailScreen(
                     playlistViewModel.removeSongFromPlaylist(playlistId, currentSong.id)
                 }
             )
-            if (showPlaylistBottomSheet) {
-                val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()
-
-                PlaylistBottomSheet(
-                    playlistUiState = playlistUiState,
-                    songs = listOf(currentSong),
-                    onDismiss = {
-                        showPlaylistBottomSheet = false
-                    },
-                    currentPlaylistId = playlistId,
-                    bottomBarHeight = bottomBarHeightDp,
-                    playerViewModel = playerViewModel,
-                )
-            }
         }
+    }
+
+    if (showPlaylistBottomSheet) {
+        val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()
+
+        PlaylistBottomSheet(
+            playlistUiState = playlistUiState,
+            songs = playlistSheetSongs,
+            onDismiss = {
+                showPlaylistBottomSheet = false
+            },
+            currentPlaylistId = playlistId,
+            bottomBarHeight = bottomBarHeightDp,
+            playerViewModel = playerViewModel,
+        )
     }
 
     val isSortSheetVisible by playerViewModel.isSortingSheetVisible.collectAsStateWithLifecycle()

@@ -83,6 +83,7 @@ fun DailyMixSection(
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
     var showSongInfoSheet by remember { mutableStateOf(false) }
     var showPlaylistBottomSheet by remember { mutableStateOf(false) }
+    var playlistSheetSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     val dailyMixQueueName = stringResource(R.string.presentation_batch_g_daily_mix_queue_name)
 
     Column(
@@ -130,6 +131,8 @@ fun DailyMixSection(
                 showSongInfoSheet = false
             },
             onAddToPlayList = {
+                playlistSheetSongs = listOf(song)
+                showSongInfoSheet = false
                 showPlaylistBottomSheet = true
             },
             onDeleteFromDevice = playerViewModel::deleteFromDevice,
@@ -167,16 +170,16 @@ fun DailyMixSection(
             },
             removeFromListTrigger = {}
         )
+    }
 
-        if (showPlaylistBottomSheet) {
-            PlaylistBottomSheet(
-                playlistUiState = playlistUiState,
-                songs = listOf(song),
-                onDismiss = { showPlaylistBottomSheet = false },
-                bottomBarHeight = bottomBarHeightDp,
-                playerViewModel = playerViewModel,
-            )
-        }
+    if (showPlaylistBottomSheet) {
+        PlaylistBottomSheet(
+            playlistUiState = playlistUiState,
+            songs = playlistSheetSongs,
+            onDismiss = { showPlaylistBottomSheet = false },
+            bottomBarHeight = bottomBarHeightDp,
+            playerViewModel = playerViewModel,
+        )
     }
 }
 

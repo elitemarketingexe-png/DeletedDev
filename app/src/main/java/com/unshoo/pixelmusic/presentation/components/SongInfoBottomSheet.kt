@@ -653,7 +653,7 @@ fun SongInfoBottomSheet(
                                                     song.id.startsWith("youtube_")
                                             if (isYouTubeSong) {
                                                 item {
-                                                    var isLikedState by remember { mutableStateOf(isFavorite) }
+                                                    var isLikedState by remember(isFavorite) { mutableStateOf(isFavorite) }
                                                     Row(
                                                         modifier = Modifier
                                                             .fillMaxWidth()

@@ -136,6 +136,8 @@ import com.unshoo.pixelmusic.presentation.components.LyricsSheet
 import com.unshoo.pixelmusic.presentation.components.ShareBottomSheet
 import com.unshoo.pixelmusic.presentation.viewmodel.SongInfoBottomSheetViewModel
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.unshoo.pixelmusic.presentation.components.PlaylistBottomSheet
+import com.unshoo.pixelmusic.presentation.viewmodel.PlaylistViewModel
 import com.unshoo.pixelmusic.presentation.components.scoped.rememberSmoothProgress
 import com.unshoo.pixelmusic.presentation.components.subcomps.FetchLyricsDialog
 import com.unshoo.pixelmusic.presentation.viewmodel.LyricsSearchUiState
@@ -252,6 +254,7 @@ fun FullPlayerContent(
 
     val song = currentSong ?: retainedSong ?: return // Keep the player visible while transitioning
     var showSongInfoBottomSheet by remember { mutableStateOf(false) }
+    var showPlaylistBottomSheet by remember { mutableStateOf(false) }
     var showLyricsSheet by remember { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
     var showArtistPicker by rememberSaveable { mutableStateOf(false) }
@@ -410,7 +413,6 @@ fun FullPlayerContent(
     }
 
     val onSongMetadataQueueClick = {
-        showSongInfoBottomSheet = true
         onShowQueueClicked()
     }
 
@@ -899,7 +901,6 @@ fun FullPlayerContent(
                                     )
                                     .background(playerOnAccentColor.copy(alpha = 0.7f))
                                     .clickable {
-                                        showSongInfoBottomSheet = true
                                         onShowQueueClicked()
                                     },
                                 contentAlignment = Alignment.Center
@@ -1019,10 +1020,21 @@ fun FullPlayerContent(
             onDismiss = { showShareSheet = false },
             onAddToPlaylist = {
                 showShareSheet = false
-                showSongInfoBottomSheet = true
-                onShowQueueClicked()
+                showPlaylistBottomSheet = true
             },
             colorScheme = LocalMaterialTheme.current
+        )
+    }
+
+    if (showPlaylistBottomSheet) {
+        val playlistViewModel: PlaylistViewModel = hiltViewModel()
+        val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()
+        PlaylistBottomSheet(
+            playlistUiState = playlistUiState,
+            songs = listOf(song),
+            onDismiss = { showPlaylistBottomSheet = false },
+            bottomBarHeight = 0.dp,
+            playerViewModel = playerViewModel
         )
     }
 
@@ -1104,7 +1116,7 @@ fun FullPlayerContent(
                     ListItem(
                         modifier = Modifier.clickable {
                             showSongInfoBottomSheet = false
-                            onShowQueueClicked()
+                            showPlaylistBottomSheet = true
                         },
                         headlineContent = {
                             Text(
@@ -2778,7 +2790,7 @@ private fun BottomToggleRow(
 
     Box(
         modifier = modifier.background(
-            color = LocalMaterialTheme.current.surfaceContainerLowest.copy(alpha = 0.7f),
+            color = LocalMaterialTheme.current.surfaceContainer.copy(alpha = 0.35f),
             shape = AbsoluteSmoothCornerShape(
                 cornerRadiusBL = rowCorners,
                 smoothnessAsPercentTR = 60,

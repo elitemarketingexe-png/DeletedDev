@@ -1235,7 +1235,12 @@ class MusicRepositoryImpl @Inject constructor(
     }
 
     override fun getSong(songId: String): Flow<Song?> {
-        val longId = songId.toLongOrNull()
+        val youtubeId = if (songId.startsWith("youtube_")) songId.substringAfter("youtube_") else null
+        val longId = if (youtubeId != null) {
+            toUnifiedYoutubeSongId(youtubeId)
+        } else {
+            songId.toLongOrNull()
+        }
         return if (longId != null) {
             musicDao.getSongById(longId).map { it?.toSong() }.flowOn(Dispatchers.IO)
         } else {

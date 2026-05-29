@@ -1862,6 +1862,7 @@ fun LibraryScreen(
                 },
                 onAddToPlayList = {
                     playlistSheetSongs = listOf(currentSong)
+                    showSongInfoBottomSheet = false
                     showPlaylistBottomSheet = true
                 },
                 onDeleteFromDevice = playerViewModel::deleteFromDevice,

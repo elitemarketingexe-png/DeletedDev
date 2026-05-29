@@ -86,6 +86,7 @@ import coil.compose.AsyncImagePainter
 import coil.size.Size
 import com.unshoo.pixelmusic.R
 import com.unshoo.pixelmusic.data.model.Album
+import com.unshoo.pixelmusic.data.model.Song
 import com.unshoo.pixelmusic.presentation.components.CollapsibleCommonTopBar
 import com.unshoo.pixelmusic.presentation.components.ExpressiveScrollBar
 import com.unshoo.pixelmusic.presentation.components.MiniPlayerHeight
@@ -126,6 +127,7 @@ fun AlbumDetailScreen(
     val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
     var showPlaylistBottomSheet by remember { mutableStateOf(false) }
+    var playlistSheetSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     val isDarkTheme = LocalPixelMusicDarkTheme.current
     val baseColorScheme = MaterialTheme.colorScheme
     val albumArtUri = uiState.album?.albumArtUriString?.takeIf { it.isNotBlank() }
@@ -428,7 +430,9 @@ fun AlbumDetailScreen(
                         showSongInfoBottomSheet = false
                     },
                     onAddToPlayList = {
-                        showPlaylistBottomSheet = true;
+                        playlistSheetSongs = listOf(currentSong)
+                        showSongInfoBottomSheet = false
+                        showPlaylistBottomSheet = true
                     },
                     onDeleteFromDevice = playerViewModel::deleteFromDevice,
                     onNavigateToAlbum = {
@@ -475,18 +479,19 @@ fun AlbumDetailScreen(
                     },
                     removeFromListTrigger = removeFromListTrigger
                 )
-                if (showPlaylistBottomSheet) {
-                    val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()
-
-                    PlaylistBottomSheet(
-                        playlistUiState = playlistUiState,
-                        songs = listOf(currentSong),
-                        onDismiss = { showPlaylistBottomSheet = false },
-                        bottomBarHeight = bottomBarHeightDp,
-                        playerViewModel = playerViewModel
-                    )
-                }
             }
+        }
+
+        if (showPlaylistBottomSheet) {
+            val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()
+
+            PlaylistBottomSheet(
+                playlistUiState = playlistUiState,
+                songs = playlistSheetSongs,
+                onDismiss = { showPlaylistBottomSheet = false },
+                bottomBarHeight = bottomBarHeightDp,
+                playerViewModel = playerViewModel
+            )
         }
     }
 }

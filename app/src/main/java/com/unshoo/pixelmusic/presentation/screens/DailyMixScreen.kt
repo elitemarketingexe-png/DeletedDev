@@ -115,6 +115,7 @@ fun DailyMixScreen(
     val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
     var showPlaylistBottomSheet by remember { mutableStateOf(false) }
+    var playlistSheetSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
     val favoriteSongIds by playerViewModel.favoriteSongIds.collectAsStateWithLifecycle()
     val selectedSongForInfo by playerViewModel.selectedSongForInfo.collectAsStateWithLifecycle()
@@ -196,7 +197,9 @@ fun DailyMixScreen(
                 showSongInfoSheet = false
             },
             onAddToPlayList = {
-                showPlaylistBottomSheet = true;
+                playlistSheetSongs = listOf(song)
+                showSongInfoSheet = false
+                showPlaylistBottomSheet = true
             },
             onDeleteFromDevice = playerViewModel::deleteFromDevice,
             onNavigateToAlbum = {
@@ -239,18 +242,18 @@ fun DailyMixScreen(
             aiError = aiError,
             onRetryMetadata = { playerViewModel.retryLastMetadataGeneration() }
         )
+    }
 
-        if (showPlaylistBottomSheet) {
-            val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()
+    if (showPlaylistBottomSheet) {
+        val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()
 
-            PlaylistBottomSheet(
-                playlistUiState = playlistUiState,
-                songs = listOf(song),
-                onDismiss = { showPlaylistBottomSheet = false },
-                bottomBarHeight = bottomBarHeightDp,
-                playerViewModel = playerViewModel,
-            )
-        }
+        PlaylistBottomSheet(
+            playlistUiState = playlistUiState,
+            songs = playlistSheetSongs,
+            onDismiss = { showPlaylistBottomSheet = false },
+            bottomBarHeight = bottomBarHeightDp,
+            playerViewModel = playerViewModel,
+        )
     }
 
 
@@ -602,8 +605,8 @@ private fun rememberDailyMixTitleStyle(): TextStyle {
                 )
             ),
             fontWeight = FontWeight(760),
-            fontSize = 44.sp,
-            //lineHeight = 62.sp,
+            fontSize = 40.sp,
+            lineHeight = 42.sp,
 //            letterSpacing = (-0.4).sp
         )
     }

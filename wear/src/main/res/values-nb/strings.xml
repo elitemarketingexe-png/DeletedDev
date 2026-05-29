@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PixelMusic</string>
+    <string name="app_name">Pixel Music</string>
     <string name="not_playing">Ingen avspilling</string>
     <string name="open_on_phone">Åpne på telefonen</string>
     <string name="connecting">Kobler til…</string>

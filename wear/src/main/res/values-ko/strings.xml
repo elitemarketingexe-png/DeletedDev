@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PixelMusic</string>
+    <string name="app_name">Pixel Music</string>
     <string name="not_playing">재생 중 아님</string>
     <string name="open_on_phone">휴대전화에서 열기</string>
     <string name="connecting">연결 중…</string>

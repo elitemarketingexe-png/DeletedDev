@@ -83,7 +83,7 @@ fun PlaylistCover(
             .then(shapeMod)
             .clip(shape)
     ) {
-        if (playlist.coverImageUri != null) {
+        if (!playlist.coverImageUri.isNullOrBlank()) {
             AsyncImage(
                 model = playlist.coverImageUri,
                 contentDescription = null,

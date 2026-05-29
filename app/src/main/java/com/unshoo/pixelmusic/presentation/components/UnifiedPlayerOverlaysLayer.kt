@@ -167,16 +167,21 @@ internal fun UnifiedPlayerSongInfoLayer(
     onNavigateToArtist: (Song) -> Unit,
     onNavigateToGenre: (Song) -> Unit
 ) {
+    var showPlaylistBottomSheet by remember { mutableStateOf(false) }
+    var songForPlaylist by remember { mutableStateOf<Song?>(null) }
+
     selectedSongForInfo?.let { staticSong ->
         val context = LocalContext.current
-        var showPlaylistBottomSheet by remember(staticSong.id) { mutableStateOf(false) }
         val playlistViewModel: PlaylistViewModel = hiltViewModel()
         val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()
+        val favoriteSongIds by playerViewModel.favoriteSongIds.collectAsStateWithLifecycle()
         val liveSongState by remember(playerViewModel, staticSong.id) {
             playerViewModel.observeSong(staticSong.id).map { it ?: staticSong }
         }.collectAsStateWithLifecycle(initialValue = staticSong)
 
-        val liveSong = liveSongState
+        val liveSong = remember(liveSongState, favoriteSongIds) {
+            liveSongState.copy(isFavorite = favoriteSongIds.contains(liveSongState.id))
+        }
 
         MaterialTheme(
             colorScheme = albumColorScheme,
@@ -188,7 +193,6 @@ internal fun UnifiedPlayerSongInfoLayer(
                 isFavorite = liveSong.isFavorite,
                 onToggleFavorite = { playerViewModel.toggleFavoriteSpecificSong(liveSong) },
                 onDismiss = {
-                    showPlaylistBottomSheet = false
                     onDismissSongInfo()
                 },
                 onPlaySong = {
@@ -210,7 +214,9 @@ internal fun UnifiedPlayerSongInfoLayer(
                     Toast.makeText(context, context.getString(R.string.toast_playing_next), Toast.LENGTH_SHORT).show()
                 },
                 onAddToPlayList = {
+                    songForPlaylist = liveSong
                     showPlaylistBottomSheet = true
+                    onDismissSongInfo()
                 },
                 onDeleteFromDevice = { activity, songToDelete, onResult ->
                     playerViewModel.deleteFromDevice(activity, songToDelete, onResult)
@@ -245,16 +251,27 @@ internal fun UnifiedPlayerSongInfoLayer(
                     onDismissSongInfo()
                 }
             )
+        }
+    }
 
-            if (showPlaylistBottomSheet) {
-                PlaylistBottomSheet(
-                    playlistUiState = playlistUiState,
-                    songs = listOf(liveSong),
-                    onDismiss = { showPlaylistBottomSheet = false },
-                    bottomBarHeight = 0.dp,
-                    playerViewModel = playerViewModel,
-                )
-            }
+    if (showPlaylistBottomSheet && songForPlaylist != null) {
+        val playlistViewModel: PlaylistViewModel = hiltViewModel()
+        val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()
+        MaterialTheme(
+            colorScheme = albumColorScheme,
+            typography = MaterialTheme.typography,
+            shapes = MaterialTheme.shapes
+        ) {
+            PlaylistBottomSheet(
+                playlistUiState = playlistUiState,
+                songs = listOf(songForPlaylist!!),
+                onDismiss = {
+                    showPlaylistBottomSheet = false
+                    songForPlaylist = null
+                },
+                bottomBarHeight = 0.dp,
+                playerViewModel = playerViewModel,
+            )
         }
     }
 }

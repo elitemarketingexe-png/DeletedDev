@@ -125,6 +125,7 @@ fun RecentlyPlayedScreen(
     val lazyListState = rememberLazyListState()
     var showSongInfoBottomSheet by remember { mutableStateOf(false) }
     var showPlaylistBottomSheet by remember { mutableStateOf(false) }
+    var playlistSheetSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     val bottomBarHeightDp = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
     var ytHistorySongs by remember { mutableStateOf<List<RecentlyPlayedSongUiModel>?>(null) }
@@ -329,7 +330,6 @@ fun RecentlyPlayedScreen(
                 },
                 onDismiss = {
                     showSongInfoBottomSheet = false
-                    showPlaylistBottomSheet = false
                 },
                 onPlaySong = {
                     if (queueSongs.isNotEmpty()) {
@@ -346,6 +346,8 @@ fun RecentlyPlayedScreen(
                     showSongInfoBottomSheet = false
                 },
                 onAddToPlayList = {
+                    playlistSheetSongs = listOf(song)
+                    showSongInfoBottomSheet = false
                     showPlaylistBottomSheet = true
                 },
                 onDeleteFromDevice = playerViewModel::deleteFromDevice,
@@ -384,17 +386,18 @@ fun RecentlyPlayedScreen(
                 },
                 removeFromListTrigger = {}
             )
-
-            if (showPlaylistBottomSheet) {
-                PlaylistBottomSheet(
-                    playlistUiState = playlistUiState,
-                    songs = listOf(song),
-                    onDismiss = { showPlaylistBottomSheet = false },
-                    bottomBarHeight = bottomBarHeightDp,
-                    playerViewModel = playerViewModel,
-                )
-            }
         }
+
+    if (showPlaylistBottomSheet && selectedSongForInfo != null) {
+        val song = selectedSongForInfo!!
+        PlaylistBottomSheet(
+            playlistUiState = playlistUiState,
+            songs = playlistSheetSongs,
+            onDismiss = { showPlaylistBottomSheet = false },
+            bottomBarHeight = bottomBarHeightDp,
+            playerViewModel = playerViewModel,
+        )
+    }
 
         FilledIconButton(
             onClick = { navController.popBackStack() },

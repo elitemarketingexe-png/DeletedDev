@@ -945,8 +945,8 @@ private fun rememberYourMixTitleStyle(): TextStyle {
                 )
             ),
             fontWeight = FontWeight(760),
-            fontSize = 64.sp,
-            lineHeight = 62.sp
+            fontSize = 42.sp,
+            lineHeight = 44.sp
         )
     }
 }
