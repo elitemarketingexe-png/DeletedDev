@@ -166,15 +166,18 @@ jobs:
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/v${VERSION_NAME}"
           COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
 
-          CAPTION="<b>📱 PixelMusic v${VERSION_NAME} — Release</b>
+          CAPTION=$(cat <<EOF
+<b>📱 PixelMusic v${VERSION_NAME} — Release</b>
 
 <b>Changes:</b>
 ${CHANGELOG}
 
-<b>Commit:</b> <a href=\"${COMMIT_URL}\">${{ github.sha }}</a>
-<b>Release:</b> <a href=\"${RELEASE_URL}\">GitHub Release ↗</a>
+<b>Commit:</b> <a href="${COMMIT_URL}">${{ github.sha }}</a>
+<b>Release:</b> <a href="${RELEASE_URL}">GitHub Release ↗</a>
 
-🚀 All APKs attached below."
+🚀 All APKs attached below.
+EOF
+          )
 
           # 1. Universal APK (with full caption)
           curl -s -F document=@app/build/outputs/apk/release/app-universal-release.apk \
