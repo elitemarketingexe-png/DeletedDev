@@ -1154,7 +1154,7 @@ class MusicRepositoryImpl @Inject constructor(
     override suspend fun setFavoriteStatusWithMetadata(song: Song, isFavorite: Boolean, awaitRemoteSync: Boolean) = withContext(Dispatchers.IO) {
         val youtubeId = song.youtubeId 
             ?: if (song.id.startsWith("youtube_")) song.id.substringAfter("youtube_")
-               else if (song.contentUriString?.startsWith("youtube://") == true) song.contentUriString.substringAfter("youtube://")
+               else if (song.contentUriString.startsWith("youtube://")) song.contentUriString.substringAfter("youtube://")
                else null
                
         val id = if (youtubeId != null) {
