@@ -39,6 +39,7 @@ object AutoQueueManager {
 
     private const val TARGET_QUEUE_SIZE = 45 // Targets exactly 45 upcoming songs
     private const val MAX_HISTORY = 150
+    private const val DECAY_LAMBDA = 1.15e-9 // 7-day half-life decay parameter
 
     private var fetchJob: Job? = null
     private var lastFetchedVideoId: String? = null
@@ -121,6 +122,47 @@ object AutoQueueManager {
         currentWatchEndpoint = endpoint
         addedVideoIds.clear()
         addedVideoIds.add(videoId)
+    }
+
+    fun registerSkip(songId: String) {
+        val cleanId = extractYtId(songId) ?: songId
+        val ctx = contextRef ?: return
+        try {
+            val sharedPrefs = ctx.getSharedPreferences("auto_queue_skips", Context.MODE_PRIVATE)
+            sharedPrefs.edit().putLong(cleanId, System.currentTimeMillis()).apply()
+            printd("AutoQueueManager: Registered skip for $cleanId")
+        } catch (e: Exception) {
+            printe("AutoQueueManager: Error saving skip to SharedPreferences: ${e.message}")
+        }
+    }
+
+    private fun getActiveSkippedSongIds(): Set<String> {
+        val ctx = contextRef ?: return emptySet()
+        val activeIds = mutableSetOf<String>()
+        try {
+            val sharedPrefs = ctx.getSharedPreferences("auto_queue_skips", Context.MODE_PRIVATE)
+            val allEntries = sharedPrefs.all
+            val now = System.currentTimeMillis()
+            val FOUR_HOURS_MS = 4 * 60 * 60 * 1000L
+            val editor = sharedPrefs.edit()
+            var modified = false
+
+            for ((songId, timestampObj) in allEntries) {
+                val timestamp = (timestampObj as? Long) ?: 0L
+                if (now - timestamp < FOUR_HOURS_MS) {
+                    activeIds.add(songId)
+                } else {
+                    editor.remove(songId)
+                    modified = true
+                }
+            }
+            if (modified) {
+                editor.apply()
+            }
+        } catch (e: Exception) {
+            printe("AutoQueueManager: Error reading skips from SharedPreferences: ${e.message}")
+        }
+        return activeIds
     }
 
 
@@ -233,7 +275,7 @@ object AutoQueueManager {
         }
 
         val playedMultipleTimesSongs = mutableListOf<Song>()
-        if (engagementDao != null) {
+        val engagementsMap = if (engagementDao != null) {
             val engagements = try {
                 engagementDao.getAllEngagements()
             } catch (e: Exception) {
@@ -246,15 +288,37 @@ object AutoQueueManager {
                     playedMultipleTimesSongs.add(dbSong)
                 }
             }
+            engagements.associateBy { it.songId }
+        } else {
+            emptyMap()
         }
 
         val combined = (favoriteSongs + playedMultipleTimesSongs).distinctBy { it.id }
+
+        // Calculate dynamic temporal decay affinity scores
+        val now = System.currentTimeMillis()
+        fun calculateAffinityScore(song: Song): Double {
+            val songIdStr = song.id
+            val rawId = extractYtId(songIdStr) ?: songIdStr
+            val eng = engagementsMap[songIdStr] ?: engagementsMap[rawId]
+            var score = 0.0
+            if (song.isFavorite) score += 5.0
+            if (eng != null) {
+                val timeDiffMs = (now - eng.lastPlayedTimestamp).coerceAtLeast(0L)
+                val decay = kotlin.math.exp(-DECAY_LAMBDA * timeDiffMs)
+                score += eng.playCount * decay
+            }
+            return score
+        }
+
+        // Sort candidates by affinity score
+        val sortedCandidates = combined.sortedByDescending { calculateAffinityScore(it) }
 
         val currentGenre = currentSong?.genre
         val currentArtist = currentSong?.artistName
         val currentArtistId = currentSong?.artistId
 
-        val contextualMatches = combined.filter { song ->
+        val contextualMatches = sortedCandidates.filter { song ->
             val songIdStr = song.id
             val isAlreadyInQueue = currentQueueIds.any { isSameSong(it, songIdStr) }
             val isAvoid = avoidIds.any { isSameSong(it, songIdStr) }
@@ -266,17 +330,17 @@ object AutoQueueManager {
         }
 
         if (contextualMatches.size >= 4) {
-            return contextualMatches.shuffled()
+            return contextualMatches.take(15) // Keep top contextual affinity matches
         }
 
-        val nonContextualFiltered = combined.filter { song ->
+        val nonContextualFiltered = sortedCandidates.filter { song ->
             val songIdStr = song.id
             val isAlreadyInQueue = currentQueueIds.any { isSameSong(it, songIdStr) }
             val isAvoid = avoidIds.any { isSameSong(it, songIdStr) }
             !isAlreadyInQueue && !isAvoid
         }
 
-        return (contextualMatches + nonContextualFiltered.shuffled().take(15)).distinctBy { it.id }
+        return (contextualMatches + nonContextualFiltered.take(15)).distinctBy { it.id }
     }
 
     private suspend fun refillQueueLoop(currentId: String, forceRefresh: Boolean) {
@@ -411,10 +475,11 @@ object AutoQueueManager {
             }
 
             val settings = datastoreRepository?.settings?.first() ?: return
+            val activeSkips = getActiveSkippedSongIds()
             val avoidIds = if (settings.avoidRepetitiveSongs) {
-                highlyRotatedIds + recentlyPlayedIds
+                highlyRotatedIds + recentlyPlayedIds + activeSkips
             } else {
-                highlyRotatedIds
+                highlyRotatedIds + activeSkips
             }
 
             val songsToAdd = mutableListOf<Song>()
@@ -649,17 +714,30 @@ object AutoQueueManager {
             
             var filtered = emptyList<SongEntity>()
 
-            // Get popular local song IDs (play count >= 2)
-            val popularIds = mutableSetOf<String>()
-            if (engagementDao != null) {
+            // Get engagements map for temporal-decay scoring
+            val engagementsMap = if (engagementDao != null) {
                 try {
-                    val engagements = engagementDao.getAllEngagements()
-                    engagements.filter { it.playCount >= 2 }.forEach {
-                        popularIds.add(it.songId)
-                    }
+                    engagementDao.getAllEngagements().associateBy { it.songId }
                 } catch (e: Exception) {
-                    // Ignore
+                    emptyMap()
                 }
+            } else {
+                emptyMap()
+            }
+            val now = System.currentTimeMillis()
+
+            fun calculateLocalDecayedScore(entity: SongEntity): Double {
+                val songIdStr = entity.id.toString()
+                val rawId = extractYtId(songIdStr) ?: songIdStr
+                val eng = engagementsMap[songIdStr] ?: engagementsMap[rawId]
+                var score = 0.0
+                if (entity.isFavorite) score += 5.0
+                if (eng != null) {
+                    val timeDiffMs = (now - eng.lastPlayedTimestamp).coerceAtLeast(0L)
+                    val decay = kotlin.math.exp(-DECAY_LAMBDA * timeDiffMs)
+                    score += eng.playCount * decay
+                }
+                return score
             }
 
             if (currentSong != null) {
@@ -671,11 +749,8 @@ object AutoQueueManager {
                     limit = 25
                 )
                 
-                // Prioritize favorites and popular ones, but keep everything so we have plenty of recommendations
-                val sortedRelated = relatedEntities.sortedWith(
-                    compareByDescending<SongEntity> { it.isFavorite }
-                        .thenByDescending { popularIds.contains(it.id.toString()) }
-                )
+                // Prioritize favorites and dynamically decay-scored popular ones
+                val sortedRelated = relatedEntities.sortedByDescending { calculateLocalDecayedScore(it) }
                 
                 filtered = sortedRelated.filter { 
                     it.id.toString() !in addedVideoIds && it.id.toString() !in currentQueueIds
@@ -686,10 +761,8 @@ object AutoQueueManager {
                 val allLocalSongs = dao.getAllSongsList()
                 val extraLocal = allLocalSongs.filter {
                     it.id.toString() !in addedVideoIds && it.id.toString() !in currentQueueIds && (currentSong == null || it.id != currentSong.id)
-                }.sortedWith(
-                    compareByDescending<SongEntity> { it.isFavorite }
-                        .thenByDescending { popularIds.contains(it.id.toString()) }
-                ).shuffled().take(20)
+                }.sortedByDescending { calculateLocalDecayedScore(it) }
+                 .take(20)
                 filtered = (filtered + extraLocal).distinctBy { it.id }
             }
             

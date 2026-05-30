@@ -299,6 +299,9 @@ class ListeningStatsTracker @Inject constructor(
                 genre = session.genre,
                 album = session.album
             )
+        } else if (listened >= 1000L) {
+            // Log as negative feedback skip signal if song was started but skipped before 15 seconds.
+            com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.registerSkip(session.songId)
         }
         currentSession = null
         if (pendingVoluntarySongId == session.songId) {
