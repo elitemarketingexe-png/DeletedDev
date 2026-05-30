@@ -1600,6 +1600,7 @@ class MusicRepositoryImpl @Inject constructor(
     }
 
     override suspend fun insertYoutubeSongs(songs: List<Song>): Unit = withContext(Dispatchers.IO) {
+        val ytSongs = mutableListOf<com.unshoo.pixelmusic.data.model.youtube.Song>()
         songs.forEach { song ->
             val youtubeId = song.youtubeId 
                 ?: if (song.id.startsWith("youtube_")) song.id.substringAfter("youtube_")
@@ -1618,6 +1619,30 @@ class MusicRepositoryImpl @Inject constructor(
                         genre = song.genre ?: "YouTube Music"
                     )
                 }
+                ytSongs.add(
+                    com.unshoo.pixelmusic.data.model.youtube.Song(
+                        youtubeId = youtubeId,
+                        title = song.title,
+                        artist = song.artist,
+                        duration = song.duration.toString(),
+                        thumbnailHref = song.albumArtUriString ?: "",
+                        thumbnailPath = song.albumArtUriString,
+                        audioFilePath = song.path
+                    )
+                )
+            }
+        }
+        if (ytSongs.isNotEmpty()) {
+            try {
+                val songRepo = com.unshoo.pixelmusic.data.database.youtube.AppDatabase.getInstance(context).songRepository()
+                val allYtIds = ytSongs.map { it.youtubeId }
+                val existingYtIds = songRepo.getExistingSongIds(allYtIds).toSet()
+                val newYtSongs = ytSongs.filter { it.youtubeId !in existingYtIds }
+                if (newYtSongs.isNotEmpty()) {
+                    songRepo.createAll(newYtSongs)
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to insert songs into YouTube DB")
             }
         }
     }

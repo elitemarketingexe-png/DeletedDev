@@ -119,15 +119,15 @@ class InnerTube {
 
     var dns: Dns = Dns { hostname ->
         try {
-            Dns.SYSTEM.lookup(hostname)
+            cloudflareDns.lookup(hostname)
         } catch (e: Exception) {
             try {
-                cloudflareDns.lookup(hostname)
+                googleDns.lookup(hostname)
             } catch (ex: Exception) {
                 try {
-                    googleDns.lookup(hostname)
+                    Dns.SYSTEM.lookup(hostname)
                 } catch (ey: Exception) {
-                    throw e
+                    throw ex
                 }
             }
         }
