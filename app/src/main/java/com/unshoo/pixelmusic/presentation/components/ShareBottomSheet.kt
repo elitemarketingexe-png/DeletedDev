@@ -32,6 +32,9 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.animation.core.animateFloatAsState
@@ -208,6 +211,18 @@ fun ShareBottomSheet(
             dragHandle = null
         ) {
         CompositionLocalProvider(LocalOverscrollFactory provides null) {
+            val view = LocalView.current
+            LaunchedEffect(view) {
+                var parent = view.parent
+                while (parent != null) {
+                    if (parent is DialogWindowProvider) {
+                        val window = parent.window
+                        WindowCompat.setDecorFitsSystemWindows(window, false)
+                        break
+                    }
+                    parent = parent.parent
+                }
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -480,6 +495,10 @@ fun ShareBottomSheet(
                             } else {
                                 if (selectedLyrics.size < 5) {
                                     selectedLyrics.add(line)
+                                    // Sort selectedLyrics to maintain the song's original lyrics chronological order
+                                    val sorted = selectedLyrics.sortedBy { cleanedLyrics.indexOf(it) }
+                                    selectedLyrics.clear()
+                                    selectedLyrics.addAll(sorted)
                                 } else {
                                     Toast.makeText(context, "Maximum 5 lines allowed", Toast.LENGTH_SHORT).show()
                                 }
@@ -606,29 +625,6 @@ fun ShareBottomSheet(
                         )
                     }
 
-                    // Copy YT Music Link (if available)
-                    if (!song.youtubeId.isNullOrEmpty()) {
-                        item {
-                            ShareActionChip(
-                                icon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.MusicNote,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                },
-                                label = "YT Music Link",
-                                containerColor = Color(0xFFFF0000).copy(alpha = 0.12f),
-                                contentColor = Color(0xFFFF0000),
-                                onClick = {
-                                    val ytMusicLink = "https://music.youtube.com/watch?v=${song.youtubeId}"
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("YouTube Music Link", ytMusicLink))
-                                    Toast.makeText(context, "YouTube Music link copied", Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                        }
-                    }
 
                     // Standard Android Share
                     item {
@@ -693,51 +689,17 @@ fun ShareBottomSheet(
                     }
                 )
 
-                // Open in YouTube Music (for YT songs) or GitHub link (for local songs)
-                if (!song.youtubeId.isNullOrEmpty()) {
-                    val ytMusicLink = "https://music.youtube.com/watch?v=${song.youtubeId}"
-                    ShareListItem(
-                        icon = Icons.Rounded.OpenInNew,
-                        title = "Open in YouTube Music",
-                        subtitle = ytMusicLink,
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(ytMusicLink)).apply {
-                                // Try to open in the YT Music app first
-                                setPackage("com.google.android.apps.youtube.music")
-                            }
-                            val resolved = context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                            if (resolved != null) {
-                                context.startActivity(intent)
-                            } else {
-                                // Fallback: open in browser
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, android.net.Uri.parse(ytMusicLink))
-                                )
-                            }
-                        }
-                    )
-                    ShareListItem(
-                        icon = Icons.Rounded.ContentCopy,
-                        title = "Copy YouTube Music Link",
-                        subtitle = ytMusicLink,
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("YouTube Music Link", ytMusicLink))
-                            Toast.makeText(context, "YouTube Music link copied", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                } else {
-                    ShareListItem(
-                        icon = Icons.Rounded.ContentCopy,
-                        title = stringResource(R.string.share_action_copy_github_link),
-                        subtitle = GITHUB_LINK,
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("GitHub", GITHUB_LINK))
-                            Toast.makeText(context, context.getString(R.string.share_link_copied), Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
+                // Copy GitHub link
+                ShareListItem(
+                    icon = Icons.Rounded.ContentCopy,
+                    title = stringResource(R.string.share_action_copy_github_link),
+                    subtitle = GITHUB_LINK,
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("GitHub", GITHUB_LINK))
+                        Toast.makeText(context, context.getString(R.string.share_link_copied), Toast.LENGTH_SHORT).show()
+                    }
+                )
                 Spacer(modifier = Modifier.navigationBarsPadding())
             }
         }
@@ -950,7 +912,7 @@ private fun ShareableCard(
             // Centerpiece Floating Card (Player Styled & Frost Blended)
             Card(
                 modifier = Modifier
-                    .fillMaxWidth(0.86f)
+                    .fillMaxWidth(if (isLyricsMode) 0.85f else 0.74f)
                     .weight(1f, fill = false)
                     .shadow(16.dp, shape = RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
@@ -1125,7 +1087,7 @@ private fun ShareableCard(
 
                         Spacer(Modifier.height(10.dp))
 
-                        // 4. Playback Controls Row (Dynamic Capsule Shape)
+                        // 4. Playback Controls Row (Sleek Circular Buttons)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center,
@@ -1133,9 +1095,8 @@ private fun ShareableCard(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .width(68.dp)
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(22.dp))
+                                    .size(36.dp)
+                                    .clip(CircleShape)
                                     .background(lightScheme.primary)
                                     .clickable { },
                                 contentAlignment = Alignment.Center
@@ -1144,7 +1105,7 @@ private fun ShareableCard(
                                     imageVector = Icons.Rounded.SkipPrevious,
                                     contentDescription = null,
                                     tint = lightScheme.onPrimary,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                             
@@ -1152,9 +1113,8 @@ private fun ShareableCard(
 
                             Box(
                                 modifier = Modifier
-                                    .width(84.dp)
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(22.dp))
+                                    .size(46.dp)
+                                    .clip(CircleShape)
                                     .background(lightScheme.tertiaryContainer)
                                     .clickable { },
                                 contentAlignment = Alignment.Center
@@ -1171,9 +1131,8 @@ private fun ShareableCard(
 
                             Box(
                                 modifier = Modifier
-                                    .width(68.dp)
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(22.dp))
+                                    .size(36.dp)
+                                    .clip(CircleShape)
                                     .background(lightScheme.primary)
                                     .clickable { },
                                 contentAlignment = Alignment.Center
@@ -1182,7 +1141,7 @@ private fun ShareableCard(
                                     imageVector = Icons.Rounded.SkipNext,
                                     contentDescription = null,
                                     tint = lightScheme.onPrimary,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -1233,10 +1192,10 @@ private fun ShareableCard(
                         HorizontalDivider(color = lightScheme.onPrimaryContainer.copy(alpha = 0.12f), thickness = 1.dp)
                         Spacer(Modifier.height(8.dp))
 
-                        // 2. Verses Quote Block
+                        // 2. Verses Quote Block (Premium Editorial Style)
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
                         ) {
                             if (selectedLyrics.isEmpty()) {
                                 Text(
@@ -1249,28 +1208,31 @@ private fun ShareableCard(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
                                 )
                             } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.FormatQuote,
+                                    contentDescription = null,
+                                    tint = lightScheme.primary.copy(alpha = 0.28f),
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                
                                 val fontSize = when (selectedLyrics.size) {
-                                    1 -> 19.sp
-                                    2, 3 -> 16.sp
-                                    else -> 13.sp
+                                    1 -> 22.sp
+                                    2 -> 19.sp
+                                    3 -> 17.sp
+                                    else -> 15.sp
                                 }
                                 val lineHeight = when (selectedLyrics.size) {
-                                    1 -> 25.sp
-                                    2, 3 -> 21.sp
-                                    else -> 17.sp
+                                    1 -> 28.sp
+                                    2 -> 25.sp
+                                    3 -> 22.sp
+                                    else -> 20.sp
                                 }
-                                selectedLyrics.forEach { line ->
-                                    Row(
-                                        verticalAlignment = Alignment.Top,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.FormatQuote,
-                                            contentDescription = null,
-                                            tint = lightScheme.primary.copy(alpha = 0.7f),
-                                            modifier = Modifier.size(16.dp).offset(y = 2.dp)
-                                        )
+
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(start = 6.dp)
+                                ) {
+                                    selectedLyrics.forEach { line ->
                                         Text(
                                             text = line,
                                             fontFamily = GoogleSansRounded,
@@ -1279,7 +1241,7 @@ private fun ShareableCard(
                                             lineHeight = lineHeight,
                                             color = lightScheme.onPrimaryContainer,
                                             textAlign = TextAlign.Start,
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier.fillMaxWidth()
                                         )
                                     }
                                 }
@@ -1363,13 +1325,13 @@ private fun ShareableCard(
             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(Color.Black.copy(alpha = 0.35f))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                         .clickable {
                             try {
                                 uriHandler.openUri(GITHUB_LINK)
@@ -1377,36 +1339,36 @@ private fun ShareableCard(
                                 // Fallback
                             }
                         }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Link,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(11.dp)
                     )
                     Text(
                         text = "PixelMusic",
                         fontFamily = GoogleSansRounded,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
+                        fontSize = 10.sp,
                         color = Color.White
                     )
                     Icon(
                         imageVector = Icons.Rounded.ChevronRight,
                         contentDescription = null,
                         tint = Color.White.copy(alpha = 0.8f),
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                 }
                 Text(
                     text = "github.com/ianshulyadav",
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 9.sp,
-                    color = Color.White.copy(alpha = 0.4f),
+                    fontSize = 8.sp,
+                    color = Color.White.copy(alpha = 0.35f),
                     textAlign = TextAlign.Center
                 )
             }

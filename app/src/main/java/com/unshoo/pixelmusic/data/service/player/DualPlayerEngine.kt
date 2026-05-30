@@ -219,6 +219,7 @@ class DualPlayerEngine @Inject constructor(
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            activePlaybackResolvedUris.clear()
             cancelAudioOffloadFallback()
             
             // If the transition was not automatic (e.g. user skip or playlist change),
@@ -362,6 +363,7 @@ class DualPlayerEngine @Inject constructor(
 
     private var isReleased = false
     private val resolvedUriCache = LruCache<String, Uri>(100)
+    private val activePlaybackResolvedUris = java.util.concurrent.ConcurrentHashMap<String, Uri>()
     private val localFilePathCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     fun registerLocalPath(youtubeUri: String, filePath: String) {
@@ -755,7 +757,14 @@ class DualPlayerEngine @Inject constructor(
 
     suspend fun resolveCloudUri(uri: Uri): Uri = withContext(Dispatchers.IO) {
         val uriString = uri.toString()
-        resolvedUriCache.get(uriString)?.let { return@withContext it }
+        
+        // Return active playback locked URI to prevent ExoPlayer from stuttering or re-loading due to mid-stream URL changes
+        activePlaybackResolvedUris[uriString]?.let { return@withContext it }
+        
+        resolvedUriCache.get(uriString)?.let { cachedUri ->
+            activePlaybackResolvedUris[uriString] = cachedUri
+            return@withContext cachedUri
+        }
 
         val resolved: Uri? = when (uri.scheme) {
             "telegram" -> resolveTelegramUriAsync(uri, uriString)
@@ -766,6 +775,7 @@ class DualPlayerEngine @Inject constructor(
 
         if (resolved != null) {
             resolvedUriCache.put(uriString, resolved)
+            activePlaybackResolvedUris[uriString] = resolved
             return@withContext resolved
         }
         uri
@@ -810,10 +820,9 @@ class DualPlayerEngine @Inject constructor(
             val youtubeId = uriString.substringAfter("youtube://")
             val youtubeSong = com.unshoo.pixelmusic.data.model.youtube.Song(youtubeId = youtubeId)
 
-            // ── STAGE 1: Instant low-quality stream URL (< 300 ms target) ──────
-            // getLowestQualityStreamUrl checks offline-first (local file > LRU cache > network).
+            // Resolve the player URL using the connection-aware getSongPlayerUrl helper.
             val path = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
-                .getLowestQualityStreamUrl(context, youtubeSong)
+                .getSongPlayerUrl(context, youtubeSong, allowLocal = true)
 
             // If we got a local file path, register it and return it directly.
             if (!path.startsWith("http")) {
@@ -822,25 +831,7 @@ class DualPlayerEngine @Inject constructor(
                 return@withContext Uri.fromFile(java.io.File(path))
             }
 
-            val lowUri = Uri.parse(path)
-
-            // ── STAGE 2: Pre-warm high-quality URL in background ─────────────
-            // We launch this without awaiting so ExoPlayer can begin buffering
-            // the low-quality URL immediately while the high-quality URL resolves.
-            scope.launch(Dispatchers.IO) {
-                try {
-                    val highPath = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
-                        .getHighestQualityStreamUrl(context, youtubeSong)
-                    if (highPath.startsWith("http")) {
-                        // Cache it so the next time this song is resolved it's instant
-                        resolvedUriCache.put(uriString, Uri.parse(highPath))
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("DualPlayerEngine").w(e, "Stage-2 high-quality pre-warm failed for $youtubeId")
-                }
-            }
-
-            lowUri
+            Uri.parse(path)
         } catch (e: Exception) {
             Timber.tag("DualPlayerEngine").e(e, "resolveYoutubeUriAsync failed for $uriString")
             null

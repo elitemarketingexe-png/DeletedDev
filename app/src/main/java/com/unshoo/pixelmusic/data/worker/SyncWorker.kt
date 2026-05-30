@@ -1633,34 +1633,30 @@ constructor(
             val localPlaylistsExist = appDatabase.playlistRepository().getAll().isNotEmpty()
 
             // 1. Fetch remote user-created playlists (delta sync — only insert new songs)
-            if (!isMobile || !localPlaylistsExist) {
-                try {
-                    val remotePlaylists = YoutubePlaylistDataSource().retrieveAll(settings)
-                    remotePlaylists.forEach { playlistInfo ->
-                        val existingPlaylist = appDatabase.playlistRepository().getPlaylistById(playlistInfo.id)
-                        val existingSongCount = existingPlaylist?.info?.lastSyncSongCount ?: 0
+            try {
+                val remotePlaylists = YoutubePlaylistDataSource().retrieveAll(settings)
+                remotePlaylists.forEach { playlistInfo ->
+                    val existingPlaylist = appDatabase.playlistRepository().getPlaylistById(playlistInfo.id)
+                    val existingSongCount = existingPlaylist?.info?.lastSyncSongCount ?: 0
 
-                        val emptyPlaylist = Playlist(playlistInfo, emptyList())
-                        val fullPlaylist = YoutubePlaylistDataSource().retrieveOne(emptyPlaylist, settings)
+                    val emptyPlaylist = Playlist(playlistInfo, emptyList())
+                    val fullPlaylist = YoutubePlaylistDataSource().retrieveOne(emptyPlaylist, settings)
 
-                        // Delta check: only process if song count changed or first sync
-                        if (fullPlaylist.songs.size != existingSongCount || existingPlaylist == null) {
-                            // Use preserving insert — keeps existing downloaded songs intact
-                            appDatabase.playlistRepository().insertPlaylistWithSongsPreserving(
-                                fullPlaylist,
-                                appDatabase.songRepository()
-                            )
-                            Log.i(TAG, "Delta synced playlist '${playlistInfo.title}': ${fullPlaylist.songs.size} songs (was $existingSongCount)")
-                        } else {
-                            Log.d(TAG, "Skipping playlist '${playlistInfo.title}' — no changes (${existingSongCount} songs)")
-                        }
-                        // NOTE: Auto-download removed. Users download via playlist options menu (Component 24).
+                    // Delta check: only process if song count changed or first sync
+                    if (fullPlaylist.songs.size != existingSongCount || existingPlaylist == null) {
+                        // Use preserving insert — keeps existing downloaded songs intact
+                        appDatabase.playlistRepository().insertPlaylistWithSongsPreserving(
+                            fullPlaylist,
+                            appDatabase.songRepository()
+                        )
+                        Log.i(TAG, "Delta synced playlist '${playlistInfo.title}': ${fullPlaylist.songs.size} songs (was $existingSongCount)")
+                    } else {
+                        Log.d(TAG, "Skipping playlist '${playlistInfo.title}' — no changes (${existingSongCount} songs)")
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to fetch remote YouTube playlists", e)
+                    // NOTE: Auto-download removed. Users download via playlist options menu (Component 24).
                 }
-            } else {
-                Log.i(TAG, "SyncWorker: Mobile data active and local playlists exist. Bypassing heavy cloud sync.")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch remote YouTube playlists", e)
             }
 
             // 2. Fetch and sync Liked Songs playlist ("LM") — delta sync and mapping removed

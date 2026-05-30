@@ -64,6 +64,9 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -317,6 +320,18 @@ fun SongInfoBottomSheet(
         CompositionLocalProvider(
             LocalOverscrollFactory provides null
         ) {
+            val view = LocalView.current
+            LaunchedEffect(view) {
+                var parent = view.parent
+                while (parent != null) {
+                    if (parent is DialogWindowProvider) {
+                        val window = parent.window
+                        WindowCompat.setDecorFitsSystemWindows(window, false)
+                        break
+                    }
+                    parent = parent.parent
+                }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth(),

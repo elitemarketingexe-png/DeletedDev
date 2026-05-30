@@ -7,6 +7,8 @@ import com.unshoo.pixelmusic.data.remote.youtube.Constants
 import com.unshoo.pixelmusic.data.remote.youtube.DatastoreRepository
 import com.unshoo.pixelmusic.data.remote.youtube.UmihiHelper.printd
 import com.unshoo.pixelmusic.data.model.youtube.Cookies
+import com.unshoo.pixelmusic.data.worker.SyncManager
+import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +19,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val datastoreRepository: DatastoreRepository
+    private val datastoreRepository: DatastoreRepository,
+    private val syncManager: SyncManager
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsState())
     //  val uiState = _uiState.asStateFlow()
@@ -32,6 +35,8 @@ class AuthViewModel @Inject constructor(
                 saveCookies(Cookies(cookies))
                 _uiState.update { it.copy(isLoggedIn = true) }
                 _eventsChannel.emit(ScreenEvent.Out.LoginCompleted)
+                // Trigger an immediate background synchronization of user playlists and library
+                syncManager.fullSync()
             }
         }
     }
@@ -39,6 +44,7 @@ class AuthViewModel @Inject constructor(
     fun onDataSyncIdFound(dataSyncId: String) {
         viewModelScope.launch {
             datastoreRepository.saveDataSyncId(dataSyncId)
+            YouTube.dataSyncId = dataSyncId
         }
     }
 
@@ -46,6 +52,7 @@ class AuthViewModel @Inject constructor(
         printd("Got cookies: $cookies")
         viewModelScope.launch {
             datastoreRepository.saveCookies(cookies)
+            YouTube.cookie = cookies.toRawCookie()
         }
     }
 
