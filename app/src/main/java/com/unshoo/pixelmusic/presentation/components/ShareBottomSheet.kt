@@ -1006,7 +1006,7 @@ private fun ShareableCard(
                     }
 
                     Column(
-                        modifier = Modifier.padding(14.dp),
+                        modifier = Modifier.padding(10.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         // 1. Square Album Art with soft glow
@@ -1036,7 +1036,7 @@ private fun ShareableCard(
                                 text = song.title,
                                 fontFamily = GoogleSansRounded,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
+                                fontSize = 14.sp,
                                 color = lightScheme.onPrimaryContainer,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -1045,7 +1045,7 @@ private fun ShareableCard(
                                 text = song.displayArtist,
                                 fontFamily = GoogleSansRounded,
                                 fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 color = lightScheme.onPrimaryContainer.copy(alpha = 0.65f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -1367,9 +1367,9 @@ private fun ShareableCard(
             ) {
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(RoundedCornerShape(16.dp))
                         .background(Color.Black.copy(alpha = 0.35f))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                         .clickable {
                             try {
                                 uriHandler.openUri(GITHUB_LINK)
@@ -1377,35 +1377,35 @@ private fun ShareableCard(
                                 // Fallback
                             }
                         }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Link,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                     Text(
                         text = "PixelMusic",
                         fontFamily = GoogleSansRounded,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
+                        fontSize = 11.sp,
                         color = Color.White
                     )
                     Icon(
                         imageVector = Icons.Rounded.ChevronRight,
                         contentDescription = null,
                         tint = Color.White.copy(alpha = 0.8f),
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                 }
                 Text(
                     text = "github.com/ianshulyadav",
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 9.sp,
+                    fontSize = 8.sp,
                     color = Color.White.copy(alpha = 0.4f),
                     textAlign = TextAlign.Center
                 )
