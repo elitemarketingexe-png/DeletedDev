@@ -37,9 +37,11 @@ jobs:
         with:
           languages: java-kotlin
           build-mode: manual
+          ram: 6144
+          threads: 2
 
       - name: Build with Gradle
-        run: ./gradlew assembleDebug # Use the wrapper for consistency
+        run: ./gradlew assembleDebug --no-daemon --no-configuration-cache --no-build-cache
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
