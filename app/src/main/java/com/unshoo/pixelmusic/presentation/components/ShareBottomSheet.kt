@@ -1008,7 +1008,7 @@ private fun ShareableCard(
                     }
 
                     Column(
-                        modifier = Modifier.padding(10.dp),
+                        modifier = Modifier.padding(top = 10.dp, bottom = 10.dp, start = 18.dp, end = 18.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         // 1. Square Album Art with soft glow
@@ -1027,7 +1027,7 @@ private fun ShareableCard(
                             )
                         }
 
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(6.dp))
 
                         // 2. Song Details (Left-aligned for a modern player layout)
                         Column(
@@ -1054,7 +1054,7 @@ private fun ShareableCard(
                             )
                         }
 
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(6.dp))
 
                         // 3. Sleek Wavy Progress / Seek Bar with Thumb
                         Row(
@@ -1105,14 +1105,14 @@ private fun ShareableCard(
                             )
                         }
 
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(3.dp))
 
                         // 3.5. Metadata Pill
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(lightScheme.onPrimaryContainer.copy(alpha = 0.08f))
-                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                                .padding(horizontal = 10.dp, vertical = 3.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -1125,7 +1125,7 @@ private fun ShareableCard(
                             )
                         }
 
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(6.dp))
 
                         // 4. Playback Controls Row (Dynamic Capsule Shape)
                         Row(
@@ -1135,9 +1135,9 @@ private fun ShareableCard(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .width(68.dp)
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(22.dp))
+                                    .width(60.dp)
+                                    .height(38.dp)
+                                    .clip(RoundedCornerShape(19.dp))
                                     .background(lightScheme.primary)
                                     .clickable { },
                                 contentAlignment = Alignment.Center
@@ -1146,17 +1146,17 @@ private fun ShareableCard(
                                     imageVector = Icons.Rounded.SkipPrevious,
                                     contentDescription = null,
                                     tint = lightScheme.onPrimary,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                             
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
 
                             Box(
                                 modifier = Modifier
-                                    .width(84.dp)
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(22.dp))
+                                    .width(76.dp)
+                                    .height(38.dp)
+                                    .clip(RoundedCornerShape(19.dp))
                                     .background(lightScheme.tertiaryContainer)
                                     .clickable { },
                                 contentAlignment = Alignment.Center
@@ -1165,17 +1165,17 @@ private fun ShareableCard(
                                     imageVector = Icons.Rounded.PlayArrow,
                                     contentDescription = null,
                                     tint = lightScheme.onTertiaryContainer,
-                                    modifier = Modifier.size(26.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
 
                             Box(
                                 modifier = Modifier
-                                    .width(68.dp)
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(22.dp))
+                                    .width(60.dp)
+                                    .height(38.dp)
+                                    .clip(RoundedCornerShape(19.dp))
                                     .background(lightScheme.primary)
                                     .clickable { },
                                 contentAlignment = Alignment.Center
@@ -1184,7 +1184,7 @@ private fun ShareableCard(
                                     imageVector = Icons.Rounded.SkipNext,
                                     contentDescription = null,
                                     tint = lightScheme.onPrimary,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                         }
