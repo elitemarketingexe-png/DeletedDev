@@ -175,7 +175,7 @@ object QueuePreloadManager {
         }
     }
 
-    private fun prefetchAudioBytes(ctx: Context, videoId: String, streamUrl: String) {
+    private suspend fun prefetchAudioBytes(ctx: Context, videoId: String, streamUrl: String) {
         val cache = exoCache?.cache ?: return
         try {
             val uri = Uri.parse(streamUrl)
@@ -192,18 +192,32 @@ object QueuePreloadManager {
                 .setLength(512 * 1024)
                 .build()
 
+            val parentJob = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
+            val progressListener = CacheWriter.ProgressListener { _, _, _ ->
+                if (parentJob != null && !parentJob.isActive) {
+                    throw InterruptedException("Prefetch canceled")
+                }
+            }
+
             val cacheWriter = CacheWriter(
                 dataSource,
                 dataSpec,
                 null,
-                null
+                progressListener
             )
 
             printd("QueuePreloadManager: starting audio prefetch (512KB) for $videoId")
-            cacheWriter.cache()
+            withContext(Dispatchers.IO) {
+                cacheWriter.cache()
+            }
             printd("QueuePreloadManager: completed audio prefetch (512KB) for $videoId")
         } catch (e: Exception) {
-            printe("QueuePreloadManager: failed to prefetch audio bytes for $videoId: ${e.message}")
+            // InterruptedException is expected when skipped/canceled, suppress verbose logging
+            if (e !is InterruptedException) {
+                printe("QueuePreloadManager: failed to prefetch audio bytes for $videoId: ${e.message}")
+            } else {
+                printd("QueuePreloadManager: audio prefetch canceled for $videoId")
+            }
         }
     }
 
