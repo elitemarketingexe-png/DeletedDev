@@ -1055,8 +1055,9 @@ fun FullPlayerContent(
         ModalBottomSheet(
             onDismissRequest = { showSongInfoBottomSheet = false },
             dragHandle = null,
-            containerColor = Color.Transparent,
-            shape = sheetShape
+            containerColor = Color.White,
+            shape = sheetShape,
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
         ) {
             MaterialTheme(
                 colorScheme = LocalMaterialTheme.current,
@@ -1068,7 +1069,7 @@ fun FullPlayerContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(sheetShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                            .background(Color.White)
                             .navigationBarsPadding()
                             .padding(bottom = 16.dp)
                     ) {

@@ -316,6 +316,8 @@ fun SongInfoBottomSheet(
             }
         },
         sheetState = sheetState,
+        containerColor = Color.White,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) }
     ) {
         MaterialTheme(
             colorScheme = currentColorScheme,
