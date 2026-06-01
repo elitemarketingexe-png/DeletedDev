@@ -23,7 +23,7 @@ def main():
 
     caption = (
         f"Commit by: {commit_author}\n"
-        f"Commit\nmessage: {commit_message}\n"
+        f"Commit message:\n<blockquote>{commit_message}</blockquote>\n"
         f"Commit hash: #{commit_sha[:7]}\n"
         f"Device: mobile, wearos\n"
         f"ABI: arm64, armeabi, universal, x86_64\n"
