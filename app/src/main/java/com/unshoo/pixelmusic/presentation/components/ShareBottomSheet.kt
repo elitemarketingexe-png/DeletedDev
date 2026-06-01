@@ -31,6 +31,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -728,28 +730,32 @@ private fun ShareableCard(
         // ── 1. Dynamic Background Render ─────────────────────────────────────
         when (themeStyle) {
             ShareThemeStyle.DYNAMIC_PALETTE -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    surfaceContainerLow,
-                                    surfaceContainerLowest
-                                )
-                            )
-                        )
-                ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Underneath: Deep Blurred Artwork
+                    SmartImage(
+                        model = song.albumArtUriString,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .blur(60.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+                    )
+                    // Semi-dark tint overlay
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f))
+                    )
+                    // Custom theme palette gradient wash
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(
-                                brush = Brush.radialGradient(
+                                brush = Brush.verticalGradient(
                                     colors = listOf(
-                                        primaryColor.copy(alpha = 0.25f),
-                                        Color.Transparent
-                                    ),
-                                    radius = 600f
+                                        surfaceContainerLow.copy(alpha = 0.45f),
+                                        surfaceContainerLowest.copy(alpha = 0.7f)
+                                    )
                                 )
                             )
                     )
@@ -785,28 +791,20 @@ private fun ShareableCard(
             }
             ShareThemeStyle.BLURRED_ARTWORK -> {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    // Underneath: Deep Blurred Artwork
                     SmartImage(
                         model = song.albumArtUriString,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .blur(60.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
                     )
+                    // Semi-dark overlay
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.35f))
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        surfaceContainerLow.copy(alpha = 0.82f),
-                                        surfaceContainerLowest.copy(alpha = 0.92f)
-                                    )
-                                )
-                            )
+                            .background(Color.Black.copy(alpha = 0.55f))
                     )
                 }
             }
@@ -888,9 +886,17 @@ private fun ShareableCard(
                     .shadow(24.dp, shape = RoundedCornerShape(32.dp)),
                 shape = RoundedCornerShape(32.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = darkScheme.surfaceContainerLow
+                    containerColor = darkScheme.surfaceContainerLow.copy(alpha = 0.45f)
                 ),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+                border = BorderStroke(
+                    1.dp,
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.15f),
+                            Color.White.copy(alpha = 0.02f)
+                        )
+                    )
+                )
             ) {
                 if (!isLyricsMode) {
                     // SONG SHARE CARD (MINI PLAYER WIDGET DESIGN)
