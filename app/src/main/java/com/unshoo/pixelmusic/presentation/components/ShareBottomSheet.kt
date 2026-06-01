@@ -947,7 +947,7 @@ private fun ShareableCard(
                             // Title Pill
                             Box(
                                 modifier = Modifier
-                                    .weight(1f, fill = false)
+                                    .weight(1f)
                                     .clip(CircleShape)
                                     .background(Color.Black.copy(alpha = 0.25f))
                                     .padding(horizontal = 20.dp, vertical = 10.dp)
@@ -956,7 +956,7 @@ private fun ShareableCard(
                                     text = song.title,
                                     fontFamily = GoogleSansRounded,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
+                                    fontSize = 18.sp,
                                     color = Color.White,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -990,7 +990,7 @@ private fun ShareableCard(
                             text = song.displayArtist,
                             fontFamily = GoogleSansRounded,
                             fontWeight = FontWeight.Medium,
-                            fontSize = 13.sp,
+                            fontSize = 14.sp,
                             color = Color.White.copy(alpha = 0.65f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -1056,7 +1056,7 @@ private fun ShareableCard(
                                 Text(
                                     text = formattedProgress,
                                     color = Color.White.copy(alpha = 0.5f),
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontFamily = GoogleSansRounded,
                                     fontWeight = FontWeight.Bold
                                 )
