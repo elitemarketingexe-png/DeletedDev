@@ -118,6 +118,11 @@ jobs:
           echo "keyAlias=pixelmusic-nightly-key" >> keystore.properties
           echo "keyPassword=994273" >> keystore.properties
 
+      - name: Create local.properties
+        run: |
+          echo "TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID }}" > local.properties
+          echo "TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}" >> local.properties
+
       - name: Build Phone nightly release APKs
         run: gradle :app:assembleRelease -Ppixelmusic.enableAbiSplits=true
 

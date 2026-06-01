@@ -40,6 +40,11 @@ jobs:
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> keystore.properties
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> keystore.properties
 
+      - name: Create local.properties
+        run: |
+          echo "TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID }}" > local.properties
+          echo "TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}" >> local.properties
+
       - name: Build all split + universal release APKs
         run: ./gradlew :app:assembleRelease :wear:assembleRelease -Ppixelmusic.enableAbiSplits=true
 

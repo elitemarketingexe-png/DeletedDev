@@ -29,6 +29,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Create local.properties
+        run: |
+          echo "TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID }}" > local.properties
+          echo "TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}" >> local.properties
+
       - name: Build Phone debug APK
         run: gradle :app:assembleDebug -Ppixelmusic.enableAbiSplits=true
 
