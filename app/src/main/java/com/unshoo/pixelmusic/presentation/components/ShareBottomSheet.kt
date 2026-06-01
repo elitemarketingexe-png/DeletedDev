@@ -671,58 +671,15 @@ fun ShareBottomSheet(
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
-                Spacer(Modifier.height(4.dp))
-
                 // ── Secondary Actions ────────────────────────────────────────
-                ShareListItem(
-                    icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
-                    title = stringResource(R.string.share_action_add_to_playlist),
-                    subtitle = stringResource(R.string.share_action_add_to_playlist_sub),
-                    onClick = {
-                        onDismiss()
-                        onAddToPlaylist()
-                    }
-                )
+                if (song.youtubeId.isNullOrEmpty()) {
+                    Spacer(Modifier.height(16.dp))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    Spacer(Modifier.height(4.dp))
 
-                // Open in YouTube Music (for YT songs) or GitHub link (for local songs)
-                if (!song.youtubeId.isNullOrEmpty()) {
-                    val ytMusicLink = "https://music.youtube.com/watch?v=${song.youtubeId}"
-                    ShareListItem(
-                        icon = Icons.Rounded.OpenInNew,
-                        title = "Open in YouTube Music",
-                        subtitle = ytMusicLink,
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(ytMusicLink)).apply {
-                                // Try to open in the YT Music app first
-                                setPackage("com.google.android.apps.youtube.music")
-                            }
-                            val resolved = context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                            if (resolved != null) {
-                                context.startActivity(intent)
-                            } else {
-                                // Fallback: open in browser
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, android.net.Uri.parse(ytMusicLink))
-                                )
-                            }
-                        }
-                    )
-                    ShareListItem(
-                        icon = Icons.Rounded.ContentCopy,
-                        title = "Copy YouTube Music Link",
-                        subtitle = ytMusicLink,
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("YouTube Music Link", ytMusicLink))
-                            Toast.makeText(context, "YouTube Music link copied", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                } else {
                     ShareListItem(
                         icon = Icons.Rounded.ContentCopy,
                         title = stringResource(R.string.share_action_copy_github_link),
