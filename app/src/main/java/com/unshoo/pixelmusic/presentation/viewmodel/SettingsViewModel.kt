@@ -142,7 +142,8 @@ data class SettingsUiState(
     val ytHandle: String = "",
     val ytAvatarUrl: String = "",
     val performanceModeEnabled: Boolean = false,
-    val audioOffloadEnabled: Boolean = false
+    val audioOffloadEnabled: Boolean = false,
+    val preferTelegramAlternative: Boolean = false
 )
 
 data class FailedSongInfo(
@@ -203,7 +204,8 @@ private sealed interface SettingsUiUpdate {
         val animatedLyricsBlurEnabled: Boolean,
         val animatedLyricsBlurStrength: Float,
         val performanceModeEnabled: Boolean,
-        val audioOffloadEnabled: Boolean
+        val audioOffloadEnabled: Boolean,
+        val preferTelegramAlternative: Boolean
     ) : SettingsUiUpdate
 }
 
@@ -614,7 +616,8 @@ class SettingsViewModel @Inject constructor(
                 userPreferencesRepository.animatedLyricsBlurEnabledFlow,
                 userPreferencesRepository.animatedLyricsBlurStrengthFlow,
                 userPreferencesRepository.performanceModeEnabledFlow,
-                userPreferencesRepository.audioOffloadEnabledFlow
+                userPreferencesRepository.audioOffloadEnabledFlow,
+                userPreferencesRepository.preferTelegramAlternativeFlow
             ) { values ->
                 SettingsUiUpdate.Group2(
                     keepPlayingInBackground = values[0] as Boolean,
@@ -635,7 +638,8 @@ class SettingsViewModel @Inject constructor(
                     animatedLyricsBlurEnabled = values[15] as Boolean,
                     animatedLyricsBlurStrength = values[16] as Float,
                     performanceModeEnabled = values[17] as Boolean,
-                    audioOffloadEnabled = values[18] as Boolean
+                    audioOffloadEnabled = values[18] as Boolean,
+                    preferTelegramAlternative = values[19] as Boolean
                 )
             }.collect { update ->
                 _uiState.update { state ->
@@ -658,10 +662,12 @@ class SettingsViewModel @Inject constructor(
                         animatedLyricsBlurEnabled = update.animatedLyricsBlurEnabled,
                         animatedLyricsBlurStrength = update.animatedLyricsBlurStrength,
                         performanceModeEnabled = update.performanceModeEnabled,
-                        audioOffloadEnabled = update.audioOffloadEnabled
+                        audioOffloadEnabled = update.audioOffloadEnabled,
+                        preferTelegramAlternative = update.preferTelegramAlternative
                     )
                 }
             }
+
         }
         
         // Group 3: Remaining individual collectors (loading state, tweaks)
@@ -979,6 +985,12 @@ class SettingsViewModel @Inject constructor(
     fun isAtRoot(): Boolean = fileExplorerStateHolder.isAtRoot()
 
     fun explorerRoot(): File = fileExplorerStateHolder.rootDirectory()
+
+    fun setPreferTelegramAlternative(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setPreferTelegramAlternative(enabled)
+        }
+    }
 
     // Método para guardar la preferencia de tema del reproductor
     fun setPlayerThemePreference(preference: String) {

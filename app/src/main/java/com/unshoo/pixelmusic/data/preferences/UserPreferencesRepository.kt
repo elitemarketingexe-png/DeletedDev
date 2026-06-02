@@ -312,6 +312,18 @@ constructor(
         val SEARCH_SOURCE = stringPreferencesKey("search_source")
         val PERFORMANCE_MODE_ENABLED = booleanPreferencesKey("performance_mode_enabled")
         val AUDIO_OFFLOAD_ENABLED = booleanPreferencesKey("audio_offload_enabled")
+        val PREFER_TELEGRAM_ALTERNATIVE = booleanPreferencesKey("prefer_telegram_alternative")
+    }
+
+    val preferTelegramAlternativeFlow: Flow<Boolean> =
+            dataStore.data.map { preferences ->
+                preferences[PreferencesKeys.PREFER_TELEGRAM_ALTERNATIVE] ?: false
+            }
+
+    suspend fun setPreferTelegramAlternative(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.PREFER_TELEGRAM_ALTERNATIVE] = enabled
+        }
     }
 
     val performanceModeEnabledFlow: Flow<Boolean> =

@@ -101,6 +101,7 @@ import com.unshoo.pixelmusic.utils.LyricsUtils
 import com.unshoo.pixelmusic.utils.StorageType
 import com.unshoo.pixelmusic.utils.StorageUtils
 import com.unshoo.pixelmusic.utils.ZipShareHelper
+import com.unshoo.pixelmusic.utils.normalizeMetadataText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
@@ -4073,20 +4074,50 @@ class PlayerViewModel @Inject constructor(
             ensureTelegramPlaybackObserversStarted()
         }
 
+        var finalUri = originalUri
         if (scheme == "youtube") {
-            val videoId = originalUri.toString().substringAfter("youtube://")
-            val ytSong = try {
-                com.unshoo.pixelmusic.data.database.youtube.AppDatabase.getInstance(context).songRepository().getSong(videoId)
-            } catch (e: Exception) {
-                null
+            // First check if preferTelegramAlternative is enabled
+            val preferTelegram = userPreferencesRepository.preferTelegramAlternativeFlow.first()
+            if (preferTelegram) {
+                val normalizedTitle = song.title.normalizeMetadataText()
+                val normalizedArtist = song.artist.normalizeMetadataText()
+                if (!normalizedTitle.isNullOrBlank() && !normalizedArtist.isNullOrBlank()) {
+                    val telegramSongs = musicRepository.getTelegramSongsOnce()
+                    val matchingTelegram = telegramSongs.firstOrNull {
+                        val tTitle = it.title.normalizeMetadataText()
+                        val tArtist = it.artist.normalizeMetadataText()
+                        !tTitle.isNullOrBlank() && !tArtist.isNullOrBlank() &&
+                                tTitle.equals(normalizedTitle, ignoreCase = true) &&
+                                tArtist.equals(normalizedArtist, ignoreCase = true)
+                    }
+                    if (matchingTelegram != null && matchingTelegram.contentUriString.startsWith("telegram://")) {
+                        Log.i("PlayerViewModel", "Substituting YouTube song with matching Telegram alternative: ${matchingTelegram.title} by ${matchingTelegram.artist}")
+                        ensureTelegramPlaybackObserversStarted()
+                        finalUri = Uri.parse(matchingTelegram.contentUriString)
+                    }
+                }
             }
-            if (ytSong?.audioFilePath != null && java.io.File(ytSong.audioFilePath).exists()) {
-                dualPlayerEngine.registerLocalPath(originalUri.toString(), ytSong.audioFilePath)
-                return mediaItem.buildUpon().setUri(Uri.fromFile(java.io.File(ytSong.audioFilePath))).build()
+
+            if (finalUri.scheme == "youtube") {
+                val videoId = finalUri.toString().substringAfter("youtube://")
+                val ytSong = try {
+                    com.unshoo.pixelmusic.data.database.youtube.AppDatabase.getInstance(context).songRepository().getSong(videoId)
+                } catch (e: Exception) {
+                    null
+                }
+                if (ytSong?.audioFilePath != null && java.io.File(ytSong.audioFilePath).exists()) {
+                    dualPlayerEngine.registerLocalPath(finalUri.toString(), ytSong.audioFilePath)
+                    return mediaItem.buildUpon().setUri(Uri.fromFile(java.io.File(ytSong.audioFilePath))).build()
+                }
             }
         }
 
-        val resolvedUri = dualPlayerEngine.resolveCloudUri(originalUri)
+        if (finalUri.scheme == "telegram") {
+            ensureTelegramPlaybackObserversStarted()
+        }
+
+        val resolvedUri = dualPlayerEngine.resolveCloudUri(finalUri)
+
         return if (resolvedUri == originalUri) {
             mediaItem
         } else {

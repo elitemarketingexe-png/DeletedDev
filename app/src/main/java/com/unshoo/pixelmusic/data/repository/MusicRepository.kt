@@ -172,6 +172,7 @@ interface MusicRepository {
      * @return Lista de objetos Song.
      */
     suspend fun getAllSongsOnce(): List<Song>
+    suspend fun getTelegramSongsOnce(): List<Song>
 
     /**
      * Returns one representative song per unique album art URI for maintenance tools that

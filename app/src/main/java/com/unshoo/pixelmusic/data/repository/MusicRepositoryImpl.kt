@@ -866,6 +866,12 @@ class MusicRepositoryImpl @Inject constructor(
         ).first().map { it.toSong() }
     }
 
+    override suspend fun getTelegramSongsOnce(): List<Song> = withContext(Dispatchers.IO) {
+        musicDao.getSongsBySourceType(SourceType.TELEGRAM).map { it.toSong() }
+    }
+
+
+
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getDistinctAlbumArtSongs(): Flow<List<Song>> {
         return combine(

@@ -32,6 +32,7 @@ import com.unshoo.pixelmusic.data.database.SongArtistCrossRef
 import com.unshoo.pixelmusic.data.database.SongEntity
 import com.unshoo.pixelmusic.data.database.SourceType
 import com.unshoo.pixelmusic.data.database.TelegramDao // Added
+import com.unshoo.pixelmusic.data.database.TelegramSongEntity
 import com.unshoo.pixelmusic.data.database.FavoritesDao
 import com.unshoo.pixelmusic.data.database.FavoritesEntity
 import com.unshoo.pixelmusic.data.database.resolveAlbumArtUri
@@ -1413,7 +1414,15 @@ constructor(
     private suspend fun syncTelegramData() {
         Log.i(TAG, "Syncing Telegram songs to main database (Unified Mode)...")
         try {
-            val telegramSongs = telegramDao.getAllTelegramSongs().first()
+            val rawTelegramSongs = telegramDao.getAllTelegramSongs().first()
+            val telegramSongs = rawTelegramSongs
+                .groupBy { "${it.title.lowercase().trim()}|${it.artist.lowercase().trim()}" }
+                .map { (_, group) ->
+                    group.maxWithOrNull(
+                        compareBy<TelegramSongEntity> { it.filePath.isNotEmpty() && java.io.File(it.filePath).exists() }
+                            .thenBy { it.dateAdded }
+                    ) ?: group.first()
+                }
             val channels = telegramDao.getAllChannels().first().associateBy { it.chatId }
             val existingUnifiedTelegramIds = musicDao.getAllTelegramSongIds()
             
