@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -40,6 +41,7 @@ data class ExploreUiState(
 @HiltViewModel
 class ExploreViewModel @Inject constructor(
     private val playbackStatsRepository: com.unshoo.pixelmusic.data.stats.PlaybackStatsRepository,
+    private val userPreferencesRepository: com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -148,6 +150,69 @@ class ExploreViewModel @Inject constructor(
                         "Bollywood"
                     }
 
+                    // Fetch similar artists
+                    var similarSection: HomePage.Section? = null
+                    val candidateArtistId = userPreferencesRepository.subscribedArtistIdsFlow.first().firstOrNull()
+                    var artistNameForSection = ""
+                    var artistBrowseIdForSearch = candidateArtistId
+
+                    if (artistBrowseIdForSearch == null && userActivityQuery != "Bollywood") {
+                        val searchResult = withContext(Dispatchers.IO) {
+                            YouTube.search(userActivityQuery, YouTube.SearchFilter.FILTER_ARTIST).getOrNull()
+                        }
+                        val artistItem = searchResult?.items?.find { it is ArtistItem } as? ArtistItem
+                        artistBrowseIdForSearch = artistItem?.id
+                        artistNameForSection = artistItem?.title ?: userActivityQuery
+                    }
+
+                    if (artistBrowseIdForSearch != null) {
+                        try {
+                            val artistPage = withContext(Dispatchers.IO) {
+                                YouTube.artist(artistBrowseIdForSearch).getOrNull()
+                            }
+                            if (artistPage != null) {
+                                if (artistNameForSection.isBlank()) {
+                                    artistNameForSection = artistPage.artist.title
+                                }
+                                val rawSimilarSection = artistPage.sections.find {
+                                    it.title.contains("fans", ignoreCase = true) ||
+                                    it.title.contains("similar", ignoreCase = true) ||
+                                    it.title.contains("like", ignoreCase = true)
+                                }
+                                if (rawSimilarSection != null && rawSimilarSection.items.isNotEmpty()) {
+                                    similarSection = HomePage.Section(
+                                        title = "Similar to $artistNameForSection",
+                                        label = "Based on your activity",
+                                        thumbnail = null,
+                                        endpoint = null,
+                                        items = rawSimilarSection.items.filterIsInstance<ArtistItem>()
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "Failed to load similar artists for $artistBrowseIdForSearch")
+                        }
+                    }
+
+                    // Fetch liked albums, liked artists, and recent activity from YouTube Music
+                    val likedAlbums = if (YouTube.hasLoginCookie()) {
+                        withContext(Dispatchers.IO) {
+                            YouTube.library("FEmusic_liked_albums").getOrNull()?.items?.filterIsInstance<AlbumItem>() ?: emptyList()
+                        }
+                    } else emptyList()
+
+                    val likedArtists = if (YouTube.hasLoginCookie()) {
+                        withContext(Dispatchers.IO) {
+                            YouTube.library("FEmusic_liked_artists").getOrNull()?.items?.filterIsInstance<ArtistItem>() ?: emptyList()
+                        }
+                    } else emptyList()
+
+                    val recentActivityItems = if (YouTube.hasLoginCookie()) {
+                        withContext(Dispatchers.IO) {
+                            YouTube.libraryRecentActivity().getOrNull()?.items ?: emptyList()
+                        }
+                    } else emptyList()
+
                     // Load community playlists for user's favorite artist as guest fallback
                     val communityPlaylistsResult = withContext(Dispatchers.IO) {
                         YouTube.search(
@@ -169,11 +234,7 @@ class ExploreViewModel @Inject constructor(
                     }
 
                     if (personalPlaylists.isNotEmpty()) {
-                        // Logged in: Add "Your Playlists" section
-                        // Also remove any generic "Trending community playlists" if present
                         updatedSections.removeAll { it.title.contains("trending", ignoreCase = true) }
-                        
-                        // Let's insert "Your Playlists" section
                         updatedSections.add(0, HomePage.Section(
                             title = "Your Playlists",
                             label = "From your YouTube Music Account",
@@ -182,7 +243,6 @@ class ExploreViewModel @Inject constructor(
                             items = personalPlaylists
                         ))
                     } else {
-                        // Guest mode / Fallback: Fetch search-based community playlists
                         if (communityPlaylists.isNotEmpty()) {
                             updatedSections.removeAll { it.title.contains("trending", ignoreCase = true) }
                             updatedSections.add(HomePage.Section(
@@ -193,6 +253,40 @@ class ExploreViewModel @Inject constructor(
                                 items = communityPlaylists
                             ))
                         }
+                    }
+
+                    if (recentActivityItems.isNotEmpty()) {
+                        updatedSections.add(0, HomePage.Section(
+                            title = "Recently Played (YouTube)",
+                            label = "From your YouTube Music Account",
+                            thumbnail = null,
+                            endpoint = null,
+                            items = recentActivityItems
+                        ))
+                    }
+
+                    if (similarSection != null) {
+                        updatedSections.add(0, similarSection)
+                    }
+
+                    if (likedAlbums.isNotEmpty()) {
+                        updatedSections.add(HomePage.Section(
+                            title = "Your Liked Albums",
+                            label = "From your YouTube Music Account",
+                            thumbnail = null,
+                            endpoint = null,
+                            items = likedAlbums
+                        ))
+                    }
+
+                    if (likedArtists.isNotEmpty()) {
+                        updatedSections.add(HomePage.Section(
+                            title = "Your Favorite Artists",
+                            label = "From your YouTube Music Account",
+                            thumbnail = null,
+                            endpoint = null,
+                            items = likedArtists
+                        ))
                     }
 
                     val finalNewReleases = if (!newReleasesResult.isNullOrEmpty()) newReleasesResult else explore?.newReleaseAlbums ?: emptyList()

@@ -393,7 +393,12 @@ class ListeningStatsTracker @Inject constructor(
             if (playCount < AUTO_CACHE_PLAY_COUNT_THRESHOLD) return
 
             // Resolve the Room numeric ID to look up the song entity
-            val numericId = songId.toLongOrNull() ?: return
+            val numericId = songId.toLongOrNull() ?: run {
+                if (songId.startsWith("youtube_")) {
+                    val ytId = songId.removePrefix("youtube_")
+                    -(15_000_000_000_000L + kotlin.math.abs(ytId.hashCode().toLong()))
+                } else null
+            } ?: return
             val songEntity = musicDao.getSongByIdOnce(numericId) ?: return
 
             // Only auto-cache YouTube-streamed songs that aren't already downloaded

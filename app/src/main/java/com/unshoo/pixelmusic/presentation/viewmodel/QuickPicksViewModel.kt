@@ -85,8 +85,7 @@ class QuickPicksViewModel @Inject constructor(
     private fun loadFromCache() {
         try {
             val timestamp = prefs.getLong(KEY_CACHE_TIMESTAMP, 0L)
-            if (System.currentTimeMillis() - timestamp > CACHE_MAX_AGE_MS) return
-
+            // Stale cache is loaded immediately to allow instant playback, updated in bg later
             val songsJson = prefs.getString(KEY_SONGS, null) ?: return
             val categoriesJson = prefs.getString(KEY_CATEGORIES, null)
 
@@ -173,7 +172,9 @@ class QuickPicksViewModel @Inject constructor(
 
     private fun loadQuickPicks(category: String) {
         viewModelScope.launch {
-            _isLoading.value = true
+            if (_quickPicks.value.isEmpty()) {
+                _isLoading.value = true
+            }
             try {
                 if (category == "All") {
                     val discover = userPreferencesRepository.discoverFlow.first()
@@ -281,10 +282,10 @@ class QuickPicksViewModel @Inject constructor(
             }
         }
 
-        // Load continuation pages if we have less than 50 songs
+        // Load continuation pages if we have less than 25 songs
         var continuation = targetHome.continuation
         var pages = 0
-        while (continuation != null && accountSongsPool.distinctBy { it.id }.size < 50 && pages < 4) {
+        while (continuation != null && accountSongsPool.distinctBy { it.id }.size < 25 && pages < 2) {
             val continuationHome = YouTube.home(continuation = continuation).getOrNull()
             if (continuationHome != null) {
                 val nextSections = continuationHome.sections.filter {
@@ -305,7 +306,7 @@ class QuickPicksViewModel @Inject constructor(
         }
 
         val filteredSongs = accountSongsPool.filterVideo(pureYtMusicOnly)
-        val uniqueSongs = filteredSongs.distinctBy { it.id }.take(50)
+        val uniqueSongs = filteredSongs.distinctBy { it.id }.take(25)
         return uniqueSongs.map { it.toNativeSong() }
     }
 }

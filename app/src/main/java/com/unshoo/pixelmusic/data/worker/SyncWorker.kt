@@ -1932,6 +1932,18 @@ constructor(
                                                 YouTube.addToPlaylist(matchingRemote.id, videoId)
                                             }
                                         }
+
+                                        // Sync deletions back to YouTube
+                                        val deletedVideoIds = remoteSongVideoIds - localYoutubeVideoIds.toSet()
+                                        if (deletedVideoIds.isNotEmpty()) {
+                                            Log.i(TAG, "Removing ${deletedVideoIds.size} deleted songs from remote YouTube playlist '${localPlaylist.name}'...")
+                                            deletedVideoIds.forEach { videoId ->
+                                                val setVideoIds = YouTube.playlistEntrySetVideoIds(matchingRemote.id, videoId).getOrNull() ?: emptyList()
+                                                setVideoIds.forEach { setVideoId ->
+                                                    YouTube.removeFromPlaylist(matchingRemote.id, videoId, setVideoId)
+                                                }
+                                            }
+                                        }
                                     } catch (e: Exception) {
                                         Log.e(TAG, "Failed to sync songs to existing remote YouTube playlist", e)
                                     }

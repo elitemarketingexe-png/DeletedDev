@@ -1890,10 +1890,12 @@ class MusicService : MediaLibraryService() {
         }
 
         val preparedItems = restoredItems.toMutableList()
+        // Do not block player restoration on resolving the track's streaming URI from network.
+        // Instead, restore immediately with the unresolved media item so the UI displays the song instantly.
+        // The URI resolution is launched asynchronously to warm up the cache.
         preparedItems.getOrNull(resolvedIndex)?.let { currentItem ->
-            val resolvedCurrentItem = runCatching { engine.resolveMediaItem(currentItem) }.getOrNull()
-            if (resolvedCurrentItem != null && resolvedCurrentItem != currentItem) {
-                preparedItems[resolvedIndex] = resolvedCurrentItem
+            serviceScope.launch(Dispatchers.IO) {
+                runCatching { engine.resolveMediaItem(currentItem) }
             }
         }
 

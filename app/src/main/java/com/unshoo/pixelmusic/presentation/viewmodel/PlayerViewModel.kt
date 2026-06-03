@@ -1081,6 +1081,21 @@ class PlayerViewModel @Inject constructor(
                 snapshot.items.getOrNull(snapshot.currentIndex)
             } ?: return@launch
 
+            val uriStr = currentItem.uri
+            if (uriStr.isNotBlank() && (
+                uriStr.startsWith("youtube://") ||
+                uriStr.startsWith("telegram:") ||
+                uriStr.startsWith("gdrive:")
+            )) {
+                launch(Dispatchers.IO) {
+                    try {
+                        dualPlayerEngine.resolveCloudUri(uriStr.toUri())
+                    } catch (e: Exception) {
+                        Timber.w(e, "Pre-fetching startup cloud URI failed for: $uriStr")
+                    }
+                }
+            }
+
             val artworkUri = currentItem.artworkUri?.takeIf { it.isNotBlank() } ?: return@launch
 
             themeStateHolder.extractAndGenerateColorScheme(

@@ -1085,6 +1085,28 @@ class PlaylistViewModel @Inject constructor(
                 removeSongFromPlaylist(currentPlaylistId, mappedSongId)
             }
 
+            // Sync all removals to remote YouTube playlists
+            removedFromPlaylists.forEach { playlistId ->
+                if (playlistId != currentPlaylistId) {
+                    val playlist = currentPlaylists.find { it.id == playlistId }
+                    if (playlist != null && playlist.source == "YOUTUBE") {
+                        val videoId = song.youtubeId ?: if (song.id.startsWith("youtube_")) song.id.removePrefix("youtube_") else song.id
+                        if (videoId.isNotBlank()) {
+                            viewModelScope.launch(Dispatchers.IO) {
+                                try {
+                                    val setVideoIds = YouTube.playlistEntrySetVideoIds(playlist.id, videoId).getOrNull()
+                                    setVideoIds?.forEach { setVideoId ->
+                                        YouTube.removeFromPlaylist(playlist.id, videoId, setVideoId)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("PlaylistViewModel", "Failed to sync song removal to YouTube playlist $playlistId", e)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             addedToPlaylists.forEach { playlistId ->
                 val playlist = playlistPreferencesRepository.userPlaylistsFlow.first().find { it.id == playlistId }
                 if (playlist != null && playlist.source == "YOUTUBE") {

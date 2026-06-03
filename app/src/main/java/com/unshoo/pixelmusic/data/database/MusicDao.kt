@@ -1958,7 +1958,9 @@ interface MusicDao {
 
     @Query("""
         SELECT s.artists_json FROM songs s
-        INNER JOIN song_engagements e ON s.id = e.song_id
+        INNER JOIN song_engagements e ON (
+            'youtube_' || SUBSTR(s.content_uri_string, 11) = e.song_id
+        )
         WHERE s.source_type = 7 AND s.artists_json IS NOT NULL
         ORDER BY e.play_count DESC, e.last_played_timestamp DESC
         LIMIT 50
@@ -1981,99 +1983,76 @@ interface MusicDao {
      */
     @Query("""
         SELECT * FROM songs
-        WHERE id NOT IN (
-            SELECT CAST(song_id AS INTEGER)
-            FROM song_engagements
-            WHERE play_count > 0
-        ) AND (
-            -- 1. The artist of the song has been played
-            artist_id IN (
-                SELECT artist_id
-                FROM songs
-                WHERE id IN (
-                    SELECT CAST(song_id AS INTEGER)
-                    FROM song_engagements
-                    WHERE play_count > 0
-                )
+        WHERE 
+            -- Exclude all played songs and favorite songs to avoid overlap with Daily Mix
+            is_favorite = 0
+            AND CASE WHEN source_type = 7 THEN 'youtube_' || SUBSTR(content_uri_string, 11) ELSE CAST(id AS TEXT) END NOT IN (
+                SELECT song_id
+                FROM song_engagements
+                WHERE play_count > 0
             )
-            -- 2. The artist of the song is a favorite artist
-            OR artist_id IN (
-                SELECT artist_id
-                FROM songs
-                WHERE is_favorite = 1
-            )
-            -- 3. The song is related to a song by a played or favorite artist
-            OR id IN (
-                SELECT related_song_id
-                FROM related_song_map
-                WHERE song_id IN (
-                    SELECT id
+            -- Main selection criteria for relevant unplayed discoveries
+            AND (
+                -- 1. The artist of the song has been played or is a favorite artist
+                artist_id IN (
+                    SELECT artist_id
                     FROM songs
-                    WHERE artist_id IN (
-                        SELECT artist_id
+                    WHERE is_favorite = 1 OR CASE WHEN source_type = 7 THEN 'youtube_' || SUBSTR(content_uri_string, 11) ELSE CAST(id AS TEXT) END IN (
+                        SELECT song_id
+                        FROM song_engagements
+                        WHERE play_count > 0
+                    )
+                )
+                -- 2. The song is related to a played or favorite song
+                OR id IN (
+                    SELECT related_song_id
+                    FROM related_song_map
+                    WHERE song_id IN (
+                        SELECT id
                         FROM songs
-                        WHERE id IN (
-                            SELECT CAST(song_id AS INTEGER)
+                        WHERE is_favorite = 1 OR CASE WHEN source_type = 7 THEN 'youtube_' || SUBSTR(content_uri_string, 11) ELSE CAST(id AS TEXT) END IN (
+                            SELECT song_id
                             FROM song_engagements
                             WHERE play_count > 0
                         )
-                    ) OR is_favorite = 1
+                    )
                 )
             )
-            -- 4. The song is related to a recently played song
-            OR id IN (
-                SELECT related_song_id
-                FROM related_song_map
-                WHERE song_id IN (
-                    SELECT CAST(song_id AS INTEGER)
-                    FROM song_engagements
-                    WHERE play_count > 0
-                )
-            )
-        )
         ORDER BY (
             CASE
-                -- Match related songs of recently played that also match favorite/played artists
+                -- Prioritize related songs of favorites (highest relevance discovery)
                 WHEN id IN (
                     SELECT related_song_id
                     FROM related_song_map
                     WHERE song_id IN (
-                        SELECT CAST(song_id AS INTEGER)
-                        FROM song_engagements
-                        WHERE play_count > 0
-                    )
-                ) AND artist_id IN (
-                    SELECT artist_id
-                    FROM songs
-                    WHERE is_favorite = 1 OR id IN (
-                        SELECT CAST(song_id AS INTEGER)
-                        FROM song_engagements
-                        WHERE play_count > 0
+                        SELECT id
+                        FROM songs
+                        WHERE is_favorite = 1
                     )
                 ) THEN 4
-                
-                -- Match related songs of recently played
-                WHEN id IN (
-                    SELECT related_song_id
-                    FROM related_song_map
-                    WHERE song_id IN (
-                        SELECT CAST(song_id AS INTEGER)
-                        FROM song_engagements
-                        WHERE play_count > 0
-                    )
-                ) THEN 3
-                
-                -- Match played / favorite artist songs
+
+                -- Songs by favorite artists
                 WHEN artist_id IN (
                     SELECT artist_id
                     FROM songs
-                    WHERE is_favorite = 1 OR id IN (
-                        SELECT CAST(song_id AS INTEGER)
-                        FROM song_engagements
-                        WHERE play_count > 0
+                    WHERE is_favorite = 1
+                ) THEN 3
+
+                -- Related to recently played
+                WHEN id IN (
+                    SELECT related_song_id
+                    FROM related_song_map
+                    WHERE song_id IN (
+                        SELECT id
+                        FROM songs
+                        WHERE CASE WHEN source_type = 7 THEN 'youtube_' || SUBSTR(content_uri_string, 11) ELSE CAST(id AS TEXT) END IN (
+                            SELECT song_id
+                            FROM song_engagements
+                            WHERE play_count > 0
+                        )
                     )
                 ) THEN 2
-                
+
                 -- Fallback
                 ELSE 1
             END
@@ -2128,8 +2107,8 @@ interface MusicDao {
 
     @Query("""
         SELECT * FROM songs 
-        WHERE id IN (
-            SELECT CAST(song_id AS INTEGER) 
+        WHERE CASE WHEN source_type = 7 THEN 'youtube_' || SUBSTR(content_uri_string, 11) ELSE CAST(id AS TEXT) END IN (
+            SELECT song_id 
             FROM song_engagements 
             WHERE play_count >= 3 AND last_played_timestamp < :thirtyDaysAgo
         )
@@ -2139,8 +2118,8 @@ interface MusicDao {
 
     @Query("""
         SELECT * FROM songs 
-        WHERE id = (
-            SELECT CAST(song_id AS INTEGER) 
+        WHERE CASE WHEN source_type = 7 THEN 'youtube_' || SUBSTR(content_uri_string, 11) ELSE CAST(id AS TEXT) END = (
+            SELECT song_id 
             FROM song_engagements 
             WHERE last_played_timestamp > 0 
             ORDER BY last_played_timestamp DESC 

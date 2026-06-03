@@ -365,12 +365,19 @@ fun ExploreScreen(
                                     )
                                 }
                                 item(key = "home_section_${section.title}_${index}_carousel") {
-                                    YTItemCarousel(
-                                        items = section.items,
-                                        navController = navController,
-                                        playerViewModel = playerViewModel,
-                                        sectionTitle = section.title
-                                    )
+                                    if (section.title.startsWith("Similar to", ignoreCase = true) || section.title.contains("Fans also like", ignoreCase = true)) {
+                                        SimilarArtistsCarousel(
+                                            artists = section.items.filterIsInstance<ArtistItem>(),
+                                            navController = navController
+                                        )
+                                    } else {
+                                        YTItemCarousel(
+                                            items = section.items,
+                                            navController = navController,
+                                            playerViewModel = playerViewModel,
+                                            sectionTitle = section.title
+                                        )
+                                    }
                                 }
                             }
 
@@ -698,6 +705,94 @@ fun PlaylistCardItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+fun SimilarArtistsCarousel(
+    artists: List<ArtistItem>,
+    navController: NavController
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        items(artists) { artist ->
+            SimilarArtistCardItem(
+                artist = artist,
+                onClick = {
+                    navController.navigateSafely(Screen.ArtistDetail.createRoute(artist.id))
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun SimilarArtistCardItem(
+    artist: ArtistItem,
+    onClick: () -> Unit
+) {
+    val shape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
+    val primaryColor = MaterialTheme.colorScheme.primary
+    Card(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(onClick = onClick),
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(110.dp)
+                    .background(
+                        color = primaryColor.copy(alpha = 0.12f),
+                        shape = CircleShape
+                    )
+                    .padding(4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                SmartImage(
+                    model = artist.thumbnail,
+                    contentDescription = artist.title,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = artist.title,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = GoogleSansRounded
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "Similar Artist",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = FontWeight.Medium
+                ),
+                color = primaryColor.copy(alpha = 0.8f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
