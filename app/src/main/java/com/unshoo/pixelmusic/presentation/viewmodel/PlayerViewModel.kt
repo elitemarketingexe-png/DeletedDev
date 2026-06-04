@@ -4218,12 +4218,12 @@ class PlayerViewModel @Inject constructor(
             )
             if (target) {
                 withContext(Dispatchers.Main) {
-                    val controller = mediaController
-                    if (controller != null && controller.mediaItemCount > 0) {
-                        val currentIndex = controller.currentMediaItemIndex
-                        val totalCount = controller.mediaItemCount
+                    val player = dualPlayerEngine.masterPlayer
+                    if (player.mediaItemCount > 0) {
+                        val currentIndex = player.currentMediaItemIndex
+                        val totalCount = player.mediaItemCount
                         if (totalCount > currentIndex + 1) {
-                            controller.removeMediaItems(currentIndex + 1, totalCount)
+                            player.removeMediaItems(currentIndex + 1, totalCount)
                         }
                     }
                 }

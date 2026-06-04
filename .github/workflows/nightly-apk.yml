@@ -196,7 +196,7 @@ jobs:
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Publish Nightly to Telegram Channel
-        if: success()
+        if: false
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: "@PixelMusicApp"
