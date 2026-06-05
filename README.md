@@ -14,7 +14,6 @@
   <img src="assets/screenshot2.jpg" alt="Pixel Music Player Sheet" width="150" style="border-radius:26px; margin: 4px;"/>
   <img src="assets/screenshot3.jpg" alt="Pixel Music Equalizer" width="150" style="border-radius:26px; margin: 4px;"/>
   <img src="assets/screenshot4.jpg" alt="Pixel Music Sync Lyrics" width="150" style="border-radius:26px; margin: 4px;"/>
-  <img src="assets/screenshot5.jpg" alt="Pixel Music Settings Screen" width="150" style="border-radius:26px; margin: 4px;"/>
 </p>
 
 <p align="center">
