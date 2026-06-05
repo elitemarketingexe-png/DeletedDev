@@ -1018,38 +1018,16 @@ object YoutubeHelper {
         }
 
         var didRefreshVisitorData = false
+        val playerResponseCache = mutableMapOf<String, PlayerResponse>()
 
-        for (clientObj in clients) {
-            try {
-                UmihiHelper.printd("Trying playback client: ${clientObj.clientName}")
-                var playerResResult = YouTube.player(
-                    videoId = videoId,
-                    playlistId = null,
-                    client = clientObj,
-                    signatureTimestamp = signatureTimestamp,
-                    setLogin = authState.hasPlaybackLoginContext,
-                    authState = authState
-                )
-
-                var playerResponse = playerResResult.getOrNull()
-                if (playerResponse == null) {
-                    UmihiHelper.printe("Player response was null for client ${clientObj.clientName}")
-                    continue
-                }
-
-                var status = playerResponse.playabilityStatus.status
-                var reason = playerResponse.playabilityStatus.reason.orEmpty()
-                val isBot = "bot" in reason.lowercase(Locale.US) || "unusual traffic" in reason.lowercase(Locale.US) || "automated" in reason.lowercase(Locale.US)
-
-                if (status != "OK" && isBot && !didRefreshVisitorData) {
-                    UmihiHelper.printd("Bot detection triggered. Refreshing visitorData...")
-                    val refreshedVisitorData = YouTube.visitorData().getOrNull()
-                    if (!refreshedVisitorData.isNullOrBlank()) {
-                        YouTube.visitorData = refreshedVisitorData
-                        authState = authState.copy(visitorData = refreshedVisitorData).normalized()
-                        didRefreshVisitorData = true
-
-                        playerResResult = YouTube.player(
+        // Phase 1: If user preference is High Quality (maxBitrateKbps == 0), scan all clients for the highest bitrate Opus format first.
+        if (maxBitrateKbps == 0) {
+            UmihiHelper.printd("Enforcing HIGH quality Opus resolution first across all clients for videoId=$videoId...")
+            for (clientObj in clients) {
+                try {
+                    var playerResponse = playerResponseCache[clientObj.clientName]
+                    if (playerResponse == null) {
+                        var playerResResult = YouTube.player(
                             videoId = videoId,
                             playlistId = null,
                             client = clientObj,
@@ -1059,13 +1037,124 @@ object YoutubeHelper {
                         )
                         playerResponse = playerResResult.getOrNull()
                         if (playerResponse != null) {
-                            status = playerResponse.playabilityStatus.status
-                            reason = playerResponse.playabilityStatus.reason.orEmpty()
+                            var status = playerResponse.playabilityStatus.status
+                            var reason = playerResponse.playabilityStatus.reason.orEmpty()
+                            val isBot = "bot" in reason.lowercase(Locale.US) || "unusual traffic" in reason.lowercase(Locale.US) || "automated" in reason.lowercase(Locale.US)
+
+                            if (status != "OK" && isBot && !didRefreshVisitorData) {
+                                val refreshedVisitorData = YouTube.visitorData().getOrNull()
+                                if (!refreshedVisitorData.isNullOrBlank()) {
+                                    YouTube.visitorData = refreshedVisitorData
+                                    authState = authState.copy(visitorData = refreshedVisitorData).normalized()
+                                    didRefreshVisitorData = true
+
+                                    playerResResult = YouTube.player(
+                                        videoId = videoId,
+                                        playlistId = null,
+                                        client = clientObj,
+                                        signatureTimestamp = signatureTimestamp,
+                                        setLogin = authState.hasPlaybackLoginContext,
+                                        authState = authState
+                                    )
+                                    playerResponse = playerResResult.getOrNull()
+                                }
+                            }
                         }
+                        if (playerResponse != null) {
+                            playerResponseCache[clientObj.clientName] = playerResponse
+                        }
+                    }
+
+                    if (playerResponse == null || playerResponse.playabilityStatus.status != "OK") {
+                        continue
+                    }
+
+                    val opusFormats = playerResponse.streamingData?.adaptiveFormats.orEmpty()
+                        .filter { 
+                            it.mimeType.contains("opus", ignoreCase = true) && 
+                            it.bitrate > 0
+                        }
+                        .sortedByDescending { it.bitrate }
+
+                    for (candidate in opusFormats) {
+                        if (shouldSkipCipheredWebCandidate(clientObj, candidate, authState)) continue
+                        val deobfuscated = NewPipeUtils.getStreamUrl(candidate, videoId, clientObj, authState).getOrNull() ?: continue
+                        val patched = StreamClientUtils.patchClientVersion(deobfuscated, clientObj.clientVersion)
+                        
+                        if (validateStatus(patched)) {
+                            playerResponse.playbackTracking?.videostatsPlaybackUrl?.baseUrl?.let { baseUrl ->
+                                playbackTrackingCache[videoId] = baseUrl
+                            }
+                            lastSuccessfulClientKey = StreamClientUtils.buildClientKey(clientObj)
+                            UmihiHelper.printd("Enforced HIGH quality Opus URL resolved with client: ${clientObj.clientName} (bitrate: ${candidate.bitrate})")
+                            return patched
+                        }
+                    }
+                } catch (e: Exception) {
+                    UmihiHelper.printe("Error in HIGH quality Opus pre-resolution for client ${clientObj.clientName}: ${e.message}")
+                }
+            }
+        }
+
+        // Phase 2: Standard client-by-client candidate evaluation fallback
+        for (clientObj in clients) {
+            try {
+                UmihiHelper.printd("Trying playback client: ${clientObj.clientName}")
+                var playerResponse = playerResponseCache[clientObj.clientName]
+                if (playerResponse == null) {
+                    var playerResResult = YouTube.player(
+                        videoId = videoId,
+                        playlistId = null,
+                        client = clientObj,
+                        signatureTimestamp = signatureTimestamp,
+                        setLogin = authState.hasPlaybackLoginContext,
+                        authState = authState
+                    )
+
+                    playerResponse = playerResResult.getOrNull()
+                    if (playerResponse != null) {
+                        var status = playerResponse.playabilityStatus.status
+                        var reason = playerResponse.playabilityStatus.reason.orEmpty()
+                        val isBot = "bot" in reason.lowercase(Locale.US) || "unusual traffic" in reason.lowercase(Locale.US) || "automated" in reason.lowercase(Locale.US)
+
+                        if (status != "OK" && isBot && !didRefreshVisitorData) {
+                            UmihiHelper.printd("Bot detection triggered. Refreshing visitorData...")
+                            val refreshedVisitorData = YouTube.visitorData().getOrNull()
+                            if (!refreshedVisitorData.isNullOrBlank()) {
+                                YouTube.visitorData = refreshedVisitorData
+                                authState = authState.copy(visitorData = refreshedVisitorData).normalized()
+                                didRefreshVisitorData = true
+
+                                playerResResult = YouTube.player(
+                                    videoId = videoId,
+                                    playlistId = null,
+                                    client = clientObj,
+                                    signatureTimestamp = signatureTimestamp,
+                                    setLogin = authState.hasPlaybackLoginContext,
+                                    authState = authState
+                                )
+                                playerResponse = playerResResult.getOrNull()
+                                if (playerResponse != null) {
+                                    status = playerResponse.playabilityStatus.status
+                                    reason = playerResponse.playabilityStatus.reason.orEmpty()
+                                }
+                            }
+                        }
+                    }
+                    if (playerResponse != null) {
+                        playerResponseCache[clientObj.clientName] = playerResponse
                     }
                 }
 
-                if (playerResponse == null || status != "OK") {
+                if (playerResponse == null) {
+                    UmihiHelper.printe("Player response was null for client ${clientObj.clientName}")
+                    continue
+                }
+
+                var status = playerResponse.playabilityStatus.status
+                var reason = playerResponse.playabilityStatus.reason.orEmpty()
+
+                if (status != "OK") {
                     UmihiHelper.printe("Playability check failed for client ${clientObj.clientName}: status=$status, reason=$reason")
                     continue
                 }

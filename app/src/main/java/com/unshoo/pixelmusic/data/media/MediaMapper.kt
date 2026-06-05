@@ -25,7 +25,13 @@ class MediaMapper @Inject constructor(
         // extras are lazily populated in some cases, or we rely on localConfiguration
         val contentUri = extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI)
             ?: mediaItem.localConfiguration?.uri?.toString()
-            ?: return null
+            ?: if (mediaItem.mediaId.startsWith("-15")) {
+                "youtube://${mediaItem.mediaId}"
+            } else if (mediaItem.mediaId.startsWith("youtube_")) {
+                "youtube://${mediaItem.mediaId.removePrefix("youtube_")}"
+            } else {
+                ""
+            }
 
         val title = metadata.title?.toString()?.takeIf { it.isNotBlank() }
             ?: context.getString(R.string.unknown_song_title)
@@ -45,6 +51,15 @@ class MediaMapper @Inject constructor(
                 .orEmpty()
         val id = mediaItem.mediaId
 
+        val resolvedYoutubeId = if (id.startsWith("youtube_")) {
+            id.removePrefix("youtube_")
+        } else if (contentUri.startsWith("youtube://")) {
+            val yId = contentUri.removePrefix("youtube://")
+            if (yId.startsWith("-15")) null else yId
+        } else {
+            null
+        }
+
         // Note: This creates a partial Song object. 
         // Some fields like path, genre, year might be missing if not in extras.
         return Song(
@@ -61,7 +76,8 @@ class MediaMapper @Inject constructor(
             dateAdded = dateAdded,
             mimeType = null, 
             bitrate = null,
-            sampleRate = null
+            sampleRate = null,
+            youtubeId = resolvedYoutubeId
         )
     }
 }
