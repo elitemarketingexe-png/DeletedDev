@@ -202,6 +202,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.TextButton
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import kotlinx.collections.immutable.ImmutableList
@@ -214,6 +215,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDp
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material3.ModalBottomSheet
@@ -502,15 +508,27 @@ fun LibraryScreen(
     var showCreateAiPlaylistDialog by remember { mutableStateOf(false) }
     var aiGenerationRequestedFromDialog by remember { mutableStateOf(false) }
 
+    var pendingImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var pendingImportIsCsv by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
+
     val m3uImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { playlistViewModel.importM3u(it) }
+        if (uri != null) {
+            pendingImportUri = uri
+            pendingImportIsCsv = false
+            showImportDialog = true
+        }
     }
     val csvImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { playlistViewModel.importCsv(it) }
+        if (uri != null) {
+            pendingImportUri = uri
+            pendingImportIsCsv = true
+            showImportDialog = true
+        }
     }
     var showImportSheet by remember { mutableStateOf(false) }
 
@@ -2152,6 +2170,278 @@ fun LibraryScreen(
                 csvImportLauncher.launch("text/csv")
             }
         )
+    }
+
+    ImportPlaylistProgressOverlay(
+        importProgressState = playlistViewModel.importProgress
+    )
+
+    if (showImportDialog && pendingImportUri != null) {
+        ImportPlaylistFileDialog(
+            isVisible = showImportDialog,
+            uri = pendingImportUri!!,
+            isCsv = pendingImportIsCsv,
+            playlistViewModel = playlistViewModel,
+            onDismiss = {
+                showImportDialog = false
+                pendingImportUri = null
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+private fun ImportPlaylistProgressOverlay(
+    importProgressState: StateFlow<com.unshoo.pixelmusic.presentation.viewmodel.ImportProgressState>
+) {
+    val importProgress by importProgressState.collectAsStateWithLifecycle()
+    if (!importProgress.isImporting) return
+
+    val infiniteTransition = rememberInfiniteTransition(label = "ImportMorph")
+    
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "ImportCardRotation"
+    )
+
+    val radiusValue1 by infiniteTransition.animateFloat(
+        initialValue = 16f,
+        targetValue = 60f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "Corner1"
+    )
+    val radiusValue2 by infiniteTransition.animateFloat(
+        initialValue = 60f,
+        targetValue = 24f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "Corner2"
+    )
+    val radiusValue3 by infiniteTransition.animateFloat(
+        initialValue = 24f,
+        targetValue = 60f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "Corner3"
+    )
+    val radiusValue4 by infiniteTransition.animateFloat(
+        initialValue = 60f,
+        targetValue = 16f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "Corner4"
+    )
+
+    val morphingShape = remember(radiusValue1, radiusValue2, radiusValue3, radiusValue4) {
+        AbsoluteSmoothCornerShape(
+            cornerRadiusTL = radiusValue1.dp,
+            cornerRadiusTR = radiusValue2.dp,
+            cornerRadiusBR = radiusValue3.dp,
+            cornerRadiusBL = radiusValue4.dp,
+            smoothnessAsPercentTL = 60,
+            smoothnessAsPercentTR = 60,
+            smoothnessAsPercentBR = 60,
+            smoothnessAsPercentBL = 60
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f))
+            .pointerInput(Unit) {
+                detectTapGestures { } // Consume taps to prevent interactions under the overlay
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .padding(16.dp),
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.9f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Box(
+                    modifier = Modifier.size(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .rotate(rotation)
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.tertiaryContainer
+                                    )
+                                ),
+                                shape = morphingShape
+                            )
+                            .border(
+                                width = 1.5.dp,
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f)
+                                    )
+                                ),
+                                shape = morphingShape
+                            )
+                    )
+                    
+                    AnimatedContent(
+                        targetState = importProgress.importType,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(400)) togetherWith fadeOut(animationSpec = tween(400))
+                        },
+                        label = "ImportIconTransition"
+                    ) { type ->
+                        val iconPainter = if (type == "csv") {
+                            painterResource(R.drawable.rounded_attach_file_24)
+                        } else {
+                            null
+                        }
+                        
+                        if (iconPainter != null) {
+                            Icon(
+                                painter = iconPainter,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(44.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(44.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Progress Texts
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = importProgress.playlistName.ifBlank { stringResource(R.string.presentation_batch_b_importing) },
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    
+                    val progressText = if (importProgress.totalTracks > 0) {
+                        stringResource(
+                            R.string.presentation_batch_b_import_progress,
+                            importProgress.currentTrackIndex,
+                            importProgress.totalTracks
+                        )
+                    } else {
+                        stringResource(R.string.presentation_batch_b_resolving)
+                    }
+                    
+                    Text(
+                        text = progressText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                
+                // Linear Wavy Progress Bar
+                val animatedProgress by animateFloatAsState(
+                    targetValue = if (importProgress.totalTracks > 0) {
+                        importProgress.currentTrackIndex.toFloat() / importProgress.totalTracks
+                    } else {
+                        0f
+                    },
+                    animationSpec = tween(durationMillis = 300),
+                    label = "ImportProgressAnim"
+                )
+                
+                if (importProgress.totalTracks > 0) {
+                    LinearWavyProgressIndicator(
+                        progress = { animatedProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(50)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                } else {
+                    LinearWavyProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(50)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                }
+                
+                // Current Song Info details
+                if (importProgress.currentTrackName.isNotBlank()) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = importProgress.currentTrackName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.basicMarquee()
+                        )
+                        if (importProgress.currentTrackArtist.isNotBlank()) {
+                            Text(
+                                text = importProgress.currentTrackArtist,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -3866,5 +4156,273 @@ fun AlbumListItem(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ImportPlaylistFileDialog(
+    isVisible: Boolean,
+    uri: android.net.Uri,
+    isCsv: Boolean,
+    playlistViewModel: PlaylistViewModel,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+
+    var initialName by androidx.compose.runtime.remember(uri) {
+        var resolvedName = "Imported Playlist"
+        try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1 && cursor.moveToFirst()) {
+                    val rawName = cursor.getString(nameIndex)
+                    resolvedName = if (isCsv) rawName.removeSuffix(".csv") else rawName.removeSuffix(".m3u").removeSuffix(".m3u8")
+                }
+            }
+        } catch (e: Exception) {
+            resolvedName = "Imported Playlist"
+        }
+        androidx.compose.runtime.mutableStateOf(resolvedName)
+    }
+
+    var playlistNameInput by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(initialName) }
+    var isImporting by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showDuplicateDialog by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var resolvedSongIds by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<String>?>(null) }
+    var existingPlaylist by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<com.unshoo.pixelmusic.data.model.Playlist?>(null) }
+    var isProcessingDuplicate by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    val importProgress by playlistViewModel.importProgress.collectAsStateWithLifecycle()
+
+    fun resetState() {
+        isImporting = false
+        showDuplicateDialog = false
+        resolvedSongIds = null
+        existingPlaylist = null
+        isProcessingDuplicate = false
+    }
+
+    if (isVisible && !showDuplicateDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isImporting) {
+                    resetState()
+                    onDismiss()
+                }
+            },
+            title = {
+                Text(
+                    text = if (isCsv) "Import CSV Playlist" else "Import M3U Playlist",
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (isImporting) {
+                        Text(
+                            text = "Importing tracks: ${importProgress.currentTrackIndex}/${importProgress.totalTracks}",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        if (importProgress.currentTrackName.isNotBlank()) {
+                            Text(
+                                text = "${importProgress.currentTrackName} - ${importProgress.currentTrackArtist}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        CircularWavyProgressIndicator(
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
+                    } else {
+                        Text(
+                            text = "Confirm playlist name:",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        OutlinedTextField(
+                            value = playlistNameInput,
+                            onValueChange = { playlistNameInput = it },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isImporting && playlistNameInput.isNotBlank(),
+                    onClick = {
+                        isImporting = true
+                        playlistViewModel.setImportingState(true, playlistNameInput, isCsv)
+                        coroutineScope.launch {
+                            try {
+                                val result = if (isCsv) {
+                                    playlistViewModel.m3uManager.parseCsv(uri) { current, total, title, artist ->
+                                        playlistViewModel.updateImportProgress(playlistNameInput, current, total, title, artist)
+                                    }
+                                } else {
+                                    playlistViewModel.m3uManager.parseM3u(uri) { current, total, title, artist ->
+                                        playlistViewModel.updateImportProgress(playlistNameInput, current, total, title, artist)
+                                    }
+                                }
+                                val songIds = result.second
+                                resolvedSongIds = songIds
+
+                                if (songIds.isEmpty()) {
+                                    android.widget.Toast.makeText(context, "No playable songs found to import", android.widget.Toast.LENGTH_SHORT).show()
+                                    resetState()
+                                    onDismiss()
+                                    return@launch
+                                }
+
+                                val existing = playlistViewModel.findPlaylistByName(playlistNameInput)
+                                if (existing != null) {
+                                    existingPlaylist = existing
+                                    isImporting = false
+                                    showDuplicateDialog = true
+                                } else {
+                                    playlistViewModel.playlistPreferencesRepository.createPlaylist(playlistNameInput, songIds)
+                                    android.widget.Toast.makeText(context, "Playlist imported successfully", android.widget.Toast.LENGTH_SHORT).show()
+                                    resetState()
+                                    onDismiss()
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                android.widget.Toast.makeText(context, "Import failed: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+                                resetState()
+                                onDismiss()
+                            } finally {
+                                playlistViewModel.setImportingState(false)
+                            }
+                        }
+                    }
+                ) {
+                    Text("Import")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isImporting,
+                    onClick = {
+                        resetState()
+                        onDismiss()
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showDuplicateDialog && existingPlaylist != null) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isProcessingDuplicate) {
+                    resetState()
+                    onDismiss()
+                }
+            },
+            title = {
+                Text(
+                    text = "Playlist Already Exists",
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "A playlist named \"${existingPlaylist!!.name}\" already exists in your library. What would you like to do?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (isProcessingDuplicate) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        CircularWavyProgressIndicator()
+                    }
+                }
+            },
+            confirmButton = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Update option (Merge)
+                    TextButton(
+                        enabled = !isProcessingDuplicate,
+                        onClick = {
+                            isProcessingDuplicate = true
+                            coroutineScope.launch {
+                                try {
+                                    val songIds = resolvedSongIds ?: emptyList()
+                                    val existingSongIds = existingPlaylist!!.songIds.toSet()
+                                    val newSongIds = songIds.filterNot { it in existingSongIds }
+
+                                    if (newSongIds.isEmpty()) {
+                                        android.widget.Toast.makeText(context, "Playlist is already up to date", android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val mergedSongIds = existingPlaylist!!.songIds + newSongIds
+                                        playlistViewModel.playlistPreferencesRepository.updatePlaylist(
+                                            existingPlaylist!!.copy(songIds = mergedSongIds)
+                                        )
+                                        android.widget.Toast.makeText(context, "Playlist updated with ${newSongIds.size} new songs", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                    resetState()
+                                    onDismiss()
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Failed to update playlist: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+                                    resetState()
+                                    onDismiss()
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Update Existing")
+                    }
+
+                    // Import as new option
+                    TextButton(
+                        enabled = !isProcessingDuplicate,
+                        onClick = {
+                            isProcessingDuplicate = true
+                            coroutineScope.launch {
+                                try {
+                                    val songIds = resolvedSongIds ?: emptyList()
+                                    playlistViewModel.playlistPreferencesRepository.createPlaylist(playlistNameInput, songIds)
+                                    android.widget.Toast.makeText(context, "Playlist imported as a new copy", android.widget.Toast.LENGTH_SHORT).show()
+                                    resetState()
+                                    onDismiss()
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Failed to import playlist: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+                                    resetState()
+                                    onDismiss()
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Create New")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isProcessingDuplicate,
+                    onClick = {
+                        resetState()
+                        onDismiss()
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

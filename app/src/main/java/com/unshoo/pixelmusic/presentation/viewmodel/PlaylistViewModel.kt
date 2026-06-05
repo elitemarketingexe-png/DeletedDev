@@ -82,13 +82,23 @@ sealed class PlaylistSongsOrderMode {
     data class Sorted(val option: SortOption) : PlaylistSongsOrderMode()
 }
 
+data class ImportProgressState(
+    val isImporting: Boolean = false,
+    val playlistName: String = "",
+    val totalTracks: Int = 0,
+    val currentTrackIndex: Int = 0,
+    val currentTrackName: String = "",
+    val currentTrackArtist: String = "",
+    val importType: String = ""
+)
+
 @HiltViewModel
 class PlaylistViewModel @Inject constructor(
-    private val playlistPreferencesRepository: PlaylistPreferencesRepository,
+    val playlistPreferencesRepository: PlaylistPreferencesRepository,
     private val musicRepository: MusicRepository,
     private val dailyMixManager: DailyMixManager,
     private val aiPlaylistGenerator: AiPlaylistGenerator,
-    private val m3uManager: M3uManager,
+    val m3uManager: M3uManager,
     private val musicDao: MusicDao,
     private val datastoreRepository: DatastoreRepository,
     @ApplicationContext private val context: Context
@@ -96,6 +106,9 @@ class PlaylistViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(PlaylistUiState())
     val uiState: StateFlow<PlaylistUiState> = _uiState.asStateFlow()
+
+    private val _importProgress = MutableStateFlow(ImportProgressState())
+    val importProgress: StateFlow<ImportProgressState> = _importProgress.asStateFlow()
 
     private val _syncingPlaylists = MutableStateFlow<Set<String>>(emptySet())
     val syncingPlaylists: StateFlow<Set<String>> = _syncingPlaylists.asStateFlow()
@@ -776,15 +789,67 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
+    fun setImportingState(isImporting: Boolean, name: String = "", isCsv: Boolean = false) {
+        _importProgress.update {
+            ImportProgressState(
+                isImporting = isImporting,
+                playlistName = name,
+                importType = if (isCsv) "csv" else "m3u"
+            )
+        }
+    }
+
+    fun updateImportProgress(name: String, current: Int, total: Int, title: String, artist: String) {
+        _importProgress.update {
+            it.copy(
+                playlistName = name,
+                totalTracks = total,
+                currentTrackIndex = current,
+                currentTrackName = title,
+                currentTrackArtist = artist
+            )
+        }
+    }
+
+    fun findPlaylistByName(name: String): Playlist? {
+        return _uiState.value.playlists.find { it.name.equals(name, ignoreCase = true) }
+    }
+
     fun importM3u(uri: Uri) {
         viewModelScope.launch {
+            var initialName = "Importing Playlist..."
             try {
-                val (name, songIds) = m3uManager.parseM3u(uri)
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1 && cursor.moveToFirst()) {
+                        initialName = cursor.getString(nameIndex).removeSuffix(".m3u").removeSuffix(".m3u8")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PlaylistViewModel", "Error resolving M3U display name", e)
+            }
+            _importProgress.update {
+                ImportProgressState(isImporting = true, playlistName = initialName, importType = "m3u")
+            }
+            try {
+                val (name, songIds) = m3uManager.parseM3u(uri) { current, total, title, artist ->
+                    _importProgress.update {
+                        it.copy(
+                            playlistName = initialName,
+                            totalTracks = total,
+                            currentTrackIndex = current,
+                            currentTrackName = title,
+                            currentTrackArtist = artist
+                        )
+                    }
+                }
                 if (songIds.isNotEmpty()) {
                     playlistPreferencesRepository.createPlaylist(name, songIds)
                 }
             } catch (e: Exception) {
                 Log.e("PlaylistViewModel", "Error importing M3U", e)
+            } finally {
+                _importProgress.update { ImportProgressState(isImporting = false) }
             }
         }
     }
@@ -823,13 +888,39 @@ class PlaylistViewModel @Inject constructor(
 
     fun importCsv(uri: Uri) {
         viewModelScope.launch {
+            var initialName = "Importing Playlist..."
             try {
-                val (name, songIds) = m3uManager.parseCsv(uri)
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1 && cursor.moveToFirst()) {
+                        initialName = cursor.getString(nameIndex).removeSuffix(".csv")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PlaylistViewModel", "Error resolving CSV display name", e)
+            }
+            _importProgress.update {
+                ImportProgressState(isImporting = true, playlistName = initialName, importType = "csv")
+            }
+            try {
+                val (name, songIds) = m3uManager.parseCsv(uri) { current, total, title, artist ->
+                    _importProgress.update {
+                        it.copy(
+                            playlistName = initialName,
+                            totalTracks = total,
+                            currentTrackIndex = current,
+                            currentTrackName = title,
+                            currentTrackArtist = artist
+                        )
+                    }
+                }
                 if (songIds.isNotEmpty()) {
                     playlistPreferencesRepository.createPlaylist(name, songIds)
                 }
             } catch (e: Exception) {
                 Log.e("PlaylistViewModel", "Error importing CSV", e)
+            } finally {
+                _importProgress.update { ImportProgressState(isImporting = false) }
             }
         }
     }
