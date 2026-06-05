@@ -805,6 +805,71 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
+    fun exportCsv(playlist: Playlist, uri: Uri, context: android.content.Context) {
+        viewModelScope.launch {
+            try {
+                val songs = musicRepository.getSongsByIds(playlist.songIds).first()
+                val csvContent = m3uManager.generateCsv(songs)
+                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                    OutputStreamWriter(outputStream).use { writer ->
+                        writer.write(csvContent)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("PlaylistViewModel", "Error exporting CSV", e)
+            }
+        }
+    }
+
+    fun importCsv(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val (name, songIds) = m3uManager.parseCsv(uri)
+                if (songIds.isNotEmpty()) {
+                    playlistPreferencesRepository.createPlaylist(name, songIds)
+                }
+            } catch (e: Exception) {
+                Log.e("PlaylistViewModel", "Error importing CSV", e)
+            }
+        }
+    }
+
+    /**
+     * Shares a playlist as M3U or CSV via the Android share sheet.
+     * The content is written to the app cache directory first, then shared.
+     */
+    fun sharePlaylist(playlist: Playlist, asCsv: Boolean, context: android.content.Context) {
+        viewModelScope.launch {
+            try {
+                val songs = musicRepository.getSongsByIds(playlist.songIds).first()
+                val (fileContent, mimeType, extension) = if (asCsv) {
+                    Triple(m3uManager.generateCsv(songs), "text/csv", "csv")
+                } else {
+                    Triple(m3uManager.generateM3u(playlist, songs), "audio/x-mpegurl", "m3u")
+                }
+                val safePlaylistName = playlist.name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val file = File(context.cacheDir, "${safePlaylistName}.${extension}")
+                file.writeText(fileContent)
+                val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = mimeType
+                    putExtra(Intent.EXTRA_STREAM, fileUri)
+                    putExtra(Intent.EXTRA_SUBJECT, playlist.name)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(Intent.createChooser(shareIntent, playlist.name).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            } catch (e: Exception) {
+                Log.e("PlaylistViewModel", "Error sharing playlist", e)
+            }
+        }
+    }
+
     fun renamePlaylist(playlistId: String, newName: String) {
         if (isFolderPlaylistId(playlistId)) return
         viewModelScope.launch {

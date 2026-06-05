@@ -36,6 +36,15 @@
     <string name="presentation_batch_b_delete_playlist">Delete playlist</string>
     <string name="presentation_batch_b_set_default_transition">Set default transition</string>
     <string name="presentation_batch_b_export_playlist">Export Playlist</string>
+    <string name="presentation_batch_b_export_as_m3u">Export as M3U</string>
+    <string name="presentation_batch_b_export_as_m3u_desc">Playlist file for media players</string>
+    <string name="presentation_batch_b_export_as_csv">Export as CSV</string>
+    <string name="presentation_batch_b_export_as_csv_desc">Spreadsheet-compatible, easy to import</string>
+    <string name="presentation_batch_b_export_save">Save</string>
+    <string name="presentation_batch_b_export_share">Share</string>
+    <string name="presentation_batch_b_import_playlist">Import Playlist</string>
+    <string name="presentation_batch_b_import_m3u">Import M3U</string>
+    <string name="presentation_batch_b_import_csv">Import CSV</string>
     <string name="presentation_batch_b_download_playlist">Download playlist</string>
     <string name="presentation_batch_b_delete_playlist_confirm_title">Delete playlist?</string>
     <string name="presentation_batch_b_delete_playlist_confirm_body">Are you sure you want to delete this playlist?</string>

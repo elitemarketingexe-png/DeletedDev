@@ -211,6 +211,16 @@ fun PlaylistDetailScreen(
             }
         }
     }
+    val csvExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        uri?.let {
+            currentPlaylist?.let { playlist ->
+                playlistViewModel.exportCsv(playlist, it, context)
+            }
+        }
+    }
+    var showExportSheet by remember { mutableStateOf(false) }
 
     val selectedSongForInfo by playerViewModel.selectedSongForInfo.collectAsStateWithLifecycle()
     val favoriteIds by playerViewModel.favoriteSongIds.collectAsStateWithLifecycle() // Reintroducir favoriteIds aquí
@@ -800,7 +810,7 @@ fun PlaylistDetailScreen(
                         label = exportPlaylistLabel,
                         onClick = {
                             showPlaylistOptionsSheet = false
-                            m3uExportLauncher.launch("${currentPlaylist?.name ?: fallbackPlaylistName}.m3u")
+                            showExportSheet = true
                         }
                     )
                 }
@@ -1046,6 +1056,29 @@ fun PlaylistDetailScreen(
             showViewToggle = false 
         )
     }
+
+    if (showExportSheet && currentPlaylist != null) {
+        ExportPlaylistSheet(
+            playlistName = currentPlaylist.name,
+            onDismiss = { showExportSheet = false },
+            onSaveM3u = {
+                showExportSheet = false
+                m3uExportLauncher.launch("${currentPlaylist.name}.m3u")
+            },
+            onSaveCsv = {
+                showExportSheet = false
+                csvExportLauncher.launch("${currentPlaylist.name}.csv")
+            },
+            onShareM3u = {
+                showExportSheet = false
+                playlistViewModel.sharePlaylist(currentPlaylist, asCsv = false, context)
+            },
+            onShareCsv = {
+                showExportSheet = false
+                playlistViewModel.sharePlaylist(currentPlaylist, asCsv = true, context)
+            }
+        )
+    }
 }
 
 
@@ -1116,4 +1149,185 @@ fun RenamePlaylistDialog(currentName: String, onDismiss: () -> Unit, onRename: (
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel), maxLines = 1, overflow = TextOverflow.Ellipsis) } }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExportPlaylistSheet(
+    playlistName: String,
+    onDismiss: () -> Unit,
+    onSaveM3u: () -> Unit,
+    onSaveCsv: () -> Unit,
+    onShareM3u: () -> Unit,
+    onShareCsv: () -> Unit,
+) {
+    // false = CSV selected, true = M3U selected  (CSV is default like ArchiveTune)
+    var selectedCsv by remember { mutableStateOf(true) }
+
+    val exportPlaylistTitle = stringResource(R.string.presentation_batch_b_export_playlist)
+    val exportAsCsvLabel = stringResource(R.string.presentation_batch_b_export_as_csv)
+    val exportAsCsvDesc = stringResource(R.string.presentation_batch_b_export_as_csv_desc)
+    val exportAsM3uLabel = stringResource(R.string.presentation_batch_b_export_as_m3u)
+    val exportAsM3uDesc = stringResource(R.string.presentation_batch_b_export_as_m3u_desc)
+    val saveLabel = stringResource(R.string.presentation_batch_b_export_save)
+    val shareLabel = stringResource(R.string.presentation_batch_b_export_share)
+    val cancelLabel = stringResource(R.string.cancel)
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 4.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Title
+            Text(
+                text = exportPlaylistTitle,
+                style = MaterialTheme.typography.headlineSmall,
+                fontFamily = GoogleSansRounded,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+            )
+
+            // Format tiles
+            @Composable
+            fun FormatTile(
+                icon: androidx.compose.ui.graphics.painter.Painter,
+                label: String,
+                description: String,
+                selected: Boolean,
+                onClick: () -> Unit
+            ) {
+                val bgColor by animateColorAsState(
+                    if (selected) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    label = "tileBg"
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(bgColor)
+                        .clickable(onClick = onClick)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = icon,
+                            contentDescription = null,
+                            tint = if (selected) MaterialTheme.colorScheme.secondary
+                            else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontFamily = GoogleSansRounded,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (selected) {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            // CSV option (default selected)
+            FormatTile(
+                icon = painterResource(R.drawable.rounded_attach_file_24),
+                label = exportAsCsvLabel,
+                description = exportAsCsvDesc,
+                selected = selectedCsv,
+                onClick = { selectedCsv = true }
+            )
+
+            // M3U option
+            FormatTile(
+                icon = rememberVectorPainter(Icons.AutoMirrored.Rounded.QueueMusic),
+                label = exportAsM3uLabel,
+                description = exportAsM3uDesc,
+                selected = !selectedCsv,
+                onClick = { selectedCsv = false }
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            // Action buttons row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(cancelLabel, style = MaterialTheme.typography.labelLarge)
+                }
+                FilledTonalButton(
+                    onClick = { if (selectedCsv) onSaveCsv() else onSaveM3u() },
+                    modifier = Modifier.weight(1.5f),
+                    shape = AbsoluteSmoothCornerShape(
+                        cornerRadiusTL = 60.dp, smoothnessAsPercentTL = 60,
+                        cornerRadiusTR = 14.dp, smoothnessAsPercentTR = 60,
+                        cornerRadiusBL = 60.dp, smoothnessAsPercentBL = 60,
+                        cornerRadiusBR = 14.dp, smoothnessAsPercentBR = 60
+                    )
+                ) {
+                    Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(saveLabel, style = MaterialTheme.typography.labelLarge)
+                }
+                Button(
+                    onClick = { if (selectedCsv) onShareCsv() else onShareM3u() },
+                    modifier = Modifier.weight(1.5f),
+                    shape = AbsoluteSmoothCornerShape(
+                        cornerRadiusTL = 14.dp, smoothnessAsPercentTL = 60,
+                        cornerRadiusTR = 60.dp, smoothnessAsPercentTR = 60,
+                        cornerRadiusBL = 14.dp, smoothnessAsPercentBL = 60,
+                        cornerRadiusBR = 60.dp, smoothnessAsPercentBR = 60
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = 90f }
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(shareLabel, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+    }
 }

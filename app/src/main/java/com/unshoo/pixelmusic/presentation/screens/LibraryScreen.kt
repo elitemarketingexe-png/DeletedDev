@@ -215,6 +215,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -506,6 +507,12 @@ fun LibraryScreen(
     ) { uri ->
         uri?.let { playlistViewModel.importM3u(it) }
     }
+    val csvImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { playlistViewModel.importCsv(it) }
+    }
+    var showImportSheet by remember { mutableStateOf(false) }
 
     var showReorderTabsSheet by remember { mutableStateOf(false) }
     var showTabSwitcherSheet by remember { mutableStateOf(false) }
@@ -1254,7 +1261,7 @@ fun LibraryScreen(
                                     onLocateClick = { locateAction?.invoke() },
                                     isPlaylistTab = currentTabId == LibraryTabId.PLAYLISTS,
                                     isFoldersTab = currentTabId == LibraryTabId.FOLDERS && (!playerUiState.isFoldersPlaylistView || playerUiState.currentFolder != null),
-                                    onImportM3uClick = { m3uImportLauncher.launch("audio/x-mpegurl") },
+                                    onImportM3uClick = { showImportSheet = true },
                                     currentFolder = playerUiState.currentFolder,
                                     folderRootPath = playerUiState.folderSourceRootPath.ifBlank {
                                         Environment.getExternalStorageDirectory().path
@@ -2131,6 +2138,127 @@ fun LibraryScreen(
                 }
             }
         )
+    }
+
+    if (showImportSheet) {
+        ImportPlaylistSheet(
+            onDismiss = { showImportSheet = false },
+            onImportM3u = {
+                showImportSheet = false
+                m3uImportLauncher.launch("audio/x-mpegurl")
+            },
+            onImportCsv = {
+                showImportSheet = false
+                csvImportLauncher.launch("text/csv")
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ImportPlaylistSheet(
+    onDismiss: () -> Unit,
+    onImportM3u: () -> Unit,
+    onImportCsv: () -> Unit,
+) {
+    val importPlaylistTitle = stringResource(R.string.presentation_batch_b_import_playlist)
+    val importM3uLabel = stringResource(R.string.presentation_batch_b_import_m3u)
+    val importM3uDesc = stringResource(R.string.presentation_batch_b_export_as_m3u_desc)
+    val importCsvLabel = stringResource(R.string.presentation_batch_b_import_csv)
+    val importCsvDesc = stringResource(R.string.presentation_batch_b_export_as_csv_desc)
+    val cancelLabel = stringResource(R.string.cancel)
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 4.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = importPlaylistTitle,
+                style = MaterialTheme.typography.headlineSmall,
+                fontFamily = GoogleSansRounded,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+            )
+
+            // M3U import tile
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clickable(onClick = onImportM3u)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(importM3uLabel, style = MaterialTheme.typography.titleMedium, fontFamily = GoogleSansRounded)
+                    Text(importM3uDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            // CSV import tile
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .clickable(onClick = onImportCsv)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.rounded_attach_file_24),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(importCsvLabel, style = MaterialTheme.typography.titleMedium, fontFamily = GoogleSansRounded)
+                    Text(importCsvDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                Text(cancelLabel)
+            }
+        }
     }
 }
 
