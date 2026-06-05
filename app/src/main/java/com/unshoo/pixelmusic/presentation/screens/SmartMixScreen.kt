@@ -43,7 +43,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unshoo.pixelmusic.presentation.components.MiniPlayerHeight
+import com.unshoo.pixelmusic.presentation.components.resolveNavBarOccupiedHeight
 import com.unshoo.pixelmusic.presentation.navigation.Screen
+import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafelyReplacing
 import com.unshoo.pixelmusic.presentation.viewmodel.SmartMixViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.SmartMixUiState
@@ -129,7 +131,8 @@ fun SmartMixScreen(
             } else {
                 SmartMixConfigurator(
                     uiState = uiState,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    playerViewModel = playerViewModel
                 )
             }
 
@@ -206,11 +209,18 @@ private fun LastfmLoggedOutState(
 @Composable
 private fun SmartMixConfigurator(
     uiState: SmartMixUiState,
-    viewModel: SmartMixViewModel
+    viewModel: SmartMixViewModel,
+    playerViewModel: PlayerViewModel
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
-    val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val fabAreaHeight = 56.dp + 20.dp + MiniPlayerHeight + navBarPadding
+    val playerStableState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
+    val navBarCompactMode by playerViewModel.navBarCompactMode.collectAsStateWithLifecycle()
+    val isPlayerActive = playerStableState.currentSong != null
+
+    val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
+
+    val fabAreaHeight = 56.dp + 20.dp + (if (isPlayerActive) MiniPlayerHeight else 0.dp) + bottomBarHeightDp
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
 
     // Unique per-mode colors matching app's Expressive Settings design language
@@ -455,7 +465,7 @@ private fun SmartMixConfigurator(
                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = MiniPlayerHeight + navBarPadding + 12.dp)
+                .padding(bottom = (if (isPlayerActive) MiniPlayerHeight else 0.dp) + bottomBarHeightDp + 12.dp)
         )
     }
 }
