@@ -146,6 +146,8 @@ data class SettingsUiState(
     val preferTelegramAlternative: Boolean = false,
     val lastfmSession: String = "",
     val lastfmUsername: String = "",
+    val lastfmApiKey: String = "",
+    val lastfmApiSecret: String = "",
     val lastfmScrobblingEnabled: Boolean = false,
     val lastfmUseNowPlaying: Boolean = false,
     val scrobbleDelayPercent: Float = 0.5f,
@@ -215,6 +217,8 @@ private sealed interface SettingsUiUpdate {
         val preferTelegramAlternative: Boolean,
         val lastfmSession: String,
         val lastfmUsername: String,
+        val lastfmApiKey: String,
+        val lastfmApiSecret: String,
         val lastfmScrobblingEnabled: Boolean,
         val lastfmUseNowPlaying: Boolean,
         val scrobbleDelayPercent: Float,
@@ -634,6 +638,8 @@ class SettingsViewModel @Inject constructor(
                 userPreferencesRepository.preferTelegramAlternativeFlow,
                 userPreferencesRepository.lastfmSessionFlow,
                 userPreferencesRepository.lastfmUsernameFlow,
+                userPreferencesRepository.lastfmApiKeyFlow,
+                userPreferencesRepository.lastfmApiSecretFlow,
                 userPreferencesRepository.lastfmScrobblingEnabledFlow,
                 userPreferencesRepository.lastfmUseNowPlayingFlow,
                 userPreferencesRepository.scrobbleDelayPercentFlow,
@@ -663,11 +669,13 @@ class SettingsViewModel @Inject constructor(
                     preferTelegramAlternative = values[19] as Boolean,
                     lastfmSession = values[20] as String,
                     lastfmUsername = values[21] as String,
-                    lastfmScrobblingEnabled = values[22] as Boolean,
-                    lastfmUseNowPlaying = values[23] as Boolean,
-                    scrobbleDelayPercent = values[24] as Float,
-                    scrobbleMinSongDuration = values[25] as Int,
-                    scrobbleDelaySeconds = values[26] as Int
+                    lastfmApiKey = values[22] as String,
+                    lastfmApiSecret = values[23] as String,
+                    lastfmScrobblingEnabled = values[24] as Boolean,
+                    lastfmUseNowPlaying = values[25] as Boolean,
+                    scrobbleDelayPercent = values[26] as Float,
+                    scrobbleMinSongDuration = values[27] as Int,
+                    scrobbleDelaySeconds = values[28] as Int
                 )
             }.collect { update ->
                 _uiState.update { state ->
@@ -694,6 +702,8 @@ class SettingsViewModel @Inject constructor(
                         preferTelegramAlternative = update.preferTelegramAlternative,
                         lastfmSession = update.lastfmSession,
                         lastfmUsername = update.lastfmUsername,
+                        lastfmApiKey = update.lastfmApiKey,
+                        lastfmApiSecret = update.lastfmApiSecret,
                         lastfmScrobblingEnabled = update.lastfmScrobblingEnabled,
                         lastfmUseNowPlaying = update.lastfmUseNowPlaying,
                         scrobbleDelayPercent = update.scrobbleDelayPercent,
@@ -1715,6 +1725,18 @@ class SettingsViewModel @Inject constructor(
     fun setLastfmUsername(username: String) {
         viewModelScope.launch {
             userPreferencesRepository.setLastfmUsername(username)
+        }
+    }
+
+    fun setLastfmApiKey(apiKey: String) {
+        viewModelScope.launch {
+            userPreferencesRepository.setLastfmApiKey(apiKey)
+        }
+    }
+
+    fun setLastfmApiSecret(apiSecret: String) {
+        viewModelScope.launch {
+            userPreferencesRepository.setLastfmApiSecret(apiSecret)
         }
     }
 

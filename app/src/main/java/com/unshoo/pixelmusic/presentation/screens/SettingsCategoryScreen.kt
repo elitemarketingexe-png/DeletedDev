@@ -1632,82 +1632,113 @@ fun SettingsCategoryScreen(
                             }
 
                             if (showLoginDialog) {
-                                var username by remember { mutableStateOf("") }
-                                var password by remember { mutableStateOf("") }
-                                var isLoggingIn by remember { mutableStateOf(false) }
-                                var loginError by remember { mutableStateOf<String?>(null) }
-                                val coroutineScope = rememberCoroutineScope()
+                                 var username by remember { mutableStateOf("") }
+                                 var password by remember { mutableStateOf("") }
+                                 var apiKey by remember { mutableStateOf(uiState.lastfmApiKey) }
+                                 var apiSecret by remember { mutableStateOf(uiState.lastfmApiSecret) }
+                                 var isLoggingIn by remember { mutableStateOf(false) }
+                                 var loginError by remember { mutableStateOf<String?>(null) }
+                                 val coroutineScope = rememberCoroutineScope()
 
-                                AlertDialog(
-                                    onDismissRequest = { if (!isLoggingIn) showLoginDialog = false },
-                                    title = { Text(text = stringResource(R.string.lastfm_login_dialog_title)) },
-                                    text = {
-                                        Column(
-                                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text(
-                                                text = stringResource(R.string.lastfm_login_dialog_desc),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            OutlinedTextField(
-                                                value = username,
-                                                onValueChange = { username = it },
-                                                label = { Text(stringResource(R.string.lastfm_username)) },
-                                                singleLine = true,
-                                                modifier = Modifier.fillMaxWidth(),
-                                                enabled = !isLoggingIn
-                                            )
-                                            OutlinedTextField(
-                                                value = password,
-                                                onValueChange = { password = it },
-                                                label = { Text(stringResource(R.string.lastfm_password)) },
-                                                singleLine = true,
-                                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                                modifier = Modifier.fillMaxWidth(),
-                                                enabled = !isLoggingIn
-                                            )
-                                            if (loginError != null) {
-                                                Text(
-                                                    text = loginError!!,
-                                                    color = MaterialTheme.colorScheme.error,
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                            }
-                                        }
-                                    },
-                                    confirmButton = {
-                                        TextButton(
-                                            onClick = {
-                                                if (username.isBlank() || password.isBlank()) {
-                                                    loginError = "Username and password cannot be empty"
-                                                    return@TextButton
-                                                }
-                                                isLoggingIn = true
-                                                loginError = null
-                                                coroutineScope.launch {
-                                                    val result = com.unshoo.pixelmusic.data.lastfm.LastFM.getMobileSession(username, password)
-                                                    result.fold(
-                                                        onSuccess = { authSession ->
-                                                            val sk = authSession.session.key
-                                                            val name = authSession.session.name
-                                                            settingsViewModel.setLastfmSession(sk)
-                                                            settingsViewModel.setLastfmUsername(name)
-                                                            com.unshoo.pixelmusic.data.lastfm.LastFM.sessionKey = sk
-                                                            isLoggingIn = false
-                                                            showLoginDialog = false
-                                                            Toast.makeText(context, context.getString(R.string.lastfm_login_success), Toast.LENGTH_SHORT).show()
-                                                        },
-                                                        onFailure = { throwable ->
-                                                            isLoggingIn = false
-                                                            loginError = throwable.localizedMessage ?: "Unknown authentication error"
-                                                        }
-                                                    )
-                                                }
-                                            },
-                                            enabled = !isLoggingIn
-                                        ) {
+                                 AlertDialog(
+                                     onDismissRequest = { if (!isLoggingIn) showLoginDialog = false },
+                                     title = { Text(text = stringResource(R.string.lastfm_login_dialog_title)) },
+                                     text = {
+                                         Column(
+                                             verticalArrangement = Arrangement.spacedBy(8.dp),
+                                             modifier = Modifier.fillMaxWidth()
+                                         ) {
+                                             Text(
+                                                 text = stringResource(R.string.lastfm_login_dialog_desc),
+                                                 style = MaterialTheme.typography.bodyMedium,
+                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
+                                             )
+                                             OutlinedTextField(
+                                                 value = username,
+                                                 onValueChange = { username = it },
+                                                 label = { Text(stringResource(R.string.lastfm_username)) },
+                                                 singleLine = true,
+                                                 modifier = Modifier.fillMaxWidth(),
+                                                 enabled = !isLoggingIn
+                                             )
+                                             OutlinedTextField(
+                                                 value = password,
+                                                 onValueChange = { password = it },
+                                                 label = { Text(stringResource(R.string.lastfm_password)) },
+                                                 singleLine = true,
+                                                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                                                 modifier = Modifier.fillMaxWidth(),
+                                                 enabled = !isLoggingIn
+                                             )
+                                             OutlinedTextField(
+                                                 value = apiKey,
+                                                 onValueChange = { apiKey = it },
+                                                 label = { Text("API Key (Optional)") },
+                                                 singleLine = true,
+                                                 modifier = Modifier.fillMaxWidth(),
+                                                 enabled = !isLoggingIn
+                                             )
+                                             OutlinedTextField(
+                                                 value = apiSecret,
+                                                 onValueChange = { apiSecret = it },
+                                                 label = { Text("API Secret (Optional)") },
+                                                 singleLine = true,
+                                                 modifier = Modifier.fillMaxWidth(),
+                                                 enabled = !isLoggingIn
+                                             )
+                                             if (loginError != null) {
+                                                 Text(
+                                                     text = loginError!!,
+                                                     color = MaterialTheme.colorScheme.error,
+                                                     style = MaterialTheme.typography.bodySmall
+                                                 )
+                                             }
+                                         }
+                                     },
+                                     confirmButton = {
+                                         TextButton(
+                                             onClick = {
+                                                 if (username.isBlank() || password.isBlank()) {
+                                                     loginError = "Username and password cannot be empty"
+                                                     return@TextButton
+                                                 }
+                                                 isLoggingIn = true
+                                                 loginError = null
+                                                 coroutineScope.launch {
+                                                     val finalApiKey = apiKey.trim().ifEmpty { com.unshoo.pixelmusic.BuildConfig.LASTFM_API_KEY }
+                                                     val finalApiSecret = apiSecret.trim().ifEmpty { com.unshoo.pixelmusic.BuildConfig.LASTFM_SECRET }
+                                                     
+                                                     // Initialize client using provided/fallback credentials
+                                                     com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(finalApiKey, finalApiSecret)
+                                                     
+                                                     val result = com.unshoo.pixelmusic.data.lastfm.LastFM.getMobileSession(username, password)
+                                                     result.fold(
+                                                         onSuccess = { authSession ->
+                                                             val sk = authSession.session.key
+                                                             val name = authSession.session.name
+                                                             settingsViewModel.setLastfmSession(sk)
+                                                             settingsViewModel.setLastfmUsername(name)
+                                                             settingsViewModel.setLastfmApiKey(apiKey.trim())
+                                                             settingsViewModel.setLastfmApiSecret(apiSecret.trim())
+                                                             com.unshoo.pixelmusic.data.lastfm.LastFM.sessionKey = sk
+                                                             isLoggingIn = false
+                                                             showLoginDialog = false
+                                                             Toast.makeText(context, context.getString(R.string.lastfm_login_success), Toast.LENGTH_SHORT).show()
+                                                         },
+                                                         onFailure = { throwable ->
+                                                             isLoggingIn = false
+                                                             loginError = throwable.localizedMessage ?: "Unknown authentication error"
+                                                             
+                                                             // Revert client key configuration
+                                                             val savedKey = uiState.lastfmApiKey.ifEmpty { com.unshoo.pixelmusic.BuildConfig.LASTFM_API_KEY }
+                                                             val savedSecret = uiState.lastfmApiSecret.ifEmpty { com.unshoo.pixelmusic.BuildConfig.LASTFM_SECRET }
+                                                             com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(savedKey, savedSecret)
+                                                         }
+                                                     )
+                                                 }
+                                             },
+                                             enabled = !isLoggingIn
+                                         ) {
                                             if (isLoggingIn) {
                                                 CircularProgressIndicator(
                                                     modifier = Modifier.size(16.dp),

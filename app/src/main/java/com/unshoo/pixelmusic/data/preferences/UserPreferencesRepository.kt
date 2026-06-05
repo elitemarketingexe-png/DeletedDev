@@ -315,6 +315,8 @@ constructor(
         val PREFER_TELEGRAM_ALTERNATIVE = booleanPreferencesKey("prefer_telegram_alternative")
         val LASTFM_SESSION = stringPreferencesKey("lastfm_session")
         val LASTFM_USERNAME = stringPreferencesKey("lastfm_username")
+        val LASTFM_API_KEY = stringPreferencesKey("lastfm_api_key_v1")
+        val LASTFM_API_SECRET = stringPreferencesKey("lastfm_api_secret_v1")
         val LASTFM_SCROBBLING_ENABLED = booleanPreferencesKey("lastfm_scrobbling_enabled")
         val LASTFM_USE_NOW_PLAYING = booleanPreferencesKey("lastfm_use_now_playing")
         val SCROBBLE_DELAY_PERCENT = androidx.datastore.preferences.core.floatPreferencesKey("scrobble_delay_percent")
@@ -2184,6 +2186,28 @@ constructor(
     suspend fun setLastfmUsername(username: String) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.LASTFM_USERNAME] = username
+        }
+    }
+
+    val lastfmApiKeyFlow: Flow<String> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.LASTFM_API_KEY] ?: ""
+        }.distinctUntilChanged()
+
+    suspend fun setLastfmApiKey(apiKey: String) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LASTFM_API_KEY] = apiKey
+        }
+    }
+
+    val lastfmApiSecretFlow: Flow<String> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.LASTFM_API_SECRET] ?: ""
+        }.distinctUntilChanged()
+
+    suspend fun setLastfmApiSecret(apiSecret: String) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LASTFM_API_SECRET] = apiSecret
         }
     }
 

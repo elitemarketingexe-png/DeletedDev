@@ -82,8 +82,12 @@ android {
         buildConfigField("int", "TELEGRAM_API_ID", telegramApiId.ifEmpty { "0" })
         buildConfigField("String", "TELEGRAM_API_HASH", "\"$telegramApiHash\"")
 
-        val lastfmApiKey = localProperties.getProperty("LASTFM_API_KEY") ?: ""
-        val lastfmSecret = localProperties.getProperty("LASTFM_SECRET") ?: ""
+        val lastfmApiKey = localProperties.getProperty("LASTFM_API_KEY")
+            ?: System.getenv("LASTFM_API_KEY")
+            ?: ""
+        val lastfmSecret = localProperties.getProperty("LASTFM_SECRET")
+            ?: System.getenv("LASTFM_SECRET")
+            ?: ""
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastfmApiKey\"")
         buildConfigField("String", "LASTFM_SECRET", "\"$lastfmSecret\"")
     }

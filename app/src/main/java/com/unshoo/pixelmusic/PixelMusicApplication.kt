@@ -90,7 +90,16 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
             secret = BuildConfig.LASTFM_SECRET
         )
         startupScope.launch {
-            val sessionKey = userPreferencesRepository.get().lastfmSessionFlow.first()
+            val prefs = userPreferencesRepository.get()
+            val savedApiKey = prefs.lastfmApiKeyFlow.first()
+            val savedSecret = prefs.lastfmApiSecretFlow.first()
+            if (savedApiKey.isNotEmpty() && savedSecret.isNotEmpty()) {
+                com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(
+                    apiKey = savedApiKey,
+                    secret = savedSecret
+                )
+            }
+            val sessionKey = prefs.lastfmSessionFlow.first()
             if (sessionKey.isNotEmpty()) {
                 com.unshoo.pixelmusic.data.lastfm.LastFM.sessionKey = sessionKey
             }

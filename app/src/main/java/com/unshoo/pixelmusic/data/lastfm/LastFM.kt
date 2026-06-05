@@ -37,7 +37,7 @@ object LastFM {
     private fun Map<String, String>.apiSig(secret: String): String {
         val sorted = toSortedMap()
         val toHash = sorted.entries.joinToString("") { it.key + it.value } + secret
-        val digest = MessageDigest.getInstance("MD5").digest(toHash.toByteArray())
+        val digest = MessageDigest.getInstance("MD5").digest(toHash.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
     }
 
@@ -100,7 +100,6 @@ object LastFM {
                 secret = SECRET,
                 extra = mapOf("username" to username, "password" to password)
             )
-            parameter("format", "json")
         }
         
         val responseText = response.bodyAsText()

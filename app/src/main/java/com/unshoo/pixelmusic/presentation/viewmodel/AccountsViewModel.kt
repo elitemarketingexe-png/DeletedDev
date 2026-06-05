@@ -236,7 +236,13 @@ class AccountsViewModel @Inject constructor(
                         ExternalServiceAccount.LASTFM -> {
                             userPreferencesRepository.setLastfmSession("")
                             userPreferencesRepository.setLastfmUsername("")
+                            userPreferencesRepository.setLastfmApiKey("")
+                            userPreferencesRepository.setLastfmApiSecret("")
                             com.unshoo.pixelmusic.data.lastfm.LastFM.sessionKey = null
+                            com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(
+                                apiKey = com.unshoo.pixelmusic.BuildConfig.LASTFM_API_KEY,
+                                secret = com.unshoo.pixelmusic.BuildConfig.LASTFM_SECRET
+                            )
                         }
                     }
                 }
