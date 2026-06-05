@@ -205,6 +205,7 @@ jobs:
           TELEGRAM_THREAD_ID: "2"
           COMMIT_SHA: ${{ needs.changes.outputs.current-sha }}
           VERSION_NAME: ${{ steps.get-version.outputs.version_name }}
+          RELEASE_URL: "https://github.com/${{ github.repository }}/releases"
         run: |
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
             echo "Telegram secrets not set, skipping publishing."
