@@ -122,21 +122,22 @@ jobs:
           prerelease: false
           make_latest: true
 
+      - name: Install Pyrogram for Telegram upload
+        run: pip install -q pyrogram tgcrypto
+
       - name: Publish all APKs to Telegram Channel
         if: success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: "@PixelMusicApp"
           TELEGRAM_THREAD_ID: "2"
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
-          CHANGELOG: ${{ steps.changelog.outputs.changelog_html }}
           COMMIT_SHA: ${{ github.sha }}
-          REPO: ${{ github.repository }}
-          RELEASE_URL: "https://github.com/${{ github.repository }}/releases/tag/v${{ steps.version.outputs.version_name }}"
-          COMMIT_URL: "https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
         run: |
-          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-            echo "TELEGRAM_BOT_TOKEN not set, skipping."
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_API_ID" ]; then
+            echo "Telegram secrets not set, skipping."
             exit 0
           fi
           python3 .github/scripts/publish_telegram.py
