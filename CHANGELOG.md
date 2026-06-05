@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added an animated Sparkles (`AutoAwesome`) icon button with a pulsing scale/rotation effect and a custom "HOT" badge on the Explore Screen top bar, positioned to the left of the Settings icon.
   - Added the "Recent Mixes (last.fm)" horizontal carousel to the Explore Screen with custom preview cards mapping mixes natively.
 
+### Fixed
+- **SmartMixViewModel `fetchRecommendations` thread-safety**: The `weighted` candidate list was a plain `mutableListOf` being concurrently written by 4 parallel `launch` coroutines inside `coroutineScope`, causing a potential `ConcurrentModificationException` crash in the "My Recommendations" mode. Fixed by wrapping with `Collections.synchronizedList`.
+
 ## [1.4.06] - 2026-06-06
 
 ### Added

@@ -568,7 +568,7 @@ class SmartMixViewModel @Inject constructor(
             }
         }
 
-        val weighted = mutableListOf<Pair<LastFmTrack, Int>>() // track to weight
+        val weighted = java.util.Collections.synchronizedList(mutableListOf<Pair<LastFmTrack, Int>>()) // thread-safe: concurrent launches write to this
 
         // Parallel candidate pool retrieval
         coroutineScope {
