@@ -13,6 +13,7 @@ Required env vars:
   TELEGRAM_THREAD_ID    - (optional) message thread id for topics
   VERSION_NAME          - app version string
   COMMIT_SHA            - full commit SHA
+  IS_RELEASE            - "true" if APP_VERSION_NAME tag is new (optional)
 """
 
 import asyncio
@@ -48,18 +49,25 @@ async def publish():
     thread_id  = os.environ.get("TELEGRAM_THREAD_ID", "")
     version    = os.environ["VERSION_NAME"]
     commit_sha = os.environ["COMMIT_SHA"]
+    is_release = os.environ.get("IS_RELEASE", "false").strip().lower() == "true"
 
     commit_author, commit_message = get_commit_info()
 
+    # Badge: 🚀 Release when version bumped, 🔨 Build for regular pushes
+    if is_release:
+        badge = "🚀 <b>RELEASE</b>"
+    else:
+        badge = "🔨 <b>DEV BUILD</b>"
+
     caption = (
-        f"<b>PixelMusic v{html.escape(version)}</b>\n"
+        f"{badge} — <b>PixelMusic v{html.escape(version)}</b>\n"
         f"Commit by: {commit_author}\n"
         f"Commit message:\n<blockquote>{commit_message}</blockquote>\n"
         f"Commit hash: #{commit_sha[:7]}\n"
         f"Device: mobile, wearos\n"
         f"ABI: arm64, armeabi, universal, x86_64\n"
         f"Files: 5\n"
-        f"Version: Android >= 11"
+        f"Android >= 11"
     )
 
     apks = [

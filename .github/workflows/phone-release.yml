@@ -48,14 +48,29 @@ jobs:
       - name: Build all split + universal release APKs
         run: ./gradlew :app:assembleRelease :wear:assembleRelease -Ppixelmusic.enableAbiSplits=true
 
+      # ── Read version from gradle.properties (single source of truth) ──────────
       - name: Read version name
         id: version
         run: |
-          BUILD_TOOLS_VERSION="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
-          VERSION_NAME=$("$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aapt2" dump badging \
-            app/build/outputs/apk/release/app-arm64-v8a-release.apk \
-            | grep versionName | sed -E "s/.*versionName='([^']*)'.*/\1/")
+          VERSION_NAME=$(grep '^APP_VERSION_NAME=' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION_NAME"
+
+      # ── Detect if this version is already released on GitHub ─────────────────
+      - name: Check if version tag already exists
+        id: version_check
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${VERSION_NAME}"
+          if git tag --list "$TAG" | grep -q "$TAG"; then
+            echo "is_new_version=false" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG already exists locally — NOT a new release."
+          else
+            echo "is_new_version=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG does not exist — this IS a new version. GitHub Release will be created."
+          fi
 
       - name: Verify all split APKs
         run: |
@@ -92,8 +107,12 @@ jobs:
           CURR_SHA: ${{ github.sha }}
         run: python3 .github/scripts/generate_changelog.py
 
+      # ── GitHub Release — ONLY when version is new (tag does not exist yet) ───
       - name: Create GitHub Release
-        if: success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        if: >
+          success() &&
+          steps.version_check.outputs.is_new_version == 'true' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.version.outputs.version_name }}
@@ -122,7 +141,9 @@ jobs:
           prerelease: false
           make_latest: true
 
+      # ── Telegram — ALWAYS posts on every push (regardless of version bump) ───
       - name: Install Pyrogram for Telegram upload
+        if: success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: pip install -q pyrogram tgcrypto
 
       - name: Publish all APKs to Telegram Channel
@@ -135,6 +156,7 @@ jobs:
           TELEGRAM_THREAD_ID: "2"
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           COMMIT_SHA: ${{ github.sha }}
+          IS_RELEASE: ${{ steps.version_check.outputs.is_new_version }}
         run: |
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_API_ID" ]; then
             echo "Telegram secrets not set, skipping."
