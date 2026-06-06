@@ -857,7 +857,7 @@ private fun ShareableCard(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.Bottom,
+            verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.weight(1f))
@@ -868,7 +868,6 @@ private fun ShareableCard(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
-                        .weight(1f, fill = false)
                         .shadow(20.dp, shape = RoundedCornerShape(12.dp)),
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
@@ -883,7 +882,6 @@ private fun ShareableCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.92f)
-                        .weight(1f, fill = false)
                         .clip(RoundedCornerShape(18.dp))
                         .background(Color.White.copy(alpha = 0.18f))
                         .border(
