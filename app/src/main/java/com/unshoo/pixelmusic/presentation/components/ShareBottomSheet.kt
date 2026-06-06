@@ -873,15 +873,19 @@ private fun ShareableCard(
                         .fillMaxWidth()
                         .wrapContentHeight()
                         .drawWithContent {
-                            drawRect(
+                            val centerOffset = Offset(size.width / 2f, size.height / 2f)
+                            val bloomRadius = size.width * 0.55f
+                            drawCircle(
                                 brush = Brush.radialGradient(
                                     colors = listOf(
-                                        lightScheme.primaryContainer.copy(alpha = 0.18f),
+                                        lightScheme.primaryContainer.copy(alpha = 0.22f),
                                         Color.Transparent
                                     ),
-                                    center = Offset(size.width / 2f, size.height / 2f),
-                                    radius = maxOf(size.width, size.height) * 0.72f
-                                )
+                                    center = centerOffset,
+                                    radius = bloomRadius
+                                ),
+                                radius = bloomRadius,
+                                center = centerOffset
                             )
                             drawContent()
                         },
