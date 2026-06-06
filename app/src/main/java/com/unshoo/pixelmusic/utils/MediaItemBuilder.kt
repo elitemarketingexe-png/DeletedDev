@@ -285,6 +285,7 @@ object MediaItemBuilder {
             .setTitle(song.title)
             .setArtist(song.displayArtist)
             .setAlbumTitle(song.album)
+            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
 
         exposedArtworkUri?.let { artworkUri ->
             metadataBuilder.setArtworkUri(artworkUri)

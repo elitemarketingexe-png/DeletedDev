@@ -2048,6 +2048,7 @@ class MusicService : MediaLibraryService() {
         }
 
         val metadataBuilder = MediaMetadata.Builder()
+            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
         snapshotItem.title?.takeIf { it.isNotBlank() }?.let { metadataBuilder.setTitle(it) }
         snapshotItem.artist?.takeIf { it.isNotBlank() }?.let { metadataBuilder.setArtist(it) }
         snapshotItem.albumTitle?.takeIf { it.isNotBlank() }?.let { metadataBuilder.setAlbumTitle(it) }
@@ -3253,9 +3254,23 @@ class MusicService : MediaLibraryService() {
         val currentItem = mediaItem ?: mediaSession?.player?.currentMediaItem ?: return
         val targetPackages = LinkedHashSet<String>().apply {
             add("com.android.systemui")
-            add("com.android.settings")
+            add("com.miui.systemui")
+            add("com.miui.miwallpaper")
+            add("com.miui.aod")
             add("com.miui.player")
             add("com.xiaomi.xmsf")
+            add("com.miui.notification")
+            add("com.miui.home")
+            add("com.miui.personalassistant")
+            add("com.android.settings")
+            // Other vendor system UIs for general robustness:
+            add("com.huawei.systemui")
+            add("com.huawei.aod")
+            add("com.huawei.android.totemweather")
+            add("com.samsung.android.app.aodservice")
+            add("com.sec.android.systemui")
+            add("com.oneplus.aod")
+            add("com.oppo.aod")
             mediaSession?.connectedControllers?.forEach { controller ->
                 if (controller.packageName.isNotBlank()) {
                     add(controller.packageName)

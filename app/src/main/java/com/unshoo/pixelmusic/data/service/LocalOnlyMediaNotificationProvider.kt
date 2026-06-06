@@ -31,16 +31,22 @@ class LocalOnlyMediaNotificationProvider(
         actionFactory: MediaNotification.ActionFactory,
         callback: MediaNotification.Provider.Callback,
     ): MediaNotification {
-        val notification = delegate.createNotification(
+        val wrappedCallback = object : MediaNotification.Provider.Callback {
+            override fun onNotificationChanged(notification: MediaNotification) {
+                notification.notification.flags = notification.notification.flags or Notification.FLAG_LOCAL_ONLY
+                notification.notification.category = Notification.CATEGORY_TRANSPORT
+                callback.onNotificationChanged(notification)
+            }
+        }
+        val mediaNotification = delegate.createNotification(
             mediaSession,
             customLayout,
             actionFactory,
-            callback
+            wrappedCallback
         )
-        // Set FLAG_LOCAL_ONLY directly in the notification flags to prevent Wear OS bridging
-        // without destroying the custom MediaStyle or stripping the MediaSession token via recoverBuilder().
-        notification.notification.flags = notification.notification.flags or Notification.FLAG_LOCAL_ONLY
-        return notification
+        mediaNotification.notification.flags = mediaNotification.notification.flags or Notification.FLAG_LOCAL_ONLY
+        mediaNotification.notification.category = Notification.CATEGORY_TRANSPORT
+        return mediaNotification
     }
 
     override fun handleCustomCommand(
