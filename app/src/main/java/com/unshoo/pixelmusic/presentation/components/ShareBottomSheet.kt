@@ -39,7 +39,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -865,6 +867,26 @@ private fun ShareableCard(
             if (!isLyricsMode) {
                 // ── SONG MINI CARD ───────────────────────────────────────────
                 // Inner card: album-art extracted dynamic color (lightScheme) with glass outline and reduced roundedness
+                // Soft bloom wrapper — blends card edges into gradient bg
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .drawWithContent {
+                            drawRect(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        lightScheme.primaryContainer.copy(alpha = 0.18f),
+                                        Color.Transparent
+                                    ),
+                                    center = Offset(size.width / 2f, size.height / 2f),
+                                    radius = maxOf(size.width, size.height) * 0.72f
+                                )
+                            )
+                            drawContent()
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
@@ -876,12 +898,13 @@ private fun ShareableCard(
                         ),
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = darkScheme.primaryContainer.copy(alpha = 0.88f)
+                        containerColor = lightScheme.primaryContainer.copy(alpha = 0.9f)
                     ),
-                    border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.28f))
+                    border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.45f))
                 ) {
-                    SongMiniCard(song = song, darkScheme = darkScheme)
+                    SongMiniCard(song = song, lightScheme = lightScheme)
                 }
+                } // end bloom Box
             } else {
                 // ── LYRICS GLASS PANEL ───────────────────────────────────────
                 Box(
@@ -962,7 +985,7 @@ private fun ShareableCard(
 @Composable
 private fun SongMiniCard(
     song: Song,
-    darkScheme: ColorScheme
+    lightScheme: ColorScheme
 ) {
     val formattedDuration = remember(song.duration) {
         val totalSecs = song.duration / 1000
@@ -1019,7 +1042,7 @@ private fun SongMiniCard(
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp,
                 lineHeight = 18.sp,
-                color = darkScheme.onPrimaryContainer,
+                color = lightScheme.onPrimaryContainer,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1030,7 +1053,7 @@ private fun SongMiniCard(
                 fontWeight = FontWeight.Medium,
                 fontSize = 11.sp,
                 lineHeight = 14.sp,
-                color = darkScheme.onPrimaryContainer.copy(alpha = 0.65f),
+                color = lightScheme.onPrimaryContainer.copy(alpha = 0.55f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1046,15 +1069,15 @@ private fun SongMiniCard(
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 8.sp,
-                    color = darkScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    color = lightScheme.onPrimaryContainer.copy(alpha = 0.6f)
                 )
                 LinearWavyProgressIndicator(
                     progress = { 0.4f },
                     modifier = Modifier
                         .weight(1f)
                         .height(12.dp),
-                    color = darkScheme.primary,
-                    trackColor = darkScheme.primary.copy(alpha = 0.32f),
+                    color = lightScheme.primary,
+                    trackColor = lightScheme.primary.copy(alpha = 0.22f),
                     stroke = stroke,
                     trackStroke = stroke,
                     wavelength = 12.dp,
@@ -1066,7 +1089,7 @@ private fun SongMiniCard(
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 8.sp,
-                    color = darkScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    color = lightScheme.onPrimaryContainer.copy(alpha = 0.6f)
                 )
             }
         }
