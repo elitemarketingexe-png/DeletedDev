@@ -277,7 +277,7 @@
         <provider
             android:name=".data.provider.SharedArtworkContentProvider"
             android:authorities="${applicationId}.artwork"
-            android:exported="false"
+            android:exported="true"
             android:grantUriPermissions="true" />
 
         <!-- Wear OS Data Layer: receives playback/volume commands from the watch -->
