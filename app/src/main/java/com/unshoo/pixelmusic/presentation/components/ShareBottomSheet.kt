@@ -857,10 +857,10 @@ private fun ShareableCard(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.Bottom,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.weight(1f))
 
             if (!isLyricsMode) {
                 // ── SONG MINI CARD ───────────────────────────────────────────
@@ -897,7 +897,7 @@ private fun ShareableCard(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             // ── PixelMusic pill — OUTSIDE mini card, in outer column ─────────
             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
