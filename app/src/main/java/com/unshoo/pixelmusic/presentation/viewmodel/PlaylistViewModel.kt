@@ -229,7 +229,7 @@ class PlaylistViewModel @Inject constructor(
                         val songsList = withContext(Dispatchers.IO) {
                             val rawSongs = folder.collectAllSongs()
                             if (rawSongs.any { it.contentUriString.isBlank() }) {
-                                musicRepository.getSongsByIds(rawSongs.map { it.id }).first()
+                                musicRepository.getSongsByIdsOnce(rawSongs.map { it.id })
                             } else {
                                 rawSongs
                             }
@@ -271,7 +271,7 @@ class PlaylistViewModel @Inject constructor(
 
                         // Colectar la lista de canciones del Flow devuelto por el repositorio en un hilo de IO
                         val songsList: List<Song> = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            musicRepository.getSongsByIds(playlist.songIds).first()
+                            musicRepository.getSongsByIdsOnce(playlist.songIds)
                         }
 
                         val orderedSongs = when (orderMode) {
@@ -568,7 +568,7 @@ class PlaylistViewModel @Inject constructor(
                     val youtubeVideoIds = if (songs.isNotEmpty()) {
                         songs.mapNotNull { it.youtubeId ?: if (it.id.startsWith("youtube_")) it.id.removePrefix("youtube_") else null }
                     } else {
-                        val loadedSongs = musicRepository.getSongsByIds(songIds).first()
+                        val loadedSongs = musicRepository.getSongsByIdsOnce(songIds)
                         loadedSongs.mapNotNull { it.youtubeId ?: if (it.id.startsWith("youtube_")) it.id.removePrefix("youtube_") else null }
                     }
                     try {
@@ -857,7 +857,7 @@ class PlaylistViewModel @Inject constructor(
     fun exportM3u(playlist: Playlist, uri: Uri, context: android.content.Context) {
         viewModelScope.launch {
             try {
-                val songs = musicRepository.getSongsByIds(playlist.songIds).first()
+                val songs = musicRepository.getSongsByIdsOnce(playlist.songIds)
                 val m3uContent = m3uManager.generateM3u(playlist, songs)
                 context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                     OutputStreamWriter(outputStream).use { writer ->
@@ -873,7 +873,7 @@ class PlaylistViewModel @Inject constructor(
     fun exportCsv(playlist: Playlist, uri: Uri, context: android.content.Context) {
         viewModelScope.launch {
             try {
-                val songs = musicRepository.getSongsByIds(playlist.songIds).first()
+                val songs = musicRepository.getSongsByIdsOnce(playlist.songIds)
                 val csvContent = m3uManager.generateCsv(songs)
                 context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                     OutputStreamWriter(outputStream).use { writer ->
@@ -932,7 +932,7 @@ class PlaylistViewModel @Inject constructor(
     fun sharePlaylist(playlist: Playlist, asCsv: Boolean, context: android.content.Context) {
         viewModelScope.launch {
             try {
-                val songs = musicRepository.getSongsByIds(playlist.songIds).first()
+                val songs = musicRepository.getSongsByIdsOnce(playlist.songIds)
                 val (fileContent, mimeType, extension) = if (asCsv) {
                     Triple(m3uManager.generateCsv(songs), "text/csv", "csv")
                 } else {
@@ -1098,7 +1098,7 @@ class PlaylistViewModel @Inject constructor(
             if (playlist != null && playlist.source == "YOUTUBE") {
                 val settings = datastoreRepository.settings.first()
                 if (!settings.cookies.isEmpty()) {
-                    val songs = musicRepository.getSongsByIds(songIdsToAdd).first()
+                    val songs = musicRepository.getSongsByIdsOnce(songIdsToAdd)
                     val videoIds = songs.mapNotNull { it.youtubeId ?: if (it.id.startsWith("youtube_")) it.id.removePrefix("youtube_") else null }
                     if (videoIds.isNotEmpty()) {
                         try {
@@ -1322,7 +1322,7 @@ class PlaylistViewModel @Inject constructor(
             }
             val playlist = playlistPreferencesRepository.userPlaylistsFlow.first().find { it.id == playlistId }
             if (playlist != null && playlist.source == "YOUTUBE") {
-                val song = musicRepository.getSongsByIds(listOf(songIdToRemove)).first().firstOrNull()
+                val song = musicRepository.getSongsByIdsOnce(listOf(songIdToRemove)).firstOrNull()
                 val videoId = song?.youtubeId ?: if (songIdToRemove.startsWith("youtube_")) songIdToRemove.removePrefix("youtube_") else songIdToRemove
                 if (videoId.isNotBlank()) {
                     try {
@@ -1678,7 +1678,7 @@ class PlaylistViewModel @Inject constructor(
         return try {
             val selectedPlaylists = _uiState.value.playlists.filter { it.id in playlistIds }
             selectedPlaylists.map { playlist ->
-                val songs = musicRepository.getSongsByIds(playlist.songIds).first()
+                val songs = musicRepository.getSongsByIdsOnce(playlist.songIds)
                 playlist to songs
             }
         } catch (e: Exception) {

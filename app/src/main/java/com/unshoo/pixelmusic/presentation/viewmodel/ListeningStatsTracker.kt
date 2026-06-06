@@ -320,7 +320,6 @@ class ListeningStatsTracker @Inject constructor(
         scope = null
     }
 
-    @Suppress("UNUSED_PARAMETER")
     private fun persistPlayback(
         songId: String,
         listened: Long,
@@ -332,20 +331,39 @@ class ListeningStatsTracker @Inject constructor(
         genre: String? = null,
         album: String? = null
     ) {
-        persistenceScope.launch {
-            runCatching {
-                persistPlaybackInternal(
-                    songId = songId,
-                    listened = listened,
-                    timestamp = timestamp,
-                    title = title,
-                    artist = artist,
-                    thumbnail = thumbnail,
-                    genre = genre,
-                    album = album
-                )
-            }.onFailure { throwable ->
-                Timber.e(throwable, "Failed to persist listening session for song=%s", songId)
+        if (forceSynchronous) {
+            kotlinx.coroutines.runBlocking {
+                runCatching {
+                    persistPlaybackInternal(
+                        songId = songId,
+                        listened = listened,
+                        timestamp = timestamp,
+                        title = title,
+                        artist = artist,
+                        thumbnail = thumbnail,
+                        genre = genre,
+                        album = album
+                    )
+                }.onFailure { throwable ->
+                    Timber.e(throwable, "Failed to persist listening session synchronously for song=%s", songId)
+                }
+            }
+        } else {
+            persistenceScope.launch {
+                runCatching {
+                    persistPlaybackInternal(
+                        songId = songId,
+                        listened = listened,
+                        timestamp = timestamp,
+                        title = title,
+                        artist = artist,
+                        thumbnail = thumbnail,
+                        genre = genre,
+                        album = album
+                    )
+                }.onFailure { throwable ->
+                    Timber.e(throwable, "Failed to persist listening session for song=%s", songId)
+                }
             }
         }
     }

@@ -37,14 +37,10 @@ class LocalOnlyMediaNotificationProvider(
             actionFactory,
             callback
         )
-        val localOnlyNotification = runCatching {
-            Notification.Builder.recoverBuilder(context, notification.notification)
-                .setLocalOnly(true)
-                .build()
-        }.getOrElse {
-            notification.notification
-        }
-        return MediaNotification(notification.notificationId, localOnlyNotification)
+        // Set FLAG_LOCAL_ONLY directly in the notification flags to prevent Wear OS bridging
+        // without destroying the custom MediaStyle or stripping the MediaSession token via recoverBuilder().
+        notification.notification.flags = notification.notification.flags or Notification.FLAG_LOCAL_ONLY
+        return notification
     }
 
     override fun handleCustomCommand(

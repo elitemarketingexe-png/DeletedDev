@@ -1353,6 +1353,7 @@ class MusicService : MediaLibraryService() {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val player = mediaSession?.player ?: engine.masterPlayer
             syncLocalListeningStatsFromPlayer(player, forceNewSession = true)
+            grantArtworkPermissionsForCurrentSong(mediaItem)
             
             val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) {
                 player.duration
@@ -1409,6 +1410,7 @@ class MusicService : MediaLibraryService() {
             // Force an immediate publish for real-time watch metadata.
             requestWidgetFullUpdate(force = true)
             mediaSession?.let { refreshMediaSessionUiWithFollowUp(it) }
+            grantArtworkPermissionsForCurrentSong()
             // Only recompute RG if the track actually changed — onMediaMetadataChanged
             // also fires on queue edits (add/remove) without a track change, which would
             // launch a redundant IO coroutine and cause a brief volume spike.
@@ -3207,7 +3209,7 @@ class MusicService : MediaLibraryService() {
         requestedItems: List<MediaItem>
     ): TrustedMediaItemsResolution {
         val songIds = requestedItems.map { it.mediaId }
-        val songs = musicRepository.getSongsByIds(songIds).first()
+        val songs = musicRepository.getSongsByIdsOnce(songIds)
         val songMap = songs.associateBy { it.id }
 
         return resolveMediaItemsWithTrustedArtworkGrants(requestedItems) { mediaId ->
@@ -3224,9 +3226,13 @@ class MusicService : MediaLibraryService() {
         if (targetPackage.isBlank()) return
 
         val providerAuthority = "$packageName.provider"
+        val artworkAuthority = "$packageName.artwork"
         mediaItems.forEach { mediaItem ->
             val artworkUri = resolveArtworkUri(mediaItem.mediaMetadata) ?: return@forEach
-            if (artworkUri.scheme?.lowercase() != "content" || artworkUri.authority != providerAuthority) {
+            val authority = artworkUri.authority
+            if (artworkUri.scheme?.lowercase() != "content" || 
+                (authority != providerAuthority && authority != artworkAuthority)
+            ) {
                 return@forEach
             }
 
@@ -3240,6 +3246,24 @@ class MusicService : MediaLibraryService() {
                     artworkUri
                 )
             }
+        }
+    }
+
+    private fun grantArtworkPermissionsForCurrentSong(mediaItem: MediaItem? = null) {
+        val currentItem = mediaItem ?: mediaSession?.player?.currentMediaItem ?: return
+        val targetPackages = LinkedHashSet<String>().apply {
+            add("com.android.systemui")
+            add("com.android.settings")
+            add("com.miui.player")
+            add("com.xiaomi.xmsf")
+            mediaSession?.connectedControllers?.forEach { controller ->
+                if (controller.packageName.isNotBlank()) {
+                    add(controller.packageName)
+                }
+            }
+        }
+        targetPackages.forEach { pkg ->
+            grantArtworkUriPermissions(pkg, listOf(currentItem))
         }
     }
 

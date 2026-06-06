@@ -131,6 +131,16 @@ class PlayerViewModelTest {
         every { mockTelegramCacheManager.embeddedArtUpdated } returns kotlinx.coroutines.flow.MutableSharedFlow()
         every { mockTelegramCacheManagerProvider.get() } returns mockTelegramCacheManager
 
+        mockkStatic(android.net.Uri::class)
+        every { android.net.Uri.parse(any()) } answers {
+            val str = firstArg<String>()
+            val mockUri = mockk<android.net.Uri>(relaxed = true)
+            every { mockUri.toString() } returns str
+            every { mockUri.scheme } returns str.substringBefore("://", "")
+            every { mockUri.authority } returns str.substringAfter("://", "").substringBefore("/", "")
+            mockUri
+        }
+
         // Mock UserPreferences
         coEvery { mockUserPreferencesRepository.favoriteSongIdsFlow } returns flowOf(emptySet())
         coEvery { mockUserPreferencesRepository.songsSortOptionFlow } returns flowOf("SongTitleAZ")
@@ -200,6 +210,7 @@ class PlayerViewModelTest {
         every { mockCastTransferStateHolder.initialize(any(), any(), any(), any(), any(), any(), any(), any(), any()) } just runs
         
         // Mock MusicRepository Basic Returns
+        every { mockMusicRepository.getSong(any()) } returns flowOf(null)
         every { mockMusicRepository.getPaginatedSongs(any(), any()) } returns flowOf(androidx.paging.PagingData.empty())
         every { mockMusicRepository.getPaginatedFavoriteSongs(any(), any()) } returns flowOf(androidx.paging.PagingData.empty())
         every { mockMusicRepository.getAudioFiles() } returns flowOf(emptyList())
@@ -217,6 +228,8 @@ class PlayerViewModelTest {
         coEvery { mockMusicRepository.getRandomSongs(any()) } returns emptyList()
         coEvery { mockMusicRepository.getSongIdsSorted(any(), any()) } returns emptyList()
         coEvery { mockMusicRepository.getFavoriteSongIdsSorted(any(), any()) } returns emptyList()
+        coEvery { mockMusicRepository.getSongsByIdsOnce(any()) } returns emptyList()
+
         every { mockMusicRepository.telegramRepository } returns mockTelegramRepository
         every { mockTelegramRepository.downloadCompleted } returns MutableSharedFlow<Int>()
         every { mockLyricsStateHolder.songUpdates } returns MutableSharedFlow()

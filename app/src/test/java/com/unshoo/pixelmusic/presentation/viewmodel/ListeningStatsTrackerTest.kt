@@ -74,7 +74,9 @@ class ListeningStatsTrackerTest {
                 timestamp = any(),
                 title = song.title,
                 artist = song.displayArtist,
-                thumbnail = any()
+                thumbnail = any(),
+                genre = any(),
+                album = any()
             )
         }
     }
@@ -115,7 +117,9 @@ class ListeningStatsTrackerTest {
                 timestamp = any(),
                 title = song.title,
                 artist = song.displayArtist,
-                thumbnail = any()
+                thumbnail = any(),
+                genre = any(),
+                album = any()
             )
         }
         assertThat(expectedDurationMs).isGreaterThan(TimeUnit.SECONDS.toMillis(5))

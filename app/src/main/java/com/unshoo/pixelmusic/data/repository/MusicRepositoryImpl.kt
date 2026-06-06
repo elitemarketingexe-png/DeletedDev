@@ -848,6 +848,35 @@ class MusicRepositoryImpl @Inject constructor(
         }.flowOn(Dispatchers.IO)
     }
 
+    override suspend fun getSongsByIdsOnce(songIds: List<String>): List<Song> = withContext(Dispatchers.IO) {
+        if (songIds.isEmpty()) return@withContext emptyList()
+
+        val idMappings = songIds.map { rawId ->
+            val longId = rawId.toLongOrNull()
+            if (longId != null) {
+                rawId to longId
+            } else if (rawId.startsWith("youtube_")) {
+                val videoId = rawId.removePrefix("youtube_")
+                val hashedId = -(15_000_000_000_000L + videoId.hashCode().toLong().let {
+                    if (it < 0L) -it else it
+                })
+                rawId to hashedId
+            } else {
+                rawId to null
+            }
+        }
+
+        val validLongIds = idMappings.mapNotNull { it.second }
+        if (validLongIds.isEmpty()) return@withContext emptyList()
+
+        val entities = musicDao.getSongsByIdsListSimple(validLongIds)
+        val songMapById = entities.associate { it.id to it.toSong() }
+        
+        idMappings.mapNotNull { (_, longId) ->
+            longId?.let { songMapById[it] }
+        }
+    }
+
     override suspend fun getSongByPath(path: String): Song? {
         return withContext(Dispatchers.IO) {
             musicDao.getSongByPath(path)?.toSong()

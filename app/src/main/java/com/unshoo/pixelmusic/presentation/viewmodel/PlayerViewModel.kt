@@ -1020,13 +1020,13 @@ class PlayerViewModel @Inject constructor(
     private suspend fun getSongsByIdsChunked(songIds: List<String>): List<Song> {
         if (songIds.isEmpty()) return emptyList()
         if (songIds.size <= SONG_ID_QUERY_CHUNK_SIZE) {
-            return musicRepository.getSongsByIds(songIds).first()
+            return musicRepository.getSongsByIdsOnce(songIds)
         }
 
         return withContext(Dispatchers.IO) {
             buildList(songIds.size) {
                 songIds.chunked(SONG_ID_QUERY_CHUNK_SIZE).forEach { chunk ->
-                    addAll(musicRepository.getSongsByIds(chunk).first())
+                    addAll(musicRepository.getSongsByIdsOnce(chunk))
                 }
             }
         }
@@ -1396,6 +1396,21 @@ class PlayerViewModel @Inject constructor(
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
             return Futures.immediateFuture(SessionResult(SessionError.ERROR_NOT_SUPPORTED))
+        }
+
+        /**
+         * Called when the MediaController is disconnected from the MediaSession (e.g. the
+         * MusicService was killed by the OS after a long uptime). Without this handler the
+         * ViewModel would keep a stale, dead controller reference and silently drop every
+         * playback command — making skip buttons and gestures appear frozen.
+         */
+        override fun onDisconnected(controller: MediaController) {
+            Log.w("PlayerViewModel", "MediaController disconnected — service may have been killed. Scheduling reconnect.")
+            viewModelScope.launch(Dispatchers.Main) {
+                // Small delay so the service has time to restart before we try to bind again.
+                kotlinx.coroutines.delay(300L)
+                connectMediaController()
+            }
         }
     }
     private var activeMediaControllerFuture: ListenableFuture<MediaController>? = null
@@ -5252,7 +5267,10 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun previousSong() {
-        playbackStateHolder.previousSong()
+        // Pass the in-memory queue media IDs so PlaybackStateHolder can resolve the
+        // previous-song index without issuing N Binder IPC calls to the MediaController.
+        val queueMediaIds = _playerUiState.value.currentPlaybackQueue.map { it.id }
+        playbackStateHolder.previousSong(queueMediaIds.ifEmpty { null })
     }
 
     private fun startProgressUpdates() {
@@ -5272,29 +5290,60 @@ class PlayerViewModel @Inject constructor(
     }
 
     suspend fun getSongs(songIds: List<String>) : List<Song>{
-        return musicRepository.getSongsByIds(songIds).first()
+        return musicRepository.getSongsByIdsOnce(songIds)
     }
 
     //Sorting
     fun sortSongs(sortOption: SortOption, persist: Boolean = true) {
         libraryStateHolder.sortSongs(sortOption, persist)
+        _playerUiState.update { it.copy(currentSongSortOption = sortOption) }
+        if (persist) {
+            viewModelScope.launch {
+                userPreferencesRepository.setSongsSortOption(sortOption.storageKey)
+            }
+        }
     }
 
     fun sortAlbums(sortOption: SortOption, persist: Boolean = true) {
         libraryStateHolder.sortAlbums(sortOption, persist)
+        _playerUiState.update { it.copy(currentAlbumSortOption = sortOption) }
+        if (persist) {
+            viewModelScope.launch {
+                userPreferencesRepository.setAlbumsSortOption(sortOption.storageKey)
+            }
+        }
     }
 
     fun sortArtists(sortOption: SortOption, persist: Boolean = true) {
         libraryStateHolder.sortArtists(sortOption, persist)
+        _playerUiState.update { it.copy(currentArtistSortOption = sortOption) }
+        if (persist) {
+            viewModelScope.launch {
+                userPreferencesRepository.setArtistsSortOption(sortOption.storageKey)
+            }
+        }
     }
 
     fun sortFavoriteSongs(sortOption: SortOption, persist: Boolean = true) {
         libraryStateHolder.sortFavoriteSongs(sortOption, persist)
+        _playerUiState.update { it.copy(currentFavoriteSortOption = sortOption) }
+        if (persist) {
+            viewModelScope.launch {
+                userPreferencesRepository.setLikedSongsSortOption(sortOption.storageKey)
+            }
+        }
     }
 
     fun sortFolders(sortOption: SortOption, persist: Boolean = true) {
         libraryStateHolder.sortFolders(sortOption, persist)
+        _playerUiState.update { it.copy(currentFolderSortOption = sortOption) }
+        if (persist) {
+            viewModelScope.launch {
+                userPreferencesRepository.setFoldersSortOption(sortOption.storageKey)
+            }
+        }
     }
+
 
     fun setFoldersPlaylistView(isPlaylistView: Boolean) {
         viewModelScope.launch {

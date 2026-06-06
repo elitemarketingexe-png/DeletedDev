@@ -22,6 +22,7 @@ import com.unshoo.pixelmusic.utils.AlbumArtCacheManager
 import com.unshoo.pixelmusic.utils.AlbumArtUtils
 import com.unshoo.pixelmusic.utils.CrashHandler
 import com.unshoo.pixelmusic.utils.AppLocaleManager
+import com.unshoo.pixelmusic.utils.MediaItemBuilder
 import com.unshoo.pixelmusic.utils.MediaMetadataRetrieverPool
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -83,6 +84,8 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
 
     override fun onCreate() {
         super.onCreate()
+
+        MediaItemBuilder.initialize(this)
 
         // Initialize Last.fm client
         com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(

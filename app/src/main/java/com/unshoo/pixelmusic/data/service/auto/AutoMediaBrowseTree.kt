@@ -209,7 +209,7 @@ class AutoMediaBrowseTree @Inject constructor(
                 val playlistId = contextId ?: return emptyList()
                 val playlist = playlistPreferencesRepository.userPlaylistsFlow.first()
                     .find { it.id == playlistId } ?: return emptyList()
-                val songs = musicRepository.getSongsByIds(playlist.songIds).first()
+                val songs = musicRepository.getSongsByIdsOnce(playlist.songIds)
                 val songsById = songs.associateBy { it.id }
                 playlist.songIds.mapNotNull { id -> songsById[id] }
             }
@@ -237,7 +237,7 @@ class AutoMediaBrowseTree @Inject constructor(
         if (engagements.isEmpty()) return emptyList()
 
         val songIds = engagements.map { it.songId }
-        val songs = musicRepository.getSongsByIds(songIds).first()
+        val songs = musicRepository.getSongsByIdsOnce(songIds)
         val songsById = songs.associateBy { it.id }
         return songIds.mapNotNull { id -> songsById[id] }
     }

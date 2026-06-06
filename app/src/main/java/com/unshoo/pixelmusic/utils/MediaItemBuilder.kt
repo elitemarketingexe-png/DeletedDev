@@ -12,6 +12,12 @@ import com.unshoo.pixelmusic.data.model.Song
 import java.io.File
 
 object MediaItemBuilder {
+    private var applicationPackageName: String? = null
+
+    fun initialize(context: Context) {
+        applicationPackageName = context.applicationContext.packageName
+    }
+
     private const val EXTERNAL_MEDIA_ID_PREFIX = "external:"
     private const val EXTERNAL_EXTRA_PREFIX = "com.unshoo.pixelmusic.external."
     private val DIRECT_FILE_URI_MIME_TYPES = setOf(
@@ -228,6 +234,15 @@ object MediaItemBuilder {
      * Keep only schemes that these surfaces can usually resolve, and normalize raw paths.
      */
     fun artworkUri(rawArtworkUri: String?): Uri? {
+        val pkg = applicationPackageName
+        if (pkg != null && rawArtworkUri?.startsWith("${LocalArtworkUri.SCHEME}://") == true) {
+            val songId = rawArtworkUri.let(LocalArtworkUri::parseSongId) ?: return null
+            return SharedArtworkContentProvider.buildSongUri(
+                packageName = pkg,
+                songId = songId,
+                cacheBustToken = LocalArtworkUri.extractCacheBustToken(rawArtworkUri)
+            )
+        }
         return normalizeArtworkUri(rawArtworkUri, SUPPORTED_INTERNAL_ARTWORK_SCHEMES)
     }
 

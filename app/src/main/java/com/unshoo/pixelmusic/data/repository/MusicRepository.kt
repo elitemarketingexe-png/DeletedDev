@@ -235,6 +235,12 @@ interface MusicRepository {
     fun getSongsByIds(songIds: List<String>): Flow<List<Song>>
 
     /**
+     * Retrieves a list of Song objects matching the provided IDs once, in the requested order.
+     * Bypasses Flow creation and subscription overhead for high-performance single-shot queries.
+     */
+    suspend fun getSongsByIdsOnce(songIds: List<String>): List<Song>
+
+    /**
      * Obtiene una canción por su ruta de archivo.
      * @param path Ruta del archivo.
      * @return El objeto Song o null si no se encuentra.

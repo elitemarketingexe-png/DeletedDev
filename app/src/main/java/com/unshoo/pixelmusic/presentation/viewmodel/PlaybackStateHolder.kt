@@ -430,7 +430,13 @@ class PlaybackStateHolder @Inject constructor(
         }
     }
 
-    fun previousSong() {
+    /**
+     * @param currentQueueMediaIds Optional snapshot of the current playback queue as a list of
+     *   media IDs (in queue order). When provided, the previous-song lookup is resolved in memory
+     *   rather than by scanning the MediaController timeline via N Binder IPC calls — which would
+     *   block the main thread on large queues and cause a visible UI freeze.
+     */
+    fun previousSong(currentQueueMediaIds: List<String>? = null) {
         val castSession = castStateHolder.castSession.value
         if (castSession != null && castSession.remoteMediaClient != null) {
             castStateHolder.castPlayer?.previous()
@@ -451,9 +457,16 @@ class PlaybackStateHolder @Inject constructor(
             playHistoryStack.removeLast()
             val targetMediaId = playHistoryStack.lastOrNull()
             if (targetMediaId != null) {
-                // Find this song's index in the current player timeline
-                val targetIndex = (0 until controller.mediaItemCount)
-                    .firstOrNull { controller.getMediaItemAt(it).mediaId == targetMediaId }
+                // Prefer the in-memory queue snapshot to avoid N IPC calls on large queues.
+                val targetIndex = if (currentQueueMediaIds != null) {
+                    // Pure in-memory list scan — zero IPC, zero main-thread blocking.
+                    val idx = currentQueueMediaIds.indexOf(targetMediaId)
+                    if (idx >= 0) idx else null
+                } else {
+                    // Fallback: scan the MediaController timeline via Binder IPC.
+                    (0 until controller.mediaItemCount)
+                        .firstOrNull { controller.getMediaItemAt(it).mediaId == targetMediaId }
+                }
                 if (targetIndex != null) {
                     controller.seekTo(targetIndex, 0L)
                     return

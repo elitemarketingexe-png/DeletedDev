@@ -411,7 +411,7 @@ class QuickPicksViewModel @Inject constructor(
                 val topEngagements = engagementDao.getTopPlayedSongs(15)
                 if (topEngagements.isNotEmpty()) {
                     val songIds = topEngagements.map { it.songId }
-                    musicRepository.getSongsByIds(songIds).first()
+                    musicRepository.getSongsByIdsOnce(songIds)
                 } else {
                     musicRepository.getRandomSongs(10)
                 }

@@ -241,7 +241,7 @@ class WearCommandReceiver : WearableListenerService() {
                 val playlistId = contextId ?: return emptyList()
                 val playlist = playlistPreferencesRepository.userPlaylistsFlow.first()
                     .find { it.id == playlistId } ?: return emptyList()
-                val songs = musicRepository.getSongsByIds(playlist.songIds).first()
+                val songs = musicRepository.getSongsByIdsOnce(playlist.songIds)
                 // Maintain playlist order
                 val songsById = songs.associateBy { it.id }
                 playlist.songIds.mapNotNull { id -> songsById[id] }
@@ -382,7 +382,7 @@ class WearCommandReceiver : WearableListenerService() {
                 val playlist = playlistPreferencesRepository.userPlaylistsFlow.first()
                     .find { it.id == playlistId }
                     ?: throw IllegalArgumentException("Playlist not found: $playlistId")
-                val songs = musicRepository.getSongsByIds(playlist.songIds).first()
+                val songs = musicRepository.getSongsByIdsOnce(playlist.songIds)
                 // Maintain playlist order
                 val songsById = songs.associateBy { it.id }
                 playlist.songIds

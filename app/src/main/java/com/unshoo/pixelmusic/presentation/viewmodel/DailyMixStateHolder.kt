@@ -99,7 +99,7 @@ class DailyMixStateHolder @Inject constructor(
             val dailyMixIds = userPreferencesRepository.dailyMixSongIdsFlow.first()
             if (dailyMixIds.isNotEmpty() && _dailyMixSongs.value.isEmpty()) {
                 val songs = withContext(Dispatchers.IO) {
-                    musicRepository.getSongsByIds(dailyMixIds).first()
+                    musicRepository.getSongsByIdsOnce(dailyMixIds)
                 }
                 if (songs.isNotEmpty()) {
                     // Maintain persisted order
@@ -115,7 +115,7 @@ class DailyMixStateHolder @Inject constructor(
             val yourMixIds = userPreferencesRepository.yourMixSongIdsFlow.first()
             if (yourMixIds.isNotEmpty() && _yourMixSongs.value.isEmpty()) {
                 val songs = withContext(Dispatchers.IO) {
-                    musicRepository.getSongsByIds(yourMixIds).first()
+                    musicRepository.getSongsByIdsOnce(yourMixIds)
                 }
                 if (songs.isNotEmpty()) {
                     val songMap = songs.associateBy { it.id }
