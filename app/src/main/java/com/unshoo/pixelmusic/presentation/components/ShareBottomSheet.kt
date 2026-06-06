@@ -65,6 +65,7 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LinearWavyProgressIndicator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -954,6 +955,7 @@ private fun ShareableCard(
 // Layout: flush full-width art → title → artist → thin progress bar
 // NO controls. NO branding inside this card.
 // ────────────────────────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SongMiniCard(
     song: Song,
@@ -1052,7 +1054,9 @@ private fun SongMiniCard(
                     trackColor = lightScheme.primary.copy(alpha = 0.22f),
                     stroke = stroke,
                     trackStroke = stroke,
-                    amplitude = { 2f }
+                    wavelength = 12.dp,
+                    amplitude = { 0.5f },
+                    waveSpeed = 4.dp
                 )
                 Text(
                     text = formattedDuration,
