@@ -266,6 +266,17 @@ fun FullPlayerContent(
     var showArtistPicker by rememberSaveable { mutableStateOf(false) }
     
     val lyricsSearchUiState by playerViewModel.lyricsSearchUiState.collectAsStateWithLifecycle()
+    val playerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
+    val lyricsLines = remember(playerState.lyrics) {
+        val lyrics = playerState.lyrics
+        if (lyrics != null) {
+            lyrics.synced?.map { it.line }?.filter { it.isNotBlank() }
+                ?: lyrics.plain?.filter { it.isNotBlank() }
+                ?: emptyList()
+        } else {
+            emptyList()
+        }
+    }
 
     // Single subscription — replaces 11 independent collectAsStateWithLifecycle calls.
     // distinctUntilChanged in the ViewModel ensures this only emits when something
@@ -1028,7 +1039,8 @@ fun FullPlayerContent(
                 showShareSheet = false
                 showPlaylistBottomSheet = true
             },
-            colorScheme = LocalMaterialTheme.current
+            colorScheme = LocalMaterialTheme.current,
+            lyricsLines = lyricsLines
         )
     }
 

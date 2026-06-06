@@ -71,6 +71,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import java.io.File
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalDensity
 import com.snapchat.kit.sdk.SnapCreative
 import com.snapchat.kit.sdk.creative.models.SnapPhotoContent
 
@@ -112,7 +115,8 @@ fun ShareBottomSheet(
     song: Song,
     onDismiss: () -> Unit,
     onAddToPlaylist: () -> Unit,
-    colorScheme: ColorScheme = MaterialTheme.colorScheme
+    colorScheme: ColorScheme = MaterialTheme.colorScheme,
+    lyricsLines: List<String> = emptyList()
 ) {
     val context = LocalContext.current
     val appContext = context.applicationContext
@@ -128,10 +132,12 @@ fun ShareBottomSheet(
 
     // Card mode: 0 = Song Card, 1 = Lyrics Card
     var selectedCardMode by remember { mutableStateOf(0) }
-    val hasLyrics = remember(song.lyrics) { !song.lyrics.isNullOrBlank() }
 
     // Lyric state
-    val cleanedLyrics = remember(song.lyrics) { LyricCleaner.clean(song.lyrics) }
+    val cleanedLyrics = remember(song.lyrics, lyricsLines) {
+        lyricsLines.ifEmpty { LyricCleaner.clean(song.lyrics) }
+    }
+    val hasLyrics = remember(cleanedLyrics) { cleanedLyrics.isNotEmpty() }
     val selectedLyrics = remember { mutableStateListOf<String>() }
 
     // Initialize with first 3 lines if available to provide a gorgeous preview immediately
@@ -724,152 +730,126 @@ private fun ShareableCard(
         // ── 1. Outer Background ─────────────────────────────────────────────
         // Lyrics card: full-bleed album art as background
         // Song card: themeStyle dynamic dark bg
-        if (isLyricsMode) {
-            SmartImage(
-                model = song.albumArtUriString,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            // Dark scrim for readability
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.52f))
-            )
-        } else {
-            when (themeStyle) {
-                ShareThemeStyle.DYNAMIC_PALETTE -> {
+        val primaryContainer = darkScheme.primaryContainer
+        val secondaryContainer = darkScheme.secondaryContainer
+
+        when (themeStyle) {
+            ShareThemeStyle.DYNAMIC_PALETTE -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(primaryContainer, surfaceContainerLowest)
+                            )
+                        )
+                ) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(surfaceContainerLow, surfaceContainerLowest)
+                                brush = Brush.radialGradient(
+                                    colors = listOf(primaryColor.copy(alpha = 0.45f), Color.Transparent),
+                                    radius = 700f
                                 )
                             )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(primaryColor.copy(alpha = 0.25f), Color.Transparent),
-                                        radius = 600f
-                                    )
-                                )
-                        )
-                    }
-                }
-                ShareThemeStyle.SOOTHING_GRADIENT -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(surfaceContainerLow, surfaceContainerLowest)
-                                )
-                            )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(
-                                            primaryColor.copy(alpha = 0.2f),
-                                            tertiaryColor.copy(alpha = 0.15f),
-                                            Color.Transparent
-                                        )
-                                    )
-                                )
-                        )
-                    }
-                }
-                ShareThemeStyle.BLURRED_ARTWORK -> {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        SmartImage(
-                            model = song.albumArtUriString,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.35f))
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    brush = Brush.verticalGradient(
-                                        colors = listOf(
-                                            surfaceContainerLow.copy(alpha = 0.82f),
-                                            surfaceContainerLowest.copy(alpha = 0.92f)
-                                        )
-                                    )
-                                )
-                        )
-                    }
-                }
-                ShareThemeStyle.MIDNIGHT_MINIMAL -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(surfaceContainerLowest)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(420.dp)
-                                .align(Alignment.TopStart)
-                                .offset(x = (-120).dp, y = (-60).dp)
-                                .background(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(primaryColor.copy(alpha = 0.12f), Color.Transparent)
-                                    )
-                                )
-                        )
-                    }
-                }
-                ShareThemeStyle.VIBRANT_GLOW -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(surfaceContainerLow, surfaceContainerLowest)
-                                )
-                            )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(
-                                            primaryColor.copy(alpha = 0.22f),
-                                            secondaryColor.copy(alpha = 0.15f),
-                                            tertiaryColor.copy(alpha = 0.1f)
-                                        )
-                                    )
-                                )
-                        )
-                    }
+                    )
                 }
             }
-            // Vignette for depth on song card
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f)),
-                            radius = 1200f
+            ShareThemeStyle.SOOTHING_GRADIENT -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(primaryContainer, secondaryContainer, surfaceContainerLowest)
+                            )
                         )
+                )
+            }
+            ShareThemeStyle.BLURRED_ARTWORK -> {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    SmartImage(
+                        model = song.albumArtUriString,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
-            )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.25f))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        primaryContainer.copy(alpha = 0.65f),
+                                        surfaceContainerLowest.copy(alpha = 0.85f)
+                                    )
+                                )
+                            )
+                    )
+                }
+            }
+            ShareThemeStyle.MIDNIGHT_MINIMAL -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(surfaceContainerLowest)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(420.dp)
+                            .align(Alignment.TopStart)
+                            .offset(x = (-120).dp, y = (-60).dp)
+                            .background(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(primaryColor.copy(alpha = 0.18f), Color.Transparent)
+                                )
+                            )
+                    )
+                }
+            }
+            ShareThemeStyle.VIBRANT_GLOW -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(primaryContainer, surfaceContainerLowest)
+                            )
+                        )
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        primaryColor.copy(alpha = 0.38f),
+                                        secondaryColor.copy(alpha = 0.28f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+                }
+            }
         }
+        // Vignette for depth
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f)),
+                        radius = 1200f
+                    )
+                )
+        )
 
         // ── 2. Foreground Content Column ────────────────────────────────────
         Column(
@@ -883,17 +863,17 @@ private fun ShareableCard(
 
             if (!isLyricsMode) {
                 // ── SONG MINI CARD ───────────────────────────────────────────
-                // Inner card: album-art extracted dynamic color (lightScheme)
+                // Inner card: album-art extracted dynamic color (lightScheme) with glass outline and reduced roundedness
                 Card(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .weight(1f, fill = false)
-                        .shadow(20.dp, shape = RoundedCornerShape(20.dp)),
-                    shape = RoundedCornerShape(20.dp),
+                        .shadow(20.dp, shape = RoundedCornerShape(12.dp)),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = lightScheme.primaryContainer
+                        containerColor = lightScheme.primaryContainer.copy(alpha = 0.9f)
                     ),
-                    border = BorderStroke(0.5.dp, lightScheme.onPrimaryContainer.copy(alpha = 0.12f))
+                    border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.35f))
                 ) {
                     SongMiniCard(song = song, lightScheme = lightScheme)
                 }
@@ -904,7 +884,7 @@ private fun ShareableCard(
                         .fillMaxWidth(0.92f)
                         .weight(1f, fill = false)
                         .clip(RoundedCornerShape(18.dp))
-                        .background(Color.White.copy(alpha = 0.09f))
+                        .background(Color.White.copy(alpha = 0.18f))
                         .border(
                             width = 1.dp,
                             color = Color.White.copy(alpha = 0.18f),
@@ -992,11 +972,16 @@ private fun SongMiniCard(
         String.format("%02d:%02d", mins, secs)
     }
 
+    val density = LocalDensity.current
+    val stroke = remember(density) {
+        Stroke(width = with(density) { 3.dp.toPx() }, cap = StrokeCap.Round)
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.Start
     ) {
-        // Album Art — flush to all edges, no horizontal padding
+        // Album Art — flush to all edges, no horizontal padding, corner roundedness reduced to 12dp
         SmartImage(
             model = song.albumArtUriString,
             contentDescription = null,
@@ -1006,8 +991,8 @@ private fun SongMiniCard(
                 .aspectRatio(1f)
                 .clip(
                     RoundedCornerShape(
-                        topStart = 20.dp,
-                        topEnd = 20.dp,
+                        topStart = 12.dp,
+                        topEnd = 12.dp,
                         bottomStart = 0.dp,
                         bottomEnd = 0.dp
                     )
@@ -1045,7 +1030,7 @@ private fun SongMiniCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Thin Progress Bar + Timestamps
+            // Thin Wavy Progress Bar + Timestamps
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1062,9 +1047,12 @@ private fun SongMiniCard(
                     progress = { 0.4f },
                     modifier = Modifier
                         .weight(1f)
-                        .height(3.dp),
+                        .height(12.dp),
                     color = lightScheme.primary,
-                    trackColor = lightScheme.primary.copy(alpha = 0.22f)
+                    trackColor = lightScheme.primary.copy(alpha = 0.22f),
+                    stroke = stroke,
+                    trackStroke = stroke,
+                    amplitude = { 2f }
                 )
                 Text(
                     text = formattedDuration,
