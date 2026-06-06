@@ -872,9 +872,9 @@ private fun ShareableCard(
                         .shadow(20.dp, shape = RoundedCornerShape(12.dp)),
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = lightScheme.primaryContainer.copy(alpha = 0.9f)
+                        containerColor = lightScheme.primaryContainer.copy(alpha = 0.7f)
                     ),
-                    border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.35f))
+                    border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.45f))
                 ) {
                     SongMiniCard(song = song, lightScheme = lightScheme)
                 }
