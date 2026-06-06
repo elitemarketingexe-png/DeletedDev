@@ -583,7 +583,7 @@ fun AnimatedSparklesIconButton(
 
     Box(
         modifier = modifier
-            .size(54.dp), // slightly larger to contain the badge safely
+            .size(48.dp),
         contentAlignment = Alignment.Center
     ) {
         // Exciting premium icon button with gradient and micro-animation
@@ -605,32 +605,6 @@ fun AnimatedSparklesIconButton(
                 contentDescription = "Smart Mix",
                 modifier = Modifier.size(20.dp),
                 tint = colors.onPrimary
-            )
-        }
-
-        // Beautifully polished HOT badge that doesn't clip
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = (-2).dp, y = 2.dp)
-                .background(
-                    color = colors.error,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                .border(
-                    width = 1.5.dp,
-                    color = colors.surfaceContainerLow,
-                    shape = RoundedCornerShape(8.dp)
-                )
-                .padding(horizontal = 5.dp, vertical = 2.5.dp)
-        ) {
-            Text(
-                text = "HOT",
-                fontSize = 8.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = colors.onError,
-                fontFamily = GoogleSansRounded,
-                letterSpacing = 0.5.sp
             )
         }
     }

@@ -232,8 +232,8 @@ class PlaylistPreferencesRepository @Inject constructor(
                     artist = entity.artistName,
                     duration = entity.duration.toString(),
                     thumbnailHref = entity.albumArtUriString ?: "",
-                    thumbnailPath = entity.albumArtUriString,
-                    audioFilePath = entity.filePath
+                    thumbnailPath = if (entity.filePath.isNotBlank()) entity.albumArtUriString else null,
+                    audioFilePath = if (entity.filePath.isNotBlank()) entity.filePath else null
                 )
             }
             if (ytSongs.isNotEmpty()) {

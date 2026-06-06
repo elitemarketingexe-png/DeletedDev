@@ -875,7 +875,7 @@ fun SongInfoBottomSheet(
                                         }
 
                                         item {
-                                            Spacer(Modifier.height(140.dp))
+                                            Spacer(Modifier.navigationBarsPadding().height(80.dp))
                                         }
                                     }
                                 }
@@ -962,7 +962,7 @@ fun SongInfoBottomSheet(
                                             }
                                         }
                                         item {
-                                            Spacer(Modifier.height(140.dp))
+                                            Spacer(Modifier.navigationBarsPadding().height(80.dp))
                                         }
                                     }
                                 }

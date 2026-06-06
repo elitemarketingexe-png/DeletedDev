@@ -40,7 +40,7 @@
     <string name="ai_playlist_headline_perfect">Perfectly Curated</string>
     <string name="ai_playlist_headline_daily_mix">Daily Mix</string>
     <string name="ai_playlist_subtitle_journey_ready">Your sonic journey is ready</string>
-    <string name="ai_playlist_subtitle_generator">Last.fm Recommendation Generator</string>
+    <string name="ai_playlist_subtitle_generator">Daily Mix Generator</string>
     <string name="ai_playlist_description">Generate a tailored mix based on your Last.fm profile directly into your Daily Mix.</string>
     <string name="ai_playlist_section_size">Playlist size</string>
     <string name="ai_playlist_min_songs">Min songs</string>

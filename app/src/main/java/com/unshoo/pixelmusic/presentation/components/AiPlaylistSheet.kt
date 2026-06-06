@@ -15,7 +15,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +35,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Leaderboard
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Sell
+import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -42,6 +54,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -65,9 +78,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.unshoo.pixelmusic.R
+import com.unshoo.pixelmusic.presentation.viewmodel.LastFmTrack
 import com.unshoo.pixelmusic.ui.theme.ExpTitleTypography
 import com.unshoo.pixelmusic.ui.theme.GoogleSansRounded
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
@@ -89,7 +104,17 @@ fun AiPlaylistSheet(
     isSuccess: Boolean,
     status: String?,
     error: String?,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    topTracks: List<LastFmTrack> = emptyList(),
+    topArtists: List<String> = emptyList(),
+    searchTrackResults: List<LastFmTrack> = emptyList(),
+    searchArtistResults: List<String> = emptyList(),
+    isSearchingSeeds: Boolean = false,
+    isSearchingTopSeeds: Boolean = false,
+    onSearchTrack: (String, String) -> Unit = { _, _ -> },
+    onSearchArtist: (String) -> Unit = {},
+    onLoadTopTracks: () -> Unit = {},
+    onLoadTopArtists: () -> Unit = {}
 ) {
     var selectedMode by remember { mutableStateOf("recommendations") }
     var minLength by remember { mutableStateOf("30") }
@@ -256,7 +281,7 @@ fun AiPlaylistSheet(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isSuccess) "Perfectly Curated" else "Last.fm Recommendation Mix",
+                        text = if (isSuccess) "Perfectly Curated" else "Daily Mix",
                         style = ExpTitleTypography.displayMedium.copy(
                             fontSize = 26.sp,
                             fontWeight = FontWeight.Bold
@@ -264,7 +289,7 @@ fun AiPlaylistSheet(
                         color = if (isSuccess) colors.tertiary else colors.primary
                     )
                     Text(
-                        text = if (isSuccess) "Your sonic journey is ready" else "Based on Last.fm",
+                        text = if (isSuccess) "Your sonic journey is ready" else "Based on your Last.fm history",
                         style = MaterialTheme.typography.titleMedium,
                         fontFamily = GoogleSansRounded,
                         color = if (isSuccess) colors.tertiary else colors.onSurfaceVariant
@@ -352,33 +377,66 @@ fun AiPlaylistSheet(
                             )
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .pointerInput(Unit) {
-                            detectTapGestures(onTap = { expandedModeDropdown = true })
-                        },
+                    modifier = Modifier.fillMaxWidth(),
                     shape = promptFieldShape,
                     colors = textFieldColors
+                )
+                
+                // Clickable overlay Box to make the full area clickable
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(promptFieldShape)
+                        .clickable { expandedModeDropdown = true }
                 )
                 
                 DropdownMenu(
                     expanded = expandedModeDropdown,
                     onDismissRequest = { expandedModeDropdown = false },
-                    modifier = Modifier.fillMaxWidth(0.85f)
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .background(colors.surfaceContainerHigh),
+                    shape = AbsoluteSmoothCornerShape(16.dp, 60)
                 ) {
                     val modesList = listOf(
-                        "recommendations" to "My Recommendations",
-                        "recent" to "Recent Tracks",
-                        "top" to "Top Tracks",
-                        "library" to "My Library",
-                        "similar-tracks" to "Similar Tracks",
-                        "similar-artists" to "Similar Artists",
-                        "tag" to "By Tag / Genre",
-                        "mix" to "My Mix"
+                        Triple("recommendations", "My Recommendations", Icons.Rounded.AutoAwesome),
+                        Triple("recent", "Recent Tracks", Icons.Rounded.History),
+                        Triple("top", "Top Tracks", Icons.Rounded.Leaderboard),
+                        Triple("library", "My Library", Icons.Rounded.LibraryMusic),
+                        Triple("similar-tracks", "Similar Tracks", Icons.Rounded.MusicNote),
+                        Triple("similar-artists", "Similar Artists", Icons.Rounded.People),
+                        Triple("tag", "By Tag / Genre", Icons.Rounded.Sell),
+                        Triple("mix", "My Mix", Icons.Rounded.Shuffle)
                     )
-                    modesList.forEach { (modeId, modeName) ->
+                    modesList.forEach { (modeId, modeName, icon) ->
+                        val isSelected = selectedMode == modeId
                         DropdownMenuItem(
-                            text = { Text(modeName) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = if (isSelected) colors.primary else colors.onSurfaceVariant.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            text = {
+                                Text(
+                                    text = modeName,
+                                    fontFamily = GoogleSansRounded,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) colors.primary else colors.onSurface
+                                )
+                            },
+                            trailingIcon = if (isSelected) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        tint = colors.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            } else null,
                             onClick = {
                                 selectedMode = modeId
                                 expandedModeDropdown = false
@@ -399,6 +457,13 @@ fun AiPlaylistSheet(
                         onValueChange = { seedTrackName = it },
                         label = { Text("Seed Track Name") },
                         placeholder = { Text("e.g. Blinding Lights") },
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                onSearchTrack(seedTrackName, seedArtistName)
+                            }) {
+                                Icon(Icons.Rounded.Search, contentDescription = "Search", tint = colors.primary)
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         shape = smoothCornerShape,
                         colors = textFieldColors,
@@ -414,20 +479,168 @@ fun AiPlaylistSheet(
                         colors = textFieldColors,
                         singleLine = true
                     )
+
+                    Button(
+                        onClick = {
+                            onLoadTopTracks()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary,
+                            contentColor = colors.onPrimary
+                        ),
+                        shape = AbsoluteSmoothCornerShape(12.dp, 60),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Rounded.LibraryMusic, contentDescription = null, tint = colors.onPrimary, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Pick From My Top Tracks", fontFamily = GoogleSansRounded, fontWeight = FontWeight.Bold)
+                    }
+
+                    if (isSearchingSeeds || isSearchingTopSeeds) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = colors.primary, modifier = Modifier.size(24.dp))
+                        }
+                    }
+
+                    if (searchTrackResults.isNotEmpty()) {
+                        Text(
+                            text = "Search Results",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = colors.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for (track in searchTrackResults) {
+                                SeedSearchResultItem(
+                                    title = track.name,
+                                    subtitle = track.artist,
+                                    onClick = {
+                                        seedTrackName = track.name
+                                        seedArtistName = track.artist
+                                    },
+                                    colors = colors.primaryContainer to colors.primary
+                                )
+                            }
+                        }
+                    }
+
+                    if (topTracks.isNotEmpty()) {
+                        Text(
+                            text = "My Top Tracks",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = colors.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for (track in topTracks) {
+                                SeedSearchResultItem(
+                                    title = track.name,
+                                    subtitle = track.artist,
+                                    onClick = {
+                                        seedTrackName = track.name
+                                        seedArtistName = track.artist
+                                    },
+                                    colors = colors.primaryContainer to colors.primary
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
             AnimatedVisibility(visible = selectedMode == "similar-artists") {
-                OutlinedTextField(
-                    value = seedArtistInput,
-                    onValueChange = { seedArtistInput = it },
-                    label = { Text("Seed Artist Name") },
-                    placeholder = { Text("e.g. Coldplay") },
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = smoothCornerShape,
-                    colors = textFieldColors,
-                    singleLine = true
-                )
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = seedArtistInput,
+                        onValueChange = { seedArtistInput = it },
+                        label = { Text("Seed Artist Name") },
+                        placeholder = { Text("e.g. Coldplay") },
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                onSearchArtist(seedArtistInput)
+                            }) {
+                                Icon(Icons.Rounded.Search, contentDescription = "Search", tint = colors.primary)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = smoothCornerShape,
+                        colors = textFieldColors,
+                        singleLine = true
+                    )
+
+                    Button(
+                        onClick = {
+                            onLoadTopArtists()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary,
+                            contentColor = colors.onPrimary
+                        ),
+                        shape = AbsoluteSmoothCornerShape(12.dp, 60),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Rounded.People, contentDescription = null, tint = colors.onPrimary, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Pick From My Top Artists", fontFamily = GoogleSansRounded, fontWeight = FontWeight.Bold)
+                    }
+
+                    if (isSearchingSeeds || isSearchingTopSeeds) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = colors.primary, modifier = Modifier.size(24.dp))
+                        }
+                    }
+
+                    if (searchArtistResults.isNotEmpty()) {
+                        Text(
+                            text = "Search Results",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = colors.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for (artist in searchArtistResults) {
+                                SeedSearchResultItem(
+                                    title = artist,
+                                    subtitle = "Artist",
+                                    onClick = {
+                                        seedArtistInput = artist
+                                    },
+                                    colors = colors.primaryContainer to colors.primary
+                                )
+                            }
+                        }
+                    }
+
+                    if (topArtists.isNotEmpty()) {
+                        Text(
+                            text = "My Top Artists",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = colors.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for (artist in topArtists) {
+                                SeedSearchResultItem(
+                                    title = artist,
+                                    subtitle = "Artist",
+                                    onClick = {
+                                        seedArtistInput = artist
+                                    },
+                                    colors = colors.primaryContainer to colors.primary
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             AnimatedVisibility(visible = selectedMode == "tag") {
@@ -586,7 +799,9 @@ fun AiPlaylistSheet(
                     .scale(buttonScale)
                     .clip(buttonShape)
                     .background(
-                        if (!isInputReady && !isGenerating) 
+                        if (isSuccess)
+                            colors.tertiaryContainer
+                        else if (!isInputReady && !isGenerating) 
                             colors.surfaceContainerHighest 
                         else 
                             colors.primaryContainer
@@ -594,7 +809,12 @@ fun AiPlaylistSheet(
                     .pointerInput(isInputReady, isGenerating, isSuccess) {
                         detectTapGestures(
                             onPress = {
-                                if (isInputReady && !isGenerating && !isSuccess) {
+                                if (isSuccess) {
+                                    isPressed = true
+                                    tryAwaitRelease()
+                                    isPressed = false
+                                    onDismiss()
+                                } else if (isInputReady && !isGenerating) {
                                     isPressed = true
                                     tryAwaitRelease()
                                     isPressed = false
@@ -665,6 +885,51 @@ fun AiPlaylistSheet(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun SeedSearchResultItem(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    colors: Pair<Color, Color>
+) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = AbsoluteSmoothCornerShape(12.dp, 60),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.MusicNote,
+                contentDescription = null,
+                tint = colors.second,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

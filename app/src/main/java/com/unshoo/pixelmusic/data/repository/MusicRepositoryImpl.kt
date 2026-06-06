@@ -1638,8 +1638,8 @@ class MusicRepositoryImpl @Inject constructor(
                         artist = song.artist,
                         duration = song.duration.toString(),
                         thumbnailHref = song.albumArtUriString ?: "",
-                        thumbnailPath = song.albumArtUriString,
-                        audioFilePath = song.path
+                        thumbnailPath = null,
+                        audioFilePath = null
                     )
                 )
             }

@@ -131,8 +131,8 @@ class DailyMixStateHolder @Inject constructor(
      */
     fun forceUpdate(favoriteSongIdsFlow: kotlinx.coroutines.flow.Flow<Set<String>>) {
         scope?.launch {
-            updateDailyMix(favoriteSongIdsFlow)
-            userPreferencesRepository.saveLastDailyMixUpdateTimestamp(System.currentTimeMillis())
+                updateDailyMix(favoriteSongIdsFlow)
+                userPreferencesRepository.saveLastDailyMixUpdateTimestamp(System.currentTimeMillis())
         }
     }
 
@@ -161,6 +161,7 @@ class DailyMixStateHolder @Inject constructor(
         _dailyMixSongs.value = songs.toImmutableList()
         scope?.launch {
             userPreferencesRepository.saveDailyMixSongIds(songs.map { it.id })
+            userPreferencesRepository.saveLastDailyMixUpdateTimestamp(System.currentTimeMillis())
         }
     }
 

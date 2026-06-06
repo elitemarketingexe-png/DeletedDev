@@ -127,6 +127,7 @@ fun DailyMixScreen(
     val aiStatus by smartMixViewModel.dailyMixGenProgress.collectAsStateWithLifecycle()
     val aiError by smartMixViewModel.dailyMixGenError.collectAsStateWithLifecycle()
     val aiSuccess by smartMixViewModel.dailyMixGenSuccess.collectAsStateWithLifecycle()
+    val smartMixUiState by smartMixViewModel.uiState.collectAsStateWithLifecycle()
     val isGeneratingAiMetadata by playerViewModel.isGeneratingAiMetadata.collectAsStateWithLifecycle()
     val aiMetadataSuccess by playerViewModel.aiMetadataSuccess.collectAsStateWithLifecycle()
     val lazyListState = rememberLazyListState()
@@ -146,7 +147,7 @@ fun DailyMixScreen(
     }
 
     if (showAiSheet) {
-        // Last.fm Recommendation Mix Generator
+        // Daily Mix Generator
         AiPlaylistSheet(
             onDismiss = {
                 smartMixViewModel.dismissDailyMixGenSheet()
@@ -169,7 +170,24 @@ fun DailyMixScreen(
             error = aiError,
             onRetry = {
                 smartMixViewModel.dismissDailyMixGenSheet()
-            }
+            },
+            topTracks = smartMixUiState.topTracksForSeed,
+            topArtists = smartMixUiState.topArtistsForSeed,
+            searchTrackResults = smartMixUiState.searchTrackResults,
+            searchArtistResults = smartMixUiState.searchArtistResults,
+            isSearchingSeeds = smartMixUiState.isSearchingSeed,
+            isSearchingTopSeeds = smartMixUiState.isSearchingTopSeeds,
+            onSearchTrack = { track, artist ->
+                smartMixViewModel.setSeedTrackName(track)
+                smartMixViewModel.setSeedArtistName(artist)
+                smartMixViewModel.searchSeedTrack()
+            },
+            onSearchArtist = { artist ->
+                smartMixViewModel.setSeedArtistInput(artist)
+                smartMixViewModel.searchSeedArtist()
+            },
+            onLoadTopTracks = { smartMixViewModel.loadTopTracksForSeed() },
+            onLoadTopArtists = { smartMixViewModel.loadTopArtistsForSeed() }
         )
     }
 
@@ -591,7 +609,7 @@ private fun ExpressiveDailyMixHeader(
                 Icon(
                     modifier = Modifier.size(20.dp),
                     painter = painterResource(R.drawable.rounded_instant_mix_24),
-                    contentDescription = "Last.fm Recommendation Mix"
+                    contentDescription = "Daily Mix Generator"
                 )
             }
         }

@@ -245,7 +245,7 @@ private fun SmartMixConfigurator(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = fabAreaHeight + 8.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = fabAreaHeight + 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 1. Slider Card
@@ -299,26 +299,10 @@ private fun SmartMixConfigurator(
 
                     val itemShape = remember { AbsoluteSmoothCornerShape(22.dp, 60) }
 
-                    val startColor = colors.first
-                    val ratio = if (isDark) 0.18f else 0.28f
-                    val endColor = Color(
-                        red = startColor.red * (1f - ratio) + colors.second.red * ratio,
-                        green = startColor.green * (1f - ratio) + colors.second.green * ratio,
-                        blue = startColor.blue * (1f - ratio) + colors.second.blue * ratio,
-                        alpha = 1f
-                    )
-
-                    val cardBgBrush = if (isSelected) {
-                        Brush.linearGradient(
-                            colors = listOf(startColor, endColor)
-                        )
+                    val cardBgColor = if (isSelected) {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
                     } else {
-                        Brush.linearGradient(
-                            colors = listOf(
-                                startColor.copy(alpha = if (isDark) 0.15f else 0.25f),
-                                startColor.copy(alpha = if (isDark) 0.08f else 0.15f)
-                            )
-                        )
+                        MaterialTheme.colorScheme.surfaceContainerLow
                     }
 
                     val borderStroke = if (isSelected) {
@@ -331,7 +315,7 @@ private fun SmartMixConfigurator(
                     } else {
                         BorderStroke(
                             width = 1.dp,
-                            color = colors.second.copy(alpha = if (isDark) 0.15f else 0.25f)
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                         )
                     }
 
@@ -341,7 +325,7 @@ private fun SmartMixConfigurator(
                             else viewModel.setSelectedMode(mode.id)
                         },
                         shape = itemShape,
-                        color = Color.Transparent,
+                        color = cardBgColor,
                         border = borderStroke,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -349,12 +333,13 @@ private fun SmartMixConfigurator(
                                 scaleX = cardScale
                                 scaleY = cardScale
                             }
-                            .background(
-                                brush = cardBgBrush,
-                                shape = itemShape
-                            )
                     ) {
-                        Column {
+                        val overlayModifier = if (isSelected) {
+                            Modifier.background(colors.second.copy(alpha = 0.05f))
+                        } else {
+                            Modifier
+                        }
+                        Column(modifier = overlayModifier) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
@@ -368,19 +353,25 @@ private fun SmartMixConfigurator(
                                         .size(52.dp)
                                         .clip(AbsoluteSmoothCornerShape(16.dp, 60))
                                         .background(
-                                            Brush.verticalGradient(
-                                                colors = if (isSelected) listOf(
-                                                    colors.second,
-                                                    colors.second.copy(alpha = 0.85f)
-                                                ) else listOf(
-                                                    colors.first,
-                                                    colors.first.copy(alpha = 0.85f)
+                                            if (isSelected) {
+                                                Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        colors.second,
+                                                        colors.second.copy(alpha = 0.8f)
+                                                    )
                                                 )
-                                            )
+                                            } else {
+                                                Brush.verticalGradient(
+                                                    colors = listOf(
+                                                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                                    )
+                                                )
+                                            }
                                         )
                                         .border(
                                             width = 1.dp,
-                                            color = (if (isSelected) colors.first else colors.second).copy(alpha = 0.2f),
+                                            color = (if (isSelected) colors.first else MaterialTheme.colorScheme.outlineVariant).copy(alpha = 0.2f),
                                             shape = AbsoluteSmoothCornerShape(16.dp, 60)
                                         )
                                 ) {
@@ -389,7 +380,7 @@ private fun SmartMixConfigurator(
                                         contentDescription = null,
                                         modifier = Modifier.size(24.dp),
                                         tint = if (isSelected) colors.first
-                                               else colors.second
+                                               else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
@@ -399,18 +390,16 @@ private fun SmartMixConfigurator(
                                     Text(
                                         text = mode.title,
                                         style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                                         fontFamily = GoogleSansRounded,
-                                        color = if (isSelected) colors.second
-                                                else MaterialTheme.colorScheme.onSurface,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
                                         text = mode.desc,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = if (isSelected) colors.second.copy(alpha = 0.75f)
-                                                 else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -459,7 +448,7 @@ private fun SmartMixConfigurator(
                                         "recent" -> Text(
                                             text = "Fetches what you have scrobbled recently on Last.fm.",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = colors.second.copy(alpha = 0.8f)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         "similar-tracks" -> SimilarTracksInputs(
                                             uiState = uiState, viewModel = viewModel,
@@ -479,12 +468,12 @@ private fun SmartMixConfigurator(
                                         "mix" -> Text(
                                             text = "A smart blend of your top tracks, recent plays, and tracks similar to your favorite artists.",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = colors.second.copy(alpha = 0.8f)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         "recommendations" -> Text(
                                             text = "Uses your Last.fm profile to score, filter, and balance familiar sounds with new discoveries.",
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = colors.second.copy(alpha = 0.8f)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
@@ -495,7 +484,7 @@ private fun SmartMixConfigurator(
             }
         }
 
-        // FAB — always above mini player + nav bar, hidden when selectedMode is null
+        // FAB — sticky bottom glass panel to prevent overlapping raw cards text
         val isGenerateEnabled = uiState.selectedMode != null && when (uiState.selectedMode) {
             "similar-tracks"  -> uiState.seedTrackName.isNotBlank() && uiState.seedArtistName.isNotBlank()
             "similar-artists" -> uiState.seedArtistInput.isNotBlank()
@@ -505,28 +494,76 @@ private fun SmartMixConfigurator(
 
         AnimatedVisibility(
             visible = uiState.selectedMode != null,
-            enter = fadeIn() + scaleIn(),
-            exit = fadeOut() + scaleOut(),
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ) + fadeIn(),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ) + fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = (if (isPlayerActive) MiniPlayerHeight else 0.dp) + bottomBarHeightDp + 12.dp)
+                .fillMaxWidth()
         ) {
-            ExtendedFloatingActionButton(
-                onClick = { keyboardController?.hide(); viewModel.generatePlaylist() },
-                expanded = isGenerateEnabled,
-                icon = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
-                text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                                MaterialTheme.colorScheme.surface
+                            )
+                        )
+                    )
+                    .padding(horizontal = 24.dp)
+                    .padding(
+                        top = 16.dp,
+                        bottom = (if (isPlayerActive) MiniPlayerHeight else 0.dp) + bottomBarHeightDp + 16.dp
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Button(
+                    onClick = { keyboardController?.hide(); viewModel.generatePlaylist() },
+                    enabled = isGenerateEnabled,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = AbsoluteSmoothCornerShape(28.dp, 60),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 6.dp,
+                        pressedElevation = 2.dp,
+                        disabledElevation = 0.dp
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = "Generate Mix",
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = GoogleSansRounded
+                        fontFamily = GoogleSansRounded,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
                     )
-                },
-                containerColor = if (isGenerateEnabled) MaterialTheme.colorScheme.primary
-                                 else MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = if (isGenerateEnabled) MaterialTheme.colorScheme.onPrimary
-                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-            )
+                }
+            }
         }
     }
 }
@@ -536,10 +573,12 @@ private fun TrackCountSliderCard(
     count: Int,
     onCountChange: (Int) -> Unit
 ) {
+    val shape = remember { AbsoluteSmoothCornerShape(22.dp, 60) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
     ) {
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
             Row(
@@ -551,28 +590,29 @@ private fun TrackCountSliderCard(
                     Text(
                         text = "Track Count",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Bold,
                         fontFamily = GoogleSansRounded,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "How many songs to generate",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                // Pill badge matching app's chip style
+                
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = AbsoluteSmoothCornerShape(12.dp, 60),
                     color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.padding(start = 8.dp)
                 ) {
                     Text(
                         text = "$count",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = GoogleSansRounded,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 }
             }
@@ -589,14 +629,15 @@ private fun TrackCountSliderCard(
                 )
             )
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 listOf("5", "15", "25", "35").forEach { label ->
                     Text(
                         text = label,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -683,14 +724,14 @@ private fun SimilarTracksInputs(
             },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = colors.second,
-                unfocusedBorderColor = colors.second.copy(alpha = 0.3f),
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
                 focusedLabelColor = colors.second,
-                unfocusedLabelColor = colors.second.copy(alpha = 0.7f),
+                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 cursorColor = colors.second,
-                focusedTextColor = colors.second,
-                unfocusedTextColor = colors.second,
-                focusedContainerColor = colors.second.copy(alpha = 0.08f),
-                unfocusedContainerColor = colors.second.copy(alpha = 0.04f)
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
             )
         )
 
@@ -704,14 +745,14 @@ private fun SimilarTracksInputs(
             shape = AbsoluteSmoothCornerShape(16.dp, 60),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = colors.second,
-                unfocusedBorderColor = colors.second.copy(alpha = 0.3f),
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
                 focusedLabelColor = colors.second,
-                unfocusedLabelColor = colors.second.copy(alpha = 0.7f),
+                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 cursorColor = colors.second,
-                focusedTextColor = colors.second,
-                unfocusedTextColor = colors.second,
-                focusedContainerColor = colors.second.copy(alpha = 0.08f),
-                unfocusedContainerColor = colors.second.copy(alpha = 0.04f)
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
             )
         )
 
@@ -821,14 +862,14 @@ private fun SimilarArtistsInputs(
             },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = colors.second,
-                unfocusedBorderColor = colors.second.copy(alpha = 0.3f),
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
                 focusedLabelColor = colors.second,
-                unfocusedLabelColor = colors.second.copy(alpha = 0.7f),
+                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 cursorColor = colors.second,
-                focusedTextColor = colors.second,
-                unfocusedTextColor = colors.second,
-                focusedContainerColor = colors.second.copy(alpha = 0.08f),
-                unfocusedContainerColor = colors.second.copy(alpha = 0.04f)
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
             )
         )
 
@@ -927,14 +968,14 @@ private fun TagInputs(
             keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() }),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = colors.second,
-                unfocusedBorderColor = colors.second.copy(alpha = 0.3f),
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
                 focusedLabelColor = colors.second,
-                unfocusedLabelColor = colors.second.copy(alpha = 0.7f),
+                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 cursorColor = colors.second,
-                focusedTextColor = colors.second,
-                unfocusedTextColor = colors.second,
-                focusedContainerColor = colors.second.copy(alpha = 0.08f),
-                unfocusedContainerColor = colors.second.copy(alpha = 0.04f)
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
             )
         )
 
@@ -976,15 +1017,15 @@ private fun SeedSearchResultItem(
     onClick: () -> Unit,
     colors: Pair<Color, Color>
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
         shape = AbsoluteSmoothCornerShape(16.dp, 60),
-        colors = CardDefaults.cardColors(containerColor = colors.second.copy(alpha = 0.1f))
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
@@ -998,14 +1039,14 @@ private fun SeedSearchResultItem(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                    color = colors.second,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = colors.second.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
