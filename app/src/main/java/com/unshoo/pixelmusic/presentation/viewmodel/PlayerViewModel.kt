@@ -2749,6 +2749,96 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun playArtistSongsShuffledWithRelated(
+        artistName: String,
+        initialArtistSongs: List<Song>,
+        songsMoreEndpoint: unshoo.ianshulyadav.pixelmusic.innertube.models.BrowseEndpoint? = null,
+        isOnline: Boolean = true
+    ) {
+        viewModelScope.launch {
+            _playerUiState.update { it.copy(isLoadingInitialSongs = true) }
+            try {
+                val allArtistSongs = initialArtistSongs.toMutableList()
+
+                if (isOnline && songsMoreEndpoint != null) {
+                    val fetchResult = withContext(Dispatchers.IO) {
+                        YouTube.artistItems(songsMoreEndpoint)
+                    }
+                    fetchResult.onSuccess { page ->
+                        val fetchedSongs = page.items.mapNotNull { item ->
+                            (item as? unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem)?.toNativeSong()
+                        }
+                        if (fetchedSongs.isNotEmpty()) {
+                            allArtistSongs.addAll(fetchedSongs)
+                        }
+                    }
+                }
+
+                val uniqueArtistSongs = allArtistSongs.distinctBy { it.youtubeId ?: it.id }
+
+                var seedVideoId = uniqueArtistSongs.firstOrNull { !it.youtubeId.isNullOrBlank() }?.youtubeId
+                    ?: uniqueArtistSongs.firstOrNull { it.id.startsWith("youtube_") }?.id?.removePrefix("youtube_")
+
+                if (seedVideoId == null && isOnline) {
+                    val searchResult = withContext(Dispatchers.IO) {
+                        YouTube.search(artistName, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                    }
+                    val songItem = searchResult?.items?.filterIsInstance<unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem>()?.firstOrNull()
+                    seedVideoId = songItem?.id
+                }
+
+                var relatedSongs = emptyList<Song>()
+
+                if (isOnline && seedVideoId != null) {
+                    val radioEndpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                        playlistId = "RDAMVM$seedVideoId",
+                        videoId = seedVideoId
+                    )
+                    val nextResult = withContext(Dispatchers.IO) {
+                        YouTube.next(radioEndpoint)
+                    }
+                    nextResult.onSuccess { nextData ->
+                        val radioSongs = nextData.items.map { it.toNativeSong() }
+                        val nameLower = artistName.lowercase().trim()
+                        relatedSongs = radioSongs.filter {
+                            !it.artist.lowercase().contains(nameLower) &&
+                            it.artists.none { ref -> ref.name.lowercase().contains(nameLower) }
+                        }.distinctBy { it.youtubeId ?: it.id }
+                    }
+                }
+
+                val shuffledArtistSongs = uniqueArtistSongs.shuffled().toMutableList()
+                val selectedRelated = relatedSongs.shuffled().take(5)
+
+                if (selectedRelated.isNotEmpty() && shuffledArtistSongs.isNotEmpty()) {
+                    val interval = (shuffledArtistSongs.size / (selectedRelated.size + 1)).coerceAtLeast(3)
+                    selectedRelated.forEachIndexed { index, song ->
+                        val insertIndex = ((index + 1) * interval).coerceAtMost(shuffledArtistSongs.size)
+                        shuffledArtistSongs.add(insertIndex, song)
+                    }
+                } else if (shuffledArtistSongs.isEmpty() && selectedRelated.isNotEmpty()) {
+                    shuffledArtistSongs.addAll(selectedRelated)
+                }
+
+                if (shuffledArtistSongs.isNotEmpty()) {
+                    withContext(Dispatchers.IO) {
+                        saveYoutubeSongsToDb(shuffledArtistSongs)
+                    }
+                    com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
+                    val startSong = shuffledArtistSongs.first()
+                    playSongs(shuffledArtistSongs, startSong, artistName)
+                } else {
+                    sendToast("No songs found for this artist")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Error playing artist songs with related releases")
+                sendToast("Failed to start artist playback: ${e.localizedMessage ?: "Unknown error"}")
+            } finally {
+                _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+            }
+        }
+    }
+
     private suspend fun saveYoutubeSongsToDb(songs: List<Song>) {
         val youtubeSongs = songs.filter { it.id.startsWith("youtube_") || it.youtubeId != null }
         if (youtubeSongs.isEmpty()) return

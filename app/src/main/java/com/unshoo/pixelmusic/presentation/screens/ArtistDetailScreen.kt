@@ -581,26 +581,12 @@ fun ArtistDetailScreen(
                             onSubscribeClick = { viewModel.toggleSubscription() },
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
-                                if (uiState.isOnlineArtist) {
-                                    // Seed radio from first popular song's YouTube ID (RDAMVM<videoId>)
-                                    val seedVideoId = popularSongs.firstOrNull()?.youtubeId
-                                    if (seedVideoId != null) {
-                                        playerViewModel.playRadio(
-                                            endpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
-                                                playlistId = "RDAMVM$seedVideoId",
-                                                videoId = seedVideoId
-                                            ),
-                                            title = artist.name,
-                                            shuffle = true,
-                                            artistName = artist.name,
-                                            artistSongs = popularSongs
-                                        )
-                                    } else if (songs.isNotEmpty()) {
-                                        playerViewModel.playSongsShuffled(songs, artist.name)
-                                    }
-                                } else if (songs.isNotEmpty()) {
-                                    playerViewModel.playSongsShuffled(songs, artist.name)
-                                }
+                                playerViewModel.playArtistSongsShuffledWithRelated(
+                                    artistName = artist.name,
+                                    initialArtistSongs = songs,
+                                    songsMoreEndpoint = uiState.songsMoreEndpoint,
+                                    isOnline = uiState.isOnlineArtist
+                                )
                             },
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
                             onClearCustomImage = { viewModel.clearCustomImage() }
@@ -618,25 +604,12 @@ fun ArtistDetailScreen(
                             headerImageRequestSize = headerImageRequestSize,
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
-                                if (uiState.isOnlineArtist) {
-                                    val seedVideoId = popularSongs.firstOrNull()?.youtubeId
-                                    if (seedVideoId != null) {
-                                        playerViewModel.playRadio(
-                                            endpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
-                                                playlistId = "RDAMVM$seedVideoId",
-                                                videoId = seedVideoId
-                                            ),
-                                            title = artist.name,
-                                            shuffle = true,
-                                            artistName = artist.name,
-                                            artistSongs = popularSongs
-                                        )
-                                    } else if (songs.isNotEmpty()) {
-                                        playerViewModel.playSongsShuffled(songs, artist.name)
-                                    }
-                                } else if (songs.isNotEmpty()) {
-                                    playerViewModel.playSongsShuffled(songs, artist.name)
-                                }
+                                playerViewModel.playArtistSongsShuffledWithRelated(
+                                    artistName = artist.name,
+                                    initialArtistSongs = songs,
+                                    songsMoreEndpoint = uiState.songsMoreEndpoint,
+                                    isOnline = uiState.isOnlineArtist
+                                )
                             },
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
                             onClearCustomImage = { viewModel.clearCustomImage() }
