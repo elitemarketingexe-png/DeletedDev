@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
@@ -269,9 +270,14 @@ class SmartMixViewModel @Inject constructor(
                     throw Exception("No tracks found on Last.fm for your selections.")
                 }
 
+                // Step 2: Resolve tracks to YouTube Music IDs
+                val playlistName = generatePlaylistName(mode, state)
+                val existingPlaylist = playlistPreferencesRepository.userPlaylistsFlow.first()
+                    .find { it.name.equals(playlistName, ignoreCase = true) }
+                val existingSongIds = existingPlaylist?.songIds?.map { it.removePrefix("youtube_") }?.toSet().orEmpty()
+
                 _uiState.update { it.copy(generationProgress = "Resolving streamable tracks on YouTube Music (0/${lastFmTracks.size})...") }
 
-                // Step 2: Resolve tracks to YouTube Music IDs
                 val resolvedSongs = mutableListOf<Song>()
                 val semaphore = Semaphore(3) // parallel resolution with concurrency limit
                 val deferreds = lastFmTracks.mapIndexed { index, track ->
@@ -280,7 +286,10 @@ class SmartMixViewModel @Inject constructor(
                             val song = resolveTrackToYoutubeSong(track)
                             if (song != null) {
                                 synchronized(resolvedSongs) {
-                                    if (resolvedSongs.none { it.youtubeId == song.youtubeId }) {
+                                    val ytId = song.youtubeId
+                                    if (ytId != null && 
+                                        !existingSongIds.contains(ytId) && 
+                                        resolvedSongs.none { it.youtubeId == ytId }) {
                                         resolvedSongs.add(song)
                                     }
                                     _uiState.update { it.copy(generationProgress = "Resolving streamable tracks on YouTube Music (${resolvedSongs.size}/${lastFmTracks.size})...") }
@@ -291,20 +300,21 @@ class SmartMixViewModel @Inject constructor(
                 }
                 deferreds.awaitAll()
 
-                if (resolvedSongs.isEmpty()) {
+                val finalSongs = resolvedSongs.take(limit)
+
+                if (finalSongs.isEmpty()) {
                     throw Exception("Could not find playable matches on YouTube Music for any generated tracks.")
                 }
 
                 // Step 3: Insert songs into Room database
                 _uiState.update { it.copy(generationProgress = "Saving tracks to local database...") }
                 withContext(Dispatchers.IO) {
-                    musicRepository.insertYoutubeSongs(resolvedSongs)
+                    musicRepository.insertYoutubeSongs(finalSongs)
                 }
 
                 // Step 4: Create playlist in Room database
                 _uiState.update { it.copy(generationProgress = "Creating your mix playlist...") }
-                val playlistName = generatePlaylistName(mode, state)
-                val songIds = resolvedSongs.map { "youtube_${it.youtubeId}" }
+                val songIds = finalSongs.map { "youtube_${it.youtubeId}" }
                 
                 val coverImage = lastFmTracks.firstOrNull { it.imageUrl.isNotEmpty() }?.imageUrl
 
@@ -389,20 +399,21 @@ class SmartMixViewModel @Inject constructor(
 
     private suspend fun fetchTopTracks(user: String, limit: Int, period: String): List<LastFmTrack> {
         val page = (1..3).random().toString()
+        val fetchLimit = (limit * 3).coerceAtMost(100)
         val res = LastFM.get(
             "user.gettoptracks",
-            mapOf("user" to user, "limit" to limit.toString(), "period" to period, "page" to page)
+            mapOf("user" to user, "limit" to fetchLimit.toString(), "period" to period, "page" to page)
         ).getOrThrow()
-        return parseLastFmTracks(json.parseToJsonElement(res)).shuffled().take(limit)
+        return parseLastFmTracks(json.parseToJsonElement(res)).shuffled()
     }
 
     private suspend fun fetchRecentTracks(user: String, limit: Int): List<LastFmTrack> {
+        val fetchLimit = (limit * 3).coerceAtMost(100)
         val res = LastFM.get(
             "user.getrecenttracks",
-            mapOf("user" to user, "limit" to limit.toString())
+            mapOf("user" to user, "limit" to fetchLimit.toString())
         ).getOrThrow()
-        val parsed = parseLastFmTracks(json.parseToJsonElement(res))
-        return parsed.take(limit)
+        return parseLastFmTracks(json.parseToJsonElement(res))
     }
 
     private suspend fun fetchSimilarTracks(track: String, artist: String, limit: Int): List<LastFmTrack> {
@@ -410,8 +421,7 @@ class SmartMixViewModel @Inject constructor(
             "track.getsimilar",
             mapOf("track" to track, "artist" to artist, "limit" to (limit * 4).coerceAtMost(200).toString())
         ).getOrThrow()
-        val parsed = parseLastFmTracks(json.parseToJsonElement(res))
-        return parsed.shuffled().take(limit)
+        return parseLastFmTracks(json.parseToJsonElement(res)).shuffled()
     }
 
     private suspend fun fetchSimilarArtistTracks(artist: String, limit: Int): List<LastFmTrack> {
@@ -430,7 +440,7 @@ class SmartMixViewModel @Inject constructor(
                 // Ignore single artist fetch errors
             }
         }
-        return list.shuffled().take(limit)
+        return list.shuffled()
     }
 
     private suspend fun fetchTagTracks(tag: String, limit: Int): List<LastFmTrack> {
@@ -439,7 +449,7 @@ class SmartMixViewModel @Inject constructor(
             "tag.gettoptracks",
             mapOf("tag" to tag, "limit" to (limit * 3).coerceAtMost(100).toString(), "page" to page)
         ).getOrThrow()
-        return parseLastFmTracks(json.parseToJsonElement(res)).shuffled().take(limit)
+        return parseLastFmTracks(json.parseToJsonElement(res)).shuffled()
     }
 
     private suspend fun fetchMix(user: String, total: Int): List<LastFmTrack> {
