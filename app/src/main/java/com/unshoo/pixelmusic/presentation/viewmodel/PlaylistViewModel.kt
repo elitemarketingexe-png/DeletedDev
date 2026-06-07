@@ -1636,9 +1636,20 @@ class PlaylistViewModel @Inject constructor(
      */
     fun deletePlaylistsInBatch(playlistIds: List<String>) {
         viewModelScope.launch {
+            val playlists = playlistPreferencesRepository.userPlaylistsFlow.first()
             playlistIds.forEach { playlistId ->
                 if (!isFolderPlaylistId(playlistId)) {
+                    val playlist = playlists.find { it.id == playlistId }
                     playlistPreferencesRepository.deletePlaylist(playlistId)
+                    if (playlist != null && playlist.source == "YOUTUBE") {
+                        try {
+                            withContext(Dispatchers.IO) {
+                                YouTube.deletePlaylist(playlist.id)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("PlaylistViewModel", "Failed to delete remote YouTube playlist $playlistId", e)
+                        }
+                    }
                 }
             }
         }

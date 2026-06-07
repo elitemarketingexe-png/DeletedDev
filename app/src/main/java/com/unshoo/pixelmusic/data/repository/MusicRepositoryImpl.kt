@@ -647,7 +647,8 @@ class MusicRepositoryImpl @Inject constructor(
             val parts = durationStr.split(":")
             var seconds = 0L
             if (parts.size == 1) {
-                seconds = parts[0].toLongOrNull() ?: 0L
+                val raw = parts[0].toLongOrNull() ?: 0L
+                seconds = if (raw >= 1000L) raw / 1000L else raw
             } else if (parts.size == 2) {
                 val minutes = parts[0].toLongOrNull() ?: 0L
                 val secs = parts[1].toLongOrNull() ?: 0L
@@ -1000,7 +1001,10 @@ class MusicRepositoryImpl @Inject constructor(
         val parts = durationStr.split(":")
         return try {
             when (parts.size) {
-                1 -> parts[0].toLong() * 1000L
+                1 -> {
+                    val raw = parts[0].toLong()
+                    if (raw >= 1000L) raw else raw * 1000L
+                }
                 2 -> (parts[0].toLong() * 60L + parts[1].toLong()) * 1000L
                 3 -> ((parts[0].toLong() * 3600L + parts[1].toLong() * 60L + parts[2].toLong())) * 1000L
                 else -> 0L
@@ -1665,7 +1669,7 @@ class MusicRepositoryImpl @Inject constructor(
                         youtubeId = youtubeId,
                         title = song.title,
                         artist = song.artist,
-                        duration = song.duration.toString(),
+                        duration = com.unshoo.pixelmusic.utils.formatDuration(song.duration),
                         thumbnailHref = song.albumArtUriString ?: "",
                         thumbnailPath = null,
                         audioFilePath = null

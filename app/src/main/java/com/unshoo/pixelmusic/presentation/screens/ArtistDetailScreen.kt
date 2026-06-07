@@ -586,12 +586,14 @@ fun ArtistDetailScreen(
                                     val seedVideoId = popularSongs.firstOrNull()?.youtubeId
                                     if (seedVideoId != null) {
                                         playerViewModel.playRadio(
-                                            unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                                            endpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
                                                 playlistId = "RDAMVM$seedVideoId",
                                                 videoId = seedVideoId
                                             ),
-                                            artist.name,
-                                            shuffle = true
+                                            title = artist.name,
+                                            shuffle = true,
+                                            artistName = artist.name,
+                                            artistSongs = popularSongs
                                         )
                                     } else if (songs.isNotEmpty()) {
                                         playerViewModel.playSongsShuffled(songs, artist.name)
@@ -620,12 +622,14 @@ fun ArtistDetailScreen(
                                     val seedVideoId = popularSongs.firstOrNull()?.youtubeId
                                     if (seedVideoId != null) {
                                         playerViewModel.playRadio(
-                                            unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                                            endpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
                                                 playlistId = "RDAMVM$seedVideoId",
                                                 videoId = seedVideoId
                                             ),
-                                            artist.name,
-                                            shuffle = true
+                                            title = artist.name,
+                                            shuffle = true,
+                                            artistName = artist.name,
+                                            artistSongs = popularSongs
                                         )
                                     } else if (songs.isNotEmpty()) {
                                         playerViewModel.playSongsShuffled(songs, artist.name)

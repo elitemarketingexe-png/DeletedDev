@@ -138,10 +138,15 @@ class YouTubeLibrarySyncManager @Inject constructor(
         val songs = allSongItems.map { it.toNativeSong() }
         musicRepository.insertYoutubeSongs(songs)
 
-        val favoriteEntities = songs.mapNotNull { song ->
-            val songIdStr = song.youtubeId ?: return@mapNotNull null
+        val baseTimestamp = System.currentTimeMillis()
+        val favoriteEntities = songs.mapIndexedNotNull { index, song ->
+            val songIdStr = song.youtubeId ?: return@mapIndexedNotNull null
             val numericId = ytSongId(songIdStr)
-            FavoritesEntity(songId = numericId, isFavorite = true)
+            FavoritesEntity(
+                songId = numericId,
+                isFavorite = true,
+                timestamp = baseTimestamp - index
+            )
         }
 
         if (favoriteEntities.isNotEmpty()) {

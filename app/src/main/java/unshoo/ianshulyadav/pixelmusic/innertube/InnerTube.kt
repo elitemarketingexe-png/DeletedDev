@@ -748,7 +748,7 @@ class InnerTube {
             setBody(
                 EditPlaylistBody(
                     context = client.toContext(locale, visitorData, dataSyncId),
-                    playlistId = playlistId,
+                    playlistId = playlistId.removePrefix("VL"),
                     actions = listOf(
                         Action(
                             action = "ACTION_SET_PLAYLIST_NAME",
@@ -770,7 +770,7 @@ class InnerTube {
             setBody(
                 PlaylistDeleteBody(
                     context = client.toContext(locale, visitorData, dataSyncId),
-                    playlistId = playlistId
+                    playlistId = playlistId.removePrefix("VL")
                 )
             )
         }

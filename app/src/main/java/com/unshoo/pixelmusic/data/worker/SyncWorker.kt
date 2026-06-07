@@ -2035,7 +2035,10 @@ constructor(
         var seconds = 0L
         try {
             when (parts.size) {
-                1 -> seconds = parts[0].toLongOrNull() ?: 0L
+                1 -> {
+                    val raw = parts[0].toLongOrNull() ?: 0L
+                    seconds = if (raw >= 1000L) raw / 1000L else raw
+                }
                 2 -> seconds = (parts[0].toLongOrNull() ?: 0L) * 60 + (parts[1].toLongOrNull() ?: 0L)
                 3 -> seconds = (parts[0].toLongOrNull() ?: 0L) * 3600 + (parts[1].toLongOrNull() ?: 0L) * 60 + (parts[2].toLongOrNull() ?: 0L)
             }

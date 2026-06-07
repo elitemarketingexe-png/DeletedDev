@@ -2665,7 +2665,13 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun playRadio(endpoint: unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint, title: String, shuffle: Boolean = false) {
+    fun playRadio(
+        endpoint: unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint,
+        title: String,
+        shuffle: Boolean = false,
+        artistName: String? = null,
+        artistSongs: List<Song> = emptyList()
+    ) {
         viewModelScope.launch {
             _playerUiState.update { it.copy(isLoadingInitialSongs = true) }
             val result = withContext(Dispatchers.IO) {
@@ -2674,27 +2680,63 @@ class PlayerViewModel @Inject constructor(
             result.onSuccess { nextResult ->
                 var songs = nextResult.items.map { it.toNativeSong() }
                 if (songs.isNotEmpty()) {
-                    if (shuffle) {
-                        songs = songs.shuffled()
-                    }
-                    com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
+                    if (artistName != null && artistName.isNotBlank()) {
+                        val nameLower = artistName.lowercase().trim()
+                        val radioArtistSongs = songs.filter {
+                            it.artist.lowercase().contains(nameLower) ||
+                            it.artists.any { ref -> ref.name.lowercase().contains(nameLower) }
+                        }
+                        val radioRelatedSongs = songs.filter {
+                            !it.artist.lowercase().contains(nameLower) &&
+                            it.artists.none { ref -> ref.name.lowercase().contains(nameLower) }
+                        }
 
-                    // CRITICAL FIX: Save songs to DB BEFORE starting playback.
-                    // This ensures artist/album rows exist when the player/history
-                    // system references them, preventing NOT NULL / FK constraint crashes.
-                    withContext(Dispatchers.IO) {
-                        saveYoutubeSongsToDb(songs)
+                        val allArtistSongs = (artistSongs + radioArtistSongs)
+                            .distinctBy { it.youtubeId ?: it.id }
+
+                        val allRelatedSongs = radioRelatedSongs
+                            .distinctBy { it.youtubeId ?: it.id }
+
+                        if (allArtistSongs.isNotEmpty()) {
+                            val targetSize = songs.size.coerceAtLeast(25)
+                            val targetArtistCount = ((targetSize * 60) / 100).coerceAtMost(allArtistSongs.size)
+                            val targetRelatedCount = (targetSize - targetArtistCount).coerceAtMost(allRelatedSongs.size)
+
+                            val selectedArtist = allArtistSongs.shuffled().take(targetArtistCount)
+                            val selectedRelated = allRelatedSongs.shuffled().take(targetRelatedCount)
+
+                            var combined = (selectedArtist + selectedRelated)
+                            if (shuffle) {
+                                combined = combined.shuffled()
+                            }
+                            songs = combined
+                        }
+                    } else {
+                        if (shuffle) {
+                            songs = songs.shuffled()
+                        }
                     }
 
-                    val startSong = songs.first()
-                    playSongs(songs, startSong, title)
-                    
-                    val videoId = startSong.youtubeId ?: startSong.id.substringAfter("youtube_")
-                    com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.seed(
-                        endpoint = nextResult.endpoint ?: endpoint,
-                        continuation = nextResult.continuation,
-                        videoId = videoId
-                    )
+                    if (songs.isNotEmpty()) {
+                        com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
+
+                        // CRITICAL FIX: Save songs to DB BEFORE starting playback.
+                        // This ensures artist/album rows exist when the player/history
+                        // system references them, preventing NOT NULL / FK constraint crashes.
+                        withContext(Dispatchers.IO) {
+                            saveYoutubeSongsToDb(songs)
+                        }
+
+                        val startSong = songs.first()
+                        playSongs(songs, startSong, title)
+                        
+                        val videoId = startSong.youtubeId ?: startSong.id.substringAfter("youtube_")
+                        com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.seed(
+                            endpoint = nextResult.endpoint ?: endpoint,
+                            continuation = nextResult.continuation,
+                            videoId = videoId
+                        )
+                    }
                 } else {
                     Timber.w("playRadio: YouTube.next() returned empty items for endpoint")
                 }

@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -76,18 +77,42 @@ fun PlaylistBottomSheet(
     }
     val hasActiveAiProviderApiKey by playerViewModel.hasActiveAiProviderApiKey.collectAsStateWithLifecycle()
 
-    val selectedPlaylists = remember {
-        mutableStateMapOf<String, Boolean>().apply {
-            if (songs.size == 1) {
-                // Single song: pre-select playlists containing it
-                val songId = songs.first().id
-                filteredPlaylists.forEach {
-                    put(it.id, it.songIds.contains(songId))
+    val selectedPlaylists = remember { mutableStateMapOf<String, Boolean>() }
+
+    LaunchedEffect(playlistUiState.playlists, songs) {
+        if (songs.size == 1) {
+            val song = songs.first()
+            val candidateIds = mutableSetOf<String>()
+            candidateIds.add(song.id)
+
+            val ytId = song.youtubeId
+                ?: if (song.id.startsWith("youtube_")) {
+                    song.id.removePrefix("youtube_")
+                } else if (song.contentUriString.startsWith("youtube://")) {
+                    song.contentUriString.removePrefix("youtube://")
+                } else {
+                    null
                 }
-            } else {
-                // Multiple songs: start empty (additive only)
-                filteredPlaylists.forEach {
-                    put(it.id, false)
+
+            if (ytId != null) {
+                candidateIds.add(ytId)
+                candidateIds.add("youtube_$ytId")
+                val rawHash = ytId.hashCode().toLong()
+                val absoluteHash = if (rawHash < 0L) -rawHash else rawHash
+                val unifiedId = -(15_000_000_000_000L + absoluteHash)
+                candidateIds.add(unifiedId.toString())
+            }
+
+            playlistUiState.playlists.forEach { playlist ->
+                if (!selectedPlaylists.containsKey(playlist.id)) {
+                    val containsSong = playlist.songIds.any { id -> candidateIds.contains(id) }
+                    selectedPlaylists[playlist.id] = containsSong
+                }
+            }
+        } else {
+            playlistUiState.playlists.forEach { playlist ->
+                if (!selectedPlaylists.containsKey(playlist.id)) {
+                    selectedPlaylists[playlist.id] = false
                 }
             }
         }

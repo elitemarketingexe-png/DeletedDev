@@ -266,7 +266,14 @@ class SongInfoBottomSheetViewModel @Inject constructor(
                     id = com.unshoo.pixelmusic.data.remote.youtube.Constants.Downloads.DOWNLOADED_PLAYLIST_ID,
                     title = "Downloaded Songs"
                 ),
-                songs = listOf(youtubeSong)
+                unsortedSongs = listOf(youtubeSong),
+                crossRefs = listOf(
+                    com.unshoo.pixelmusic.data.model.youtube.PlaylistSongCrossRef(
+                        playlistId = com.unshoo.pixelmusic.data.remote.youtube.Constants.Downloads.DOWNLOADED_PLAYLIST_ID,
+                        songId = youtubeSong.youtubeId,
+                        position = 0
+                    )
+                )
             )
             downloadRepository.downloadSong(playlist, youtubeSong)
         }

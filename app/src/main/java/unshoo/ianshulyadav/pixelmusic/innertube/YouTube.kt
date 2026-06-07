@@ -621,9 +621,10 @@ object YouTube {
     }
 
     suspend fun playlist(playlistId: String): Result<PlaylistPage> = runCatching {
+        val browseId = if (playlistId.startsWith("VL")) playlistId else "VL$playlistId"
         val response = innerTube.browse(
             client = WEB_REMIX,
-            browseId = "VL$playlistId",
+            browseId = browseId,
             setLogin = true
         ).body<BrowseResponse>()
         val base = response.contents?.twoColumnBrowseResultsRenderer?.tabs?.firstOrNull()?.tabRenderer?.content?.sectionListRenderer?.contents?.firstOrNull()

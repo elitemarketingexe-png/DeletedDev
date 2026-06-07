@@ -177,9 +177,9 @@ class PlaylistPreferencesRepository @Inject constructor(
                 val updatedInfo = ytPlaylist.info.copy(title = playlist.name)
                 playlistRepository.insertPlaylist(updatedInfo)
                 playlistRepository.deleteCrossRefsByPlaylistId(playlist.id)
-                val refs = playlist.songIds.map { songIdStr ->
+                val refs = playlist.songIds.mapIndexed { index, songIdStr ->
                     val rawYtId = songIdStr.removePrefix("youtube_")
-                    com.unshoo.pixelmusic.data.model.youtube.PlaylistSongCrossRef(playlist.id, rawYtId)
+                    com.unshoo.pixelmusic.data.model.youtube.PlaylistSongCrossRef(playlist.id, rawYtId, index)
                 }
                 playlistRepository.insertCrossRefs(refs)
             }
@@ -230,7 +230,7 @@ class PlaylistPreferencesRepository @Inject constructor(
                     youtubeId = yId,
                     title = entity.title,
                     artist = entity.artistName,
-                    duration = entity.duration.toString(),
+                    duration = com.unshoo.pixelmusic.utils.formatDuration(entity.duration),
                     thumbnailHref = entity.albumArtUriString ?: "",
                     thumbnailPath = if (entity.filePath.isNotBlank()) entity.albumArtUriString else null,
                     audioFilePath = if (entity.filePath.isNotBlank()) entity.filePath else null
@@ -238,8 +238,9 @@ class PlaylistPreferencesRepository @Inject constructor(
             }
             if (ytSongs.isNotEmpty()) {
                 songRepository.createAll(ytSongs)
-                val refs = ytSongs.map { song ->
-                    com.unshoo.pixelmusic.data.model.youtube.PlaylistSongCrossRef(playlistId, song.youtubeId)
+                val currentSize = ytPlaylist.songs.size
+                val refs = ytSongs.mapIndexed { index, song ->
+                    com.unshoo.pixelmusic.data.model.youtube.PlaylistSongCrossRef(playlistId, song.youtubeId, currentSize + index)
                 }
                 playlistRepository.insertCrossRefs(refs)
             }

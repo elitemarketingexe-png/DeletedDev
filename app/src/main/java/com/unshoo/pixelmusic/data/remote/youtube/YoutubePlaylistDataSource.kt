@@ -3,6 +3,7 @@ package com.unshoo.pixelmusic.data.remote.youtube
 import com.unshoo.pixelmusic.data.model.youtube.Playlist
 import com.unshoo.pixelmusic.data.model.youtube.PlaylistInfo
 import com.unshoo.pixelmusic.data.model.youtube.UmihiSettings
+import com.unshoo.pixelmusic.data.model.youtube.PlaylistSongCrossRef
 
 /**
  * Remote data source for fetching YouTube playlist metadata and their songs
@@ -34,14 +35,18 @@ class YoutubePlaylistDataSource {
      */
     fun retrieveOne(playlist: Playlist, settings: UmihiSettings): Playlist {
         val remoteId = if (playlist.info.id == "liked_songs") "LM" else playlist.info.id
-        return playlist.copy(
-            songs = YoutubeHelper.extractSongList(
-                YoutubeRequestHelper.browse(
-                    remoteId,
-                    settings
-                ),
+        val remoteSongs = YoutubeHelper.extractSongList(
+            YoutubeRequestHelper.browse(
+                remoteId,
                 settings
-            )
+            ),
+            settings
+        )
+        return playlist.copy(
+            unsortedSongs = remoteSongs,
+            crossRefs = remoteSongs.mapIndexed { index, song ->
+                PlaylistSongCrossRef(playlist.info.id, song.youtubeId, index)
+            }
         )
     }
 }

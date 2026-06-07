@@ -23,8 +23,18 @@ data class Playlist(
             entityColumn = "songId"       // column in junction pointing to Song
         )
     )
-    val songs: List<Song> = listOf()
+    val unsortedSongs: List<Song> = listOf(),
+
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "playlistId"
+    )
+    val crossRefs: List<PlaylistSongCrossRef> = listOf()
 ) {
+    val songs: List<Song>
+        get() = unsortedSongs.sortedBy { song ->
+            crossRefs.find { it.songId == song.youtubeId }?.position ?: 0
+        }
     val mediaItems: List<MediaItem>
         get() = songs.map { song ->
             song.mediaItem
@@ -57,5 +67,6 @@ data class PlaylistInfo(
 )
 data class PlaylistSongCrossRef(
     val playlistId: String,
-    val songId: String
+    val songId: String,
+    val position: Int = 0
 )

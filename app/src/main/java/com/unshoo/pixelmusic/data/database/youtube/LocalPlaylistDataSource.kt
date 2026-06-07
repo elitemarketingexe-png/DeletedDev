@@ -67,7 +67,7 @@ interface LocalPlaylistDataSource {
         insertPlaylist(playlist.info)
         val songs = playlist.songs
         insertSongs(songs)
-        val refs = songs.map { song -> PlaylistSongCrossRef(playlist.info.id, song.youtubeId) }
+        val refs = songs.mapIndexed { index, song -> PlaylistSongCrossRef(playlist.info.id, song.youtubeId, index) }
         insertCrossRefs(refs)
     }
 
@@ -99,7 +99,7 @@ interface LocalPlaylistDataSource {
         // Clear existing cross references to reflect the updated composition
         deleteCrossRefsByPlaylistId(playlist.info.id)
         // Always update cross refs to reflect current playlist composition
-        val refs = playlist.songs.map { song -> PlaylistSongCrossRef(playlist.info.id, song.youtubeId) }
+        val refs = playlist.songs.mapIndexed { index, song -> PlaylistSongCrossRef(playlist.info.id, song.youtubeId, index) }
         insertCrossRefs(refs)
     }
 

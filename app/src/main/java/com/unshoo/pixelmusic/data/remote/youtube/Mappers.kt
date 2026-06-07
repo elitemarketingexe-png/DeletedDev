@@ -147,7 +147,10 @@ private fun parseDurationStringToMillis(durationStr: String): Long {
     val parts = durationStr.split(":")
     return try {
         when (parts.size) {
-            1 -> parts[0].toLong() * 1000L
+            1 -> {
+                val raw = parts[0].toLong()
+                if (raw >= 1000L) raw else raw * 1000L
+            }
             2 -> (parts[0].toLong() * 60L + parts[1].toLong()) * 1000L
             3 -> ((parts[0].toLong() * 3600L + parts[1].toLong() * 60L + parts[2].toLong())) * 1000L
             else -> 0L

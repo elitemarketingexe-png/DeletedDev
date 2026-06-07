@@ -75,7 +75,9 @@ class PlaylistDownloadWorker(
                     )
                 )
 
-                playlist.songs.map { song ->
+                val currentDownloadedSize = playlistRepository.getPlaylistById(Constants.Downloads.DOWNLOADED_PLAYLIST_ID)?.songs?.size ?: 0
+
+                playlist.songs.mapIndexed { index, song ->
                     async {
                         semaphore.withPermit {
                             try {
@@ -116,7 +118,8 @@ class PlaylistDownloadWorker(
                                     playlistRepository.insertCrossRef(
                                         PlaylistSongCrossRef(
                                             playlistId = Constants.Downloads.DOWNLOADED_PLAYLIST_ID,
-                                            songId = song.youtubeId
+                                            songId = song.youtubeId,
+                                            position = currentDownloadedSize + index
                                         )
                                     )
                                 }
