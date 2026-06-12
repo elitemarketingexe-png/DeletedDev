@@ -157,14 +157,21 @@ jobs:
         if: success() && steps.version_check.outputs.is_new_version == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         run: pip install -q telethon
 
+      - name: Restore Telegram session cache
+        if: success() && steps.version_check.outputs.is_new_version == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/cache@v5
+        with:
+          path: bot_session.session
+          key: telegram-session-${{ runner.os }}-bot_session
+
       - name: Publish all APKs to Telegram Channel
         if: success() && steps.version_check.outputs.is_new_version == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: "@PixelMusicApp"
-          TELEGRAM_THREAD_ID: "2457"
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_THREAD_ID: ${{ secrets.TELEGRAM_RELEASE_TOPIC_ID }}
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           COMMIT_SHA: ${{ github.sha }}
           IS_RELEASE: ${{ steps.version_check.outputs.is_new_version }}
