@@ -203,7 +203,7 @@ async def run():
             captions=[cap for _, _, cap in APKS],
             parse_mode="html",
             force_document=True,
-            reply_to=header_msg.id,
+            reply_to=thread_id,
             attributes=[[DocumentAttributeFilename(file_name=name)] for name in apk_names],
         )
         print("All APKs sent.", flush=True)
@@ -246,7 +246,7 @@ async def run():
             captions=[cap for _, _, cap in APKS],
             parse_mode="html",
             force_document=True,
-            reply_to=header_msg.id,
+            reply_to=thread_id,
             attributes=[[DocumentAttributeFilename(file_name=name)] for name in apk_names],
         )
         print("All APKs sent.", flush=True)
