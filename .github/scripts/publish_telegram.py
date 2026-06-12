@@ -31,7 +31,11 @@ from telethon.tl.types import DocumentAttributeFilename
 api_id     = int(os.environ["TELEGRAM_API_ID"])
 api_hash   = os.environ["TELEGRAM_API_HASH"]
 bot_token  = os.environ["TELEGRAM_BOT_TOKEN"]
-chat_id    = int(os.environ["TELEGRAM_CHAT_ID"])
+_chat_id_raw = os.environ["TELEGRAM_CHAT_ID"]
+try:
+    chat_id = int(_chat_id_raw)
+except ValueError:
+    chat_id = _chat_id_raw  # e.g. "@PixelMusicApp"
 thread_id  = int(os.environ["TELEGRAM_THREAD_ID"]) if os.environ.get("TELEGRAM_THREAD_ID") else None
 version    = os.environ["VERSION_NAME"]
 commit_sha = os.environ["COMMIT_SHA"]
