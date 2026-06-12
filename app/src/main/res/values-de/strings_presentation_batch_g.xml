@@ -294,11 +294,6 @@
     <string name="presentation_batch_g_beta_sheet_report_body">Reproduktionsschritte, erwartetes/tatsächliches Ergebnis und Gerät/OS angeben. Eine kurze Bildschirmaufnahme hilft sehr.</string>
     <string name="presentation_batch_g_beta_sheet_open_issues">GitHub Issues öffnen</string>
     <string name="presentation_batch_g_beta_sheet_report_bug">Bug melden</string>
-    <string name="presentation_batch_g_beta05_title">Beta 0.5.0-Upgrade</string>
-    <string name="presentation_batch_g_beta05_clean_install_title">Neuinstallation empfohlen</string>
-    <string name="presentation_batch_g_beta05_clean_install_body">Beim Upgrade von Beta 0.5.0 können neue Bibliotheksdaten benötigt werden statt alter Cache-Zustände.</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_title">Bei falschen Metadaten oder Bibliothekseinträgen</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_body">Falsche Metadaten, doppelte Einträge oder nicht passende Künstler/Alben? Eine Neuinstallation hilft meistens.</string>
     <string name="presentation_batch_g_beta05_dont_show">Nicht mehr anzeigen</string>
     <string name="presentation_batch_g_beta05_got_it">Verstanden</string>
     <string name="presentation_batch_g_album_sel_count">%1$d ALBEN</string>

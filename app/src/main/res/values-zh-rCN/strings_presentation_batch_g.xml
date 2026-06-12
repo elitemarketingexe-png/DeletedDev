@@ -352,11 +352,6 @@
     <string name="presentation_batch_g_beta_sheet_nightly_access">如果可以，请通过仓库的 GitHub Actions 工作流获取。</string>
     <string name="presentation_batch_g_beta_sheet_nightly_report_title">每夜测试版问题报告</string>
     <string name="presentation_batch_g_beta_sheet_nightly_report_body">报告每夜测试版的问题时，请一定注明问题发生环境为每夜测试版而非官方发行版。如果可以，请包含版本构建日期、workflow 运行名称或编号、提交 SHA 验证码。同时也请检查同样的问题是否能够在正式版本中复现。</string>
-    <string name="presentation_batch_g_beta05_title">Beta 0.5.0 升级提示</string>
-    <string name="presentation_batch_g_beta05_clean_install_title">建议全新安装</string>
-    <string name="presentation_batch_g_beta05_clean_install_body">如果你是从 beta 0.5.0 升级而来，此更新可能需要重新建立媒体库数据，而不是沿用旧缓存状态。</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_title">如果元数据或媒体库条目显示异常</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_body">歌曲元数据错误、艺术家或专辑不匹配，或出现看似重复的条目，通常说明需要全新安装来修复。</string>
     <string name="presentation_batch_g_beta05_dont_show">不再显示</string>
     <string name="presentation_batch_g_beta05_got_it">知道了</string>
     <string name="presentation_batch_g_album_sel_count">%1$d 张专辑</string>

@@ -299,11 +299,6 @@ Backslash (\\) kan brukes for å unngå tegn-separatorer.</string>
     <string name="presentation_batch_g_beta_sheet_report_body">Del trinn for å reprodusere, forventet resultat, faktisk resultat og info om enheten din. Et skjermopptak er veldig hjelpsomt.</string>
     <string name="presentation_batch_g_beta_sheet_open_issues">Vis GitHub-issues</string>
     <string name="presentation_batch_g_beta_sheet_report_bug">Rapporter en feil</string>
-    <string name="presentation_batch_g_beta05_title">Beta 0.5.0 oppgradering</string>
-    <string name="presentation_batch_g_beta05_clean_install_title">Ren installasjon anbefales</string>
-    <string name="presentation_batch_g_beta05_clean_install_body">Hvis du kommer fra beta 0.5.0, kan denne oppdateringen trenge friske bibliotekdata.</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_title">Hvis metadata ser feil ut</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_body">Feil sanginfo, feil artister eller album betyr vanligvis at en ren installasjon er løsningen.</string>
     <string name="presentation_batch_g_beta05_dont_show">Ikke vis igjen</string>
     <string name="presentation_batch_g_beta05_got_it">Skjønner</string>
     <string name="presentation_batch_g_album_sel_count">%1$d ALBUM</string>

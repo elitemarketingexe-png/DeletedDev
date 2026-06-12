@@ -353,11 +353,11 @@ Backslash (\) can be used to escape character delimiters.</string>
     <string name="presentation_batch_g_beta_sheet_nightly_access">Access them from the repository\'s GitHub Actions workflow artifacts if available.</string>
     <string name="presentation_batch_g_beta_sheet_nightly_report_title">Reporting nightly issues</string>
     <string name="presentation_batch_g_beta_sheet_nightly_report_body">When reporting an issue from a nightly build, always mention that it happened on a nightly build, not on the official release. Include the build date, workflow run name or number, or commit SHA if possible. Also check if the same problem happens on the latest official release.</string>
-    <string name="presentation_batch_g_beta05_title">Beta 0.5.0 upgrade</string>
-    <string name="presentation_batch_g_beta05_clean_install_title">Clean install recommended</string>
-    <string name="presentation_batch_g_beta05_clean_install_body">If you\'re coming from beta 0.5.0, this update may need fresh library data instead of older cached state.</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_title">If metadata or library entries look wrong</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_body">Wrong song metadata, mismatched artists or albums, or duplicate-looking entries usually mean a clean install is the fix.</string>
+    <string name="presentation_batch_g_beta05_title">v1.5.06 Upgrade</string>
+    <string name="presentation_batch_g_beta05_clean_install_title">What\'s New in v1.5.06</string>
+    <string name="presentation_batch_g_beta05_clean_install_body">This release brings massive updates and optimizations:\n\n• <b>Smart Mixes:</b> Last.fm-powered discovery mixes.\n• <b>Lazy Loading:</b> Phased Explore page rendering for instant loading.\n• <b>Explore Personalization:</b> New releases sorted by your favorites.\n• <b>Snapchat Stories:</b> Spotify-style sharing of songs/lyrics.\n• <b>Lockscreen Art Fix:</b> Native artwork provider for MIUI/HyperOS.\n• <b>Auto-Queue:</b> Mood protection classifier and skip tracking.</string>
+    <string name="presentation_batch_g_beta05_if_wrong_meta_title">Upgrade Notice</string>
+    <string name="presentation_batch_g_beta05_if_wrong_meta_body">Due to database migrations and local caching optimizations in v1.5.06, we recommend a library rescan or clean install if you experience any mismatched metadata.</string>
     <string name="presentation_batch_g_beta05_dont_show">Don\'t show again</string>
     <string name="presentation_batch_g_beta05_got_it">Got it</string>
     <string name="presentation_batch_g_album_sel_count">%1$d ALBUMS</string>

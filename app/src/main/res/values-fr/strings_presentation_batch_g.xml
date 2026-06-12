@@ -294,11 +294,6 @@
     <string name="presentation_batch_g_beta_sheet_report_body">Partagez les étapes de reproduction, le résultat attendu, le résultat actuel et les détails de votre appareil/OS. Une courte capture d\'écran est très utile.</string>
     <string name="presentation_batch_g_beta_sheet_open_issues">Ouvrir les issues GitHub</string>
     <string name="presentation_batch_g_beta_sheet_report_bug">Signaler un bug</string>
-    <string name="presentation_batch_g_beta05_title">Mise à niveau Bêta 0.5.0</string>
-    <string name="presentation_batch_g_beta05_clean_install_title">Installation propre recommandée</string>
-    <string name="presentation_batch_g_beta05_clean_install_body">Si vous venez de la bêta 0.5.0, cette mise à jour peut nécessiter de nouvelles données de bibliothèque plutôt que l\'ancien état en cache.</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_title">Si les métadonnées ou les entrées de bibliothèque semblent incorrectes</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_body">Mauvaises métadonnées de titre, artistes ou albums incorrects, ou entrées en double signifient généralement qu\'une installation propre est la solution.</string>
     <string name="presentation_batch_g_beta05_dont_show">Ne plus afficher</string>
     <string name="presentation_batch_g_beta05_got_it">Compris</string>
     <string name="presentation_batch_g_album_sel_count">%1$d ALBUMS</string>

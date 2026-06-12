@@ -299,11 +299,6 @@
     <string name="presentation_batch_g_beta_sheet_report_body">Опишите шаги, результат и детали вашего устройства. Запись экрана очень поможет.</string>
     <string name="presentation_batch_g_beta_sheet_open_issues">Список проблем на GitHub</string>
     <string name="presentation_batch_g_beta_sheet_report_bug">Сообщить о баге</string>
-    <string name="presentation_batch_g_beta05_title">Обновление Бета 0.5.0</string>
-    <string name="presentation_batch_g_beta05_clean_install_title">Рекомендуется чистая установка</string>
-    <string name="presentation_batch_g_beta05_clean_install_body">Если вы обновляетесь с 0.5.0, может потребоваться полная очистка данных фонотеки.</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_title">Если данные отображаются неверно</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_body">Ошибки в метаданных, артистах или дубликаты обычно лечатся чистой установкой.</string>
     <string name="presentation_batch_g_beta05_dont_show">Больше не показывать</string>
     <string name="presentation_batch_g_beta05_got_it">Понятно</string>
     <string name="presentation_batch_g_album_sel_count">АЛЬБОМОВ: %1$d</string>

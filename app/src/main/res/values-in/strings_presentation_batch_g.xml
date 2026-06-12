@@ -350,11 +350,6 @@
     <string name="presentation_batch_g_beta_sheet_nightly_access">Akses build tersebut melalui artifact workflow GitHub Actions repositori jika tersedia.</string>
     <string name="presentation_batch_g_beta_sheet_nightly_report_title">Melaporkan masalah nightly</string>
     <string name="presentation_batch_g_beta_sheet_nightly_report_body">Saat melaporkan masalah dari build nightly, selalu sebutkan bahwa masalah terjadi pada build nightly, bukan rilis resmi. Sertakan tanggal build, nama atau nomor workflow run, atau commit SHA jika memungkinkan. Periksa juga apakah masalah yang sama terjadi pada rilis resmi terbaru.</string>
-    <string name="presentation_batch_g_beta05_title">Peningkatan Beta 0.5.0</string>
-    <string name="presentation_batch_g_beta05_clean_install_title">Instal bersih direkomendasikan</string>
-    <string name="presentation_batch_g_beta05_clean_install_body">Jika Anda datang dari beta 0.5.0, pembaruan ini mungkin memerlukan data pustaka baru alih-alih status cache lama.</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_title">Jika metadata atau entri pustaka tampak salah</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_body">Metadata lagu yang salah, artis atau album yang tidak cocok, atau entri yang tampak duplikat biasanya berarti instal bersih adalah solusinya.</string>
     <string name="presentation_batch_g_beta05_dont_show">Jangan tampilkan lagi</string>
     <string name="presentation_batch_g_beta05_got_it">Mengerti</string>
     <string name="presentation_batch_g_album_sel_count">%1$d ALBUM</string>

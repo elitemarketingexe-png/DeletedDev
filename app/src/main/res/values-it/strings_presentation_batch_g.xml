@@ -298,11 +298,6 @@ La barra rovesciata (\) può essere usata per sfuggire ai delimitatori carattere
     <string name="presentation_batch_g_beta_sheet_report_body">Condividi i passaggi per riprodurre, il risultato atteso, il risultato effettivo e i dettagli del tuo dispositivo/SO. Un breve screen recording è molto utile.</string>
     <string name="presentation_batch_g_beta_sheet_open_issues">Apri issue GitHub</string>
     <string name="presentation_batch_g_beta_sheet_report_bug">Segnala un bug</string>
-    <string name="presentation_batch_g_beta05_title">Aggiornamento beta 0.5.0</string>
-    <string name="presentation_batch_g_beta05_clean_install_title">Installazione pulita consigliata</string>
-    <string name="presentation_batch_g_beta05_clean_install_body">Se provieni dalla beta 0.5.0, questo aggiornamento potrebbe richiedere dati libreria freschi invece dello stato cache precedente.</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_title">Se i metadati o le voci libreria sembrano errati</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_body">Metadati brano errati, artisti o album non corrispondenti, o voci che sembrano duplicate di solito significano che un\'installazione pulita è la soluzione.</string>
     <string name="presentation_batch_g_beta05_dont_show">Non mostrare più</string>
     <string name="presentation_batch_g_beta05_got_it">Ho capito</string>
     <string name="presentation_batch_g_album_sel_count">%1$d ALBUM</string>

@@ -7,18 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.5.06] - Unreleased
+## [1.5.06] - 2026-06-12
 
 ### Added
 - **Smart Mix Playlist Generator (Last.fm Creator)**:
-  - Replicated and adapted the creation and discovery features of LastWave into a native, high-fidelity Kotlin and Jetpack Compose implementation.
-  - Created a dedicated "Smart Mix" config screen supporting 8 distinct generation modes (Top Tracks, Recent Tracks, Similar Tracks, Similar Artists, By Tag/Genre, My Mix, My Recommendations, My Library) and a track count selector (5-35 songs).
-  - Implemented parallel YouTube Music ID resolution pipeline with concurrency throttling (using Semaphores) and native Room database ingestion.
-  - Added an animated Sparkles (`AutoAwesome`) icon button with a pulsing scale/rotation effect and a custom "HOT" badge on the Explore Screen top bar, positioned to the left of the Settings icon.
-  - Added the "Recent Mixes (last.fm)" horizontal carousel to the Explore Screen with custom preview cards mapping mixes natively.
+  - Replicated and adapted the creation and discovery features of LastWave into a native Compose implementation.
+  - Created a config screen supporting 8 distinct generation modes (Top Tracks, Recent Tracks, Similar Tracks/Artists, Genre, Recommendations, etc.).
+  - Added "Recent Mixes (last.fm)" horizontal carousel to the Explore Screen with custom preview cards.
+- **Spotify-Style Snapchat Story Sharing**:
+  - Integrated the official Snapchat Creative Kit SDK for premium story sharing of customized song and lyrics cards.
+- **Share Card Customizations**:
+  - Implemented dynamic pastel theming, frosted glassmorphic card containers with deep blurred artwork backgrounds, and wavy seekbar animations.
+- **Explore Progressive Loading**:
+  - Phased Explore screen rendering (Lazy loading above-the-fold feeds first, then personalized lists in the background) for near-instant page loads.
+- **Explore Personalization**:
+  - Integrated ArchiveTune's sorting algorithm to prioritize explore new release albums by your favorite and most-played artists.
+
+### Changed
+- Reworked share and options bottom sheets to use dynamic themes and rounded list items.
+- Optimized centerpiece floating card width to 84% for wider margins relative to background.
+- Maximized size and centered monochrome/base app logo drawables for launcher compatibility.
+- Streamlined auto-queue track selection with similarity scoring, discovery balancing, and duplicate prevention.
 
 ### Fixed
-- **SmartMixViewModel `fetchRecommendations` thread-safety**: The `weighted` candidate list was a plain `mutableListOf` being concurrently written by 4 parallel `launch` coroutines inside `coroutineScope`, causing a potential `ConcurrentModificationException` crash in the "My Recommendations" mode. Fixed by wrapping with `Collections.synchronizedList`.
+- **MIUI/HyperOS Lockscreen Art Fix**: Added a custom `SharedArtworkContentProvider` to resolve missing lockscreen album art on Xiaomi/Redmi devices.
+- **SmartMix thread-safety**: Fixed concurrent modification crash in the "My Recommendations" mode by synchronizing the candidates list.
+- **Playback Reloading Bug**: Resolved redundant playback requests causing YouTube streams to restart after 1 second.
+- **Database optimizations**: Resolved Room database parameter warnings and optimized large database queries.
+- **Explore screen crash**: Added ProGuard keep rules for Explore cache models to prevent Gson ClassCastException under R8 optimization.
+- **Search Result Queueing**: Restored click behavior to play only the selected search result rather than loading the entire list.
+
+### Performance
+- Optimized prefetching by making audio bytes loading cooperatively cancelable on skipping.
+- Prioritized high-quality Opus audio streaming to minimize initial latency.
 
 ## [1.4.06] - 2026-06-06
 

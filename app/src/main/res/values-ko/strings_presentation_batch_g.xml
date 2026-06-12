@@ -299,11 +299,6 @@
     <string name="presentation_batch_g_beta_sheet_report_body">재현 단계, 예상 결과, 실제 결과 및 기기/OS 상세 정보를 공유해 주세요. 짧은 화면 녹화가 큰 도움이 됩니다.</string>
     <string name="presentation_batch_g_beta_sheet_open_issues">GitHub 이슈 열기</string>
     <string name="presentation_batch_g_beta_sheet_report_bug">버그 보고</string>
-    <string name="presentation_batch_g_beta05_title">베타 0.5.0 업그레이드</string>
-    <string name="presentation_batch_g_beta05_clean_install_title">재설정 권장</string>
-    <string name="presentation_batch_g_beta05_clean_install_body">베타 0.5.0 버전에서 업데이트하는 경우, 이전 캐시 대신 라이브러리 데이터를 새로고침해야 할 수 있습니다.</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_title">메타데이터 또는 라이브러리가 잘못 표시되는 경우</string>
-    <string name="presentation_batch_g_beta05_if_wrong_meta_body">잘못된 곡 정보, 아티스트/앨범 불일치 또는 중복 항목이 보인다면 앱을 재설정하는 것이 해결책이 될 수 있습니다.</string>
     <string name="presentation_batch_g_beta05_dont_show">다시 보지 않기</string>
     <string name="presentation_batch_g_beta05_got_it">확인</string>
     <string name="presentation_batch_g_album_sel_count">앨범 %1$d개</string>
