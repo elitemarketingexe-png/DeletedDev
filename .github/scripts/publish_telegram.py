@@ -210,9 +210,10 @@ async def run():
 
     else:
         # ── NIGHTLY POST ────────────────────────────────────────────────────────
-        caption = (
+        text = (
+            f"🎵 <b>PixelMusic Nightly Build</b> 🎵\n\n"
             f"Commit by: {commit_author}\n"
-            f"Commit message.\n<blockquote>{commit_message}</blockquote>\n"
+            f"Commit message:\n<blockquote>{commit_message}</blockquote>\n"
             f"Commit hash: #{commit_sha[:7]}\n"
             f"Device: mobile, wearos\n"
             f"ABI: arm64, armeabi, universal, x86_64\n"
@@ -225,6 +226,9 @@ async def run():
             f"• <b>x86_64:</b> Emulators & Chromebooks\n"
             f"• <b>wear:</b> Wear OS smartwatches only</blockquote>"
         )
+        print("Sending nightly info message...", flush=True)
+        header_msg = await send_message(text)
+        print(f"Nightly info sent. ID: {header_msg.id}", flush=True)
 
         # Upload all APKs in parallel
         apk_paths = [apk_path for apk_path, _, _ in APKS]
@@ -236,18 +240,15 @@ async def run():
         uploaded_files = await asyncio.gather(*upload_tasks)
         print("All uploads complete. Preparing to send...", flush=True)
 
-        send_kwargs = dict(
+        await client.send_file(
             entity=chat_id,
             file=uploaded_files,
-            caption=caption,
+            captions=[cap for _, _, cap in APKS],
             parse_mode="html",
             force_document=True,
+            reply_to=header_msg.id,
             attributes=[[DocumentAttributeFilename(file_name=name)] for name in apk_names],
         )
-        if thread_id:
-            send_kwargs["reply_to"] = thread_id
-
-        await client.send_file(**send_kwargs)
         print("All APKs sent.", flush=True)
 
     print("All APKs published successfully.", flush=True)
