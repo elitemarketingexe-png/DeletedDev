@@ -145,10 +145,9 @@ jobs:
           prerelease: false
           make_latest: true
 
-      # ── Telegram — ALWAYS posts on every push (regardless of version bump) ───
-      - name: Install Pyrogram for Telegram upload
+      - name: Install Pyrofork for Telegram upload
         if: success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        run: pip install -q pyrogram tgcrypto
+        run: pip install -q pyrofork TgCrypto-pyrofork
 
       - name: Publish all APKs to Telegram Channel
         if: success() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')

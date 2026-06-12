@@ -191,8 +191,8 @@ jobs:
             | grep versionName | sed -E "s/.*versionName='([^']*)'.*/\1/")
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Install Pyrogram for Telegram upload
-        run: pip install -q pyrogram tgcrypto
+      - name: Install Pyrofork for Telegram upload
+        run: pip install -q pyrofork TgCrypto-pyrofork
 
       - name: Publish Nightly to Telegram Channel
         env:
