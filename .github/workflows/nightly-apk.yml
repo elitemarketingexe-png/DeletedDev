@@ -1,8 +1,6 @@
 name: Build Nightly APK
 
 on:
-  push:
-    branches: [ master ]
   schedule:
     # Runs at 02:17 America/Buenos_Aires.
     - cron: '17 5 * * *'
@@ -23,36 +21,10 @@ jobs:
     outputs:
       current-sha: ${{ steps.nightly-changes.outputs.current-sha }}
       previous-sha: ${{ steps.nightly-changes.outputs.previous-sha }}
-      should-build: ${{ steps.check-should-build.outputs.should-build }}
+      should-build: ${{ steps.nightly-changes.outputs.should-build }}
       short-sha: ${{ steps.nightly-changes.outputs.short-sha }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      # ── Read version from gradle.properties (single source of truth) ──────────
-      - name: Read version name
-        id: version
-        run: |
-          VERSION_NAME=$(grep '^APP_VERSION_NAME=' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
-          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "Detected version: $VERSION_NAME"
-
-      # ── Check if version tag already exists ───────────────────
-      - name: Check if version tag already exists
-        id: version_check
-        run: |
-          TAG="v${{ steps.version.outputs.version_name }}"
-          if git tag --list "$TAG" | grep -q "$TAG"; then
-            echo "is_new_version=false" >> "$GITHUB_OUTPUT"
-            echo "Tag $TAG already exists locally — NOT a new release."
-          else
-            echo "is_new_version=true" >> "$GITHUB_OUTPUT"
-            echo "Tag $TAG does not exist — this IS a new version. GitHub Release will handle it."
-          fi
-
       - name: Check for new master changes
         id: nightly-changes
         uses: actions/github-script@v9
@@ -64,11 +36,15 @@ jobs:
             const currentSha = context.sha;
             const shortSha = currentSha.slice(0, 7);
 
-            if (context.eventName === 'workflow_dispatch' || context.eventName === 'push') {
+            if (context.eventName === 'workflow_dispatch') {
               core.setOutput('current-sha', currentSha);
               core.setOutput('previous-sha', '');
               core.setOutput('short-sha', shortSha);
               core.setOutput('should-build', 'true');
+              await core.summary
+                .addHeading('Nightly APK')
+                .addRaw(`Manual run requested for ${currentSha}. Building APKs.`)
+                .write();
               return;
             }
 
@@ -90,17 +66,17 @@ jobs:
             core.setOutput('short-sha', shortSha);
             core.setOutput('should-build', shouldBuild ? 'true' : 'false');
 
-      - name: Determine final should-build
-        id: check-should-build
-        run: |
-          # If version is bumped (is_new_version == 'true'), we do NOT build nightly
-          if [ "${{ steps.version_check.outputs.is_new_version }}" = "true" ]; then
-            echo "should-build=false" >> "$GITHUB_OUTPUT"
-            echo "Version is bumped. Skipping nightly build so official release workflow can handle it."
-          else
-            echo "should-build=${{ steps.nightly-changes.outputs.should-build }}" >> "$GITHUB_OUTPUT"
-            echo "Version is not bumped. Final should-build: ${{ steps.nightly-changes.outputs.should-build }}"
-          fi
+            const summary = core.summary.addHeading('Nightly APK');
+            if (shouldBuild) {
+              summary.addRaw(
+                previousSha
+                  ? `master moved from ${previousSha} to ${currentSha}. Building APKs.`
+                  : `No previous successful nightly was found. Building APKs for ${currentSha}.`
+              );
+            } else {
+              summary.addRaw(`master is still at ${currentSha}. Skipping APK build.`);
+            }
+            await summary.write();
 
   build:
     needs: changes
@@ -122,29 +98,36 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Decode release keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > vz-pixelmusic.jks
+      - name: Cache nightly keystore
+        id: cache-keystore
+        uses: actions/cache@v5
+        with:
+          path: vz-pixelmusic.jks
+          key: ${{ runner.os }}-nightly-keystore-vz-pixelmusic
+
+      - name: Generate nightly keystore if not cached
+        if: steps.cache-keystore.outputs.cache-hit != 'true'
+        run: |
+          keytool -genkey -v -keystore vz-pixelmusic.jks -alias pixelmusic-nightly-key -keyalg RSA -keysize 4096 -validity 10000 \
+            -storepass 994273 -keypass 994273 \
+            -dname "CN=PixelMusic Nightly, OU=Dev, O=PixelMusic, L=World, S=World, C=US"
 
       - name: Create keystore.properties
         run: |
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > keystore.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> keystore.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> keystore.properties
+          echo "storePassword=994273" > keystore.properties
+          echo "keyAlias=pixelmusic-nightly-key" >> keystore.properties
+          echo "keyPassword=994273" >> keystore.properties
 
       - name: Create local.properties
         run: |
           echo "TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID }}" > local.properties
           echo "TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}" >> local.properties
 
-      - name: Get commit count
-        id: commit_count
-        run: echo "count=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
-
       - name: Build Phone nightly release APKs
-        run: ./gradlew :app:assembleRelease -Ppixelmusic.enableAbiSplits=true -PAPP_VERSION_CODE=${{ steps.commit_count.outputs.count }}
+        run: gradle :app:assembleRelease -Ppixelmusic.enableAbiSplits=true
 
       - name: Build Wear OS nightly release APK
-        run: ./gradlew :wear:assembleRelease -PAPP_VERSION_CODE=${{ steps.commit_count.outputs.count }}
+        run: gradle :wear:assembleRelease
 
       - name: Verify Phone nightly split APKs
         run: |
@@ -215,8 +198,8 @@ jobs:
             | grep versionName | sed -E "s/.*versionName='([^']*)'.*/\1/")
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Install Pyrofork for Telegram upload
-        run: pip install -q pyrofork TgCrypto-pyrofork
+      - name: Install Pyrogram for Telegram upload
+        run: pip install -q pyrogram tgcrypto
 
       - name: Publish Nightly to Telegram Channel
         env:
@@ -227,7 +210,6 @@ jobs:
           TELEGRAM_THREAD_ID: "2"
           COMMIT_SHA: ${{ needs.changes.outputs.current-sha }}
           VERSION_NAME: ${{ steps.get-version.outputs.version_name }}
-          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
         run: |
           if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_API_ID" ]; then
             echo "Telegram secrets not set, skipping publishing."
