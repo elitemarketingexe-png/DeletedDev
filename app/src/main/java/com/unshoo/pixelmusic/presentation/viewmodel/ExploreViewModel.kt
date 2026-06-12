@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineScope
+import com.unshoo.pixelmusic.data.database.ArtistPlayCountRow
 import timber.log.Timber
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YTItem
@@ -237,10 +238,36 @@ class ExploreViewModel @Inject constructor(
                     try {
                         val exp = YouTube.explore().getOrNull()
                         explore = exp
-                        val r = exp?.newReleaseAlbums
-                        if (!r.isNullOrEmpty()) {
+                        if (exp != null) {
+                            // ── ArchiveTune pattern: sort newReleaseAlbums by artist play rank ──
+                            val artistRows = try { musicDao.getArtistsByPlayCount() } catch (e: Exception) { emptyList() }
+
+                            // Build indexed maps — index 0 = most played / most favourite
+                            val artistsMap: MutableMap<Int, String> = mutableMapOf()
+                            val favouriteArtistsMap: MutableMap<Int, String> = mutableMapOf()
+                            var favIndex = 0
+                            for ((index, row) in artistRows.withIndex()) {
+                                artistsMap[index] = row.channelId
+                                if (row.isFavourite == 1) {
+                                    favouriteArtistsMap[favIndex] = row.channelId
+                                    favIndex++
+                                }
+                            }
+
+                            val sortedReleases = exp.newReleaseAlbums
+                                .sortedBy { album ->
+                                    val artistIds = album.artists.orEmpty().mapNotNull { it.id }
+                                    artistIds.firstNotNullOfOrNull { artistId ->
+                                        if (artistId in favouriteArtistsMap.values) {
+                                            favouriteArtistsMap.entries.firstOrNull { it.value == artistId }?.key
+                                        } else {
+                                            artistsMap.entries.firstOrNull { it.value == artistId }?.key
+                                        }
+                                    } ?: Int.MAX_VALUE
+                                }
+
                             _uiState.update { currentState ->
-                                val merged = (r + currentState.newReleaseAlbums).distinctBy { it.browseId }
+                                val merged = (sortedReleases + currentState.newReleaseAlbums).distinctBy { it.browseId }
                                 currentState.copy(
                                     isLoading = false,
                                     isRefreshing = false,
@@ -436,70 +463,14 @@ class ExploreViewModel @Inject constructor(
                 }
             }
 
-            // --- STAGE 3: Fetch and merge Personalized New Releases in background ---
+            // --- STAGE 3: Persist final state to cache ---
             stage3Job = viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    val historyArtistNames = history.mapNotNull { it.artist }.distinct()
-                    val historyArtistChannelIds = dbArtists
-                        .filter { it.name in historyArtistNames }
-                        .mapNotNull { it.channelId }
-                        .filter { it.isNotBlank() }
-
-                    val subscribedArtistIds = userPreferencesRepository.subscribedArtistIdsFlow.first().toList()
-
-                    // Retrieve likedArtists directly to make Stage 3 independent and reliable
-                    val likedArtists = if (hasLogin) {
-                        YouTube.library("FEmusic_liked_artists").getOrNull()?.items?.filterIsInstance<ArtistItem>() ?: emptyList()
-                    } else emptyList()
-
-                    val likedArtistChannelIds = likedArtists
-                        .map { it.id }
-                        .filter { it.isNotBlank() }
-
-                    val allCandidateArtistIds = (historyArtistChannelIds + likedArtistChannelIds + subscribedArtistIds + libraryArtistChannelIds)
-                        .distinct()
-
-                    val shuffledArtistIds = allCandidateArtistIds.shuffled().take(6)
-
-                    coroutineScope {
-                        shuffledArtistIds.forEach { channelId ->
-                            launch {
-                                try {
-                                    val artistPage = YouTube.artist(channelId).getOrNull()
-                                    if (artistPage != null) {
-                                        val releases = mutableListOf<AlbumItem>()
-                                        artistPage.sections.forEach { section ->
-                                            val isReleaseSection = section.title.contains("album", ignoreCase = true) || 
-                                                                   section.title.contains("single", ignoreCase = true) || 
-                                                                   section.title.contains("release", ignoreCase = true)
-                                            if (isReleaseSection) {
-                                                section.items.filterIsInstance<AlbumItem>().forEach { album ->
-                                                    val albumWithArtist = if (album.artists.isNullOrEmpty()) {
-                                                        album.copy(artists = listOf(unshoo.ianshulyadav.pixelmusic.innertube.models.Artist(name = artistPage.artist.title, id = artistPage.artist.id)))
-                                                    } else album
-                                                    releases.add(albumWithArtist)
-                                                }
-                                            }
-                                        }
-                                        if (releases.isNotEmpty()) {
-                                            _uiState.update { currentState ->
-                                                val finalNewReleases = (releases + currentState.newReleaseAlbums)
-                                                    .distinctBy { it.browseId }
-                                                    .sortedByDescending { it.year ?: 0 }
-                                                val updatedState = currentState.copy(newReleaseAlbums = finalNewReleases)
-                                                persistToCache(updatedState)
-                                                updatedState
-                                            }
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    Timber.e(e, "Error loading artist releases for $channelId")
-                                }
-                            }
-                        }
-                    }
+                    // Wait briefly for Stage 2 to settle, then persist
+                    kotlinx.coroutines.delay(2000)
+                    persistToCache(_uiState.value)
                 } catch (e: Exception) {
-                    Timber.e(e, "Error loading Stage 3 Explore data")
+                    Timber.e(e, "Error persisting Stage 3 Explore data")
                 }
             }
 

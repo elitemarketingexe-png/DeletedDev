@@ -2397,6 +2397,30 @@ interface MusicDao {
     """)
     suspend fun getLocalSongCountByArtistName(artistName: String): Int
 
+    /**
+     * Returns all artists with a YouTube channel_id, ranked by total play count across their songs.
+     * Used to personalize New Release ordering (ArchiveTune pattern).
+     * Returns a pair of (artistChannelId, isFavourited) ordered most-played first.
+     */
+    @Query("""
+        SELECT
+            a.channel_id AS channelId,
+            COALESCE(SUM(e.play_count), 0) AS totalPlayCount,
+            MAX(CASE WHEN s.is_favorite = 1 THEN 1 ELSE 0 END) AS isFavourite
+        FROM artists a
+        INNER JOIN song_artist_cross_ref cr ON cr.artist_id = a.id
+        INNER JOIN songs s ON s.id = cr.song_id
+        LEFT JOIN song_engagements e ON (
+            CASE WHEN s.source_type = 7
+                THEN 'youtube_' || SUBSTR(s.content_uri_string, 11)
+                ELSE CAST(s.id AS TEXT)
+            END = e.song_id
+        )
+        WHERE a.channel_id IS NOT NULL AND a.channel_id != ''
+        GROUP BY a.channel_id
+        ORDER BY isFavourite DESC, totalPlayCount DESC
+    """)
+    suspend fun getArtistsByPlayCount(): List<ArtistPlayCountRow>
 
     companion object {
         /**
