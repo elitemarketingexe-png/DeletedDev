@@ -21,8 +21,13 @@ import html
 import os
 import subprocess
 import sys
+import socket
+
+# Force IPv4 globally to prevent connection hangs in GitHub Actions
+socket.has_ipv6 = False
 
 from pyrogram import Client
+
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -125,9 +130,20 @@ async def publish():
         api_hash=api_hash,
         bot_token=bot_token,
         in_memory=True,
-        workers=8,
-        max_concurrent_transmissions=8,
+        ipv6=False,
     ) as app:
+        def make_progress_callback(filename):
+            last_percent = -20
+            def progress(current, total):
+                nonlocal last_percent
+                if total == 0:
+                    return
+                percent = int((current / total) * 100)
+                if percent >= last_percent + 20 or percent == 100:
+                    last_percent = percent
+                    print(f"  [{filename}] Upload progress: {percent}% ({current / (1024*1024):.1f}/{total / (1024*1024):.1f} MB)", flush=True)
+            return progress
+
         # Get changelog from environment, fallback to commit message if empty
         changelog = os.environ.get("CHANGELOG", "").strip()
         if not changelog:
@@ -212,6 +228,7 @@ async def publish():
                     parse_mode=ParseMode.HTML,
                     reply_to_message_id=changelog_msg.id,
                     force_document=True,
+                    progress=make_progress_callback(display_name),
                 )
                 print(f"  OK — sent {display_name}", flush=True)
 
@@ -247,6 +264,7 @@ async def publish():
                     parse_mode=ParseMode.HTML,
                     reply_to_message_id=reply_to,
                     force_document=True,
+                    progress=make_progress_callback(display_name),
                 )
                 print(f"  OK — sent {display_name}", flush=True)
 

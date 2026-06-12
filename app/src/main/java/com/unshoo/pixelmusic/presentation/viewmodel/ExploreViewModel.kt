@@ -180,20 +180,81 @@ class ExploreViewModel @Inject constructor(
             var newReleasesResult: List<AlbumItem>? = null
 
             coroutineScope {
-                val homeDeferred = async(Dispatchers.IO) { YouTube.home().getOrNull() }
-                val exploreDeferred = async(Dispatchers.IO) { YouTube.explore().getOrNull() }
-                val chartsDeferred = async(Dispatchers.IO) { YouTube.getChartsPage().getOrNull() }
-                val newReleasesDeferred = async(Dispatchers.IO) { YouTube.newReleaseAlbums().getOrNull() }
-
-                home = homeDeferred.await()
-                explore = exploreDeferred.await()
-                charts = chartsDeferred.await()
-                newReleasesResult = newReleasesDeferred.await()
+                launch(Dispatchers.IO) {
+                    try {
+                        val h = YouTube.home().getOrNull()
+                        home = h
+                        if (h != null) {
+                            _uiState.update { currentState ->
+                                currentState.copy(
+                                    isLoading = false,
+                                    isRefreshing = false,
+                                    homePageSections = h.sections,
+                                    homePageContinuation = h.continuation
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to load home sections in Stage 1")
+                    }
+                }
+                launch(Dispatchers.IO) {
+                    try {
+                        val c = YouTube.getChartsPage().getOrNull()
+                        charts = c
+                        if (c != null) {
+                            _uiState.update { currentState ->
+                                currentState.copy(
+                                    isLoading = false,
+                                    isRefreshing = false,
+                                    chartsPage = c
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to load charts in Stage 1")
+                    }
+                }
+                launch(Dispatchers.IO) {
+                    try {
+                        val r = YouTube.newReleaseAlbums().getOrNull()
+                        newReleasesResult = r
+                        if (!r.isNullOrEmpty()) {
+                            _uiState.update { currentState ->
+                                val merged = (r + currentState.newReleaseAlbums).distinctBy { it.browseId }
+                                currentState.copy(
+                                    isLoading = false,
+                                    isRefreshing = false,
+                                    newReleaseAlbums = merged
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to load new release albums in Stage 1")
+                    }
+                }
+                launch(Dispatchers.IO) {
+                    try {
+                        val exp = YouTube.explore().getOrNull()
+                        explore = exp
+                        val r = exp?.newReleaseAlbums
+                        if (!r.isNullOrEmpty()) {
+                            _uiState.update { currentState ->
+                                val merged = (r + currentState.newReleaseAlbums).distinctBy { it.browseId }
+                                currentState.copy(
+                                    isLoading = false,
+                                    isRefreshing = false,
+                                    newReleaseAlbums = merged
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to load explore albums in Stage 1")
+                    }
+                }
             }
 
-            val globalNewReleases = if (!newReleasesResult.isNullOrEmpty()) newReleasesResult else explore?.newReleaseAlbums ?: emptyList()
-
-            if (home == null && explore == null && charts == null) {
+            if (home == null && explore == null && charts == null && newReleasesResult == null) {
                 // Only show error if we also have no cached data
                 val hasCachedData = _uiState.value.homePageSections.isNotEmpty() ||
                         _uiState.value.newReleaseAlbums.isNotEmpty() ||
@@ -208,20 +269,6 @@ class ExploreViewModel @Inject constructor(
                 return
             }
 
-            val initialSections = home?.sections ?: emptyList()
-
-            // Emit Stage 1 state immediately
-            val initialCoreState = ExploreUiState(
-                isLoading = false,
-                isRefreshing = false,
-                homePageSections = initialSections,
-                homePageContinuation = home?.continuation,
-                newReleaseAlbums = globalNewReleases,
-                chartsPage = charts,
-                selectedFilter = _uiState.value.selectedFilter,
-                recentMixes = _uiState.value.recentMixes
-            )
-            _uiState.value = initialCoreState
 
             // --- STAGE 2: Fetch and display Library & Recommendations in background ---
             stage2Job = viewModelScope.launch(Dispatchers.IO) {
@@ -325,7 +372,7 @@ class ExploreViewModel @Inject constructor(
                         val communityPlaylists = communityPlaylistsResult?.items?.filterIsInstance<PlaylistItem>() ?: emptyList()
 
                         _uiState.update { currentState ->
-                            val updatedSections = (home?.sections ?: emptyList()).toMutableList()
+                            val updatedSections = (home?.sections ?: currentState.homePageSections).toMutableList()
 
                             if (personalPlaylists.isNotEmpty()) {
                                 updatedSections.removeAll { it.title.contains("trending", ignoreCase = true) }
@@ -412,44 +459,50 @@ class ExploreViewModel @Inject constructor(
                     val allCandidateArtistIds = (historyArtistChannelIds + likedArtistChannelIds + subscribedArtistIds + libraryArtistChannelIds)
                         .distinct()
 
-                    val shuffledArtistIds = allCandidateArtistIds.shuffled().take(12)
+                    val shuffledArtistIds = allCandidateArtistIds.shuffled().take(6)
 
-                    val personalizedArtistPages = coroutineScope {
-                        shuffledArtistIds.map { channelId ->
-                            async { YouTube.artist(channelId).getOrNull() }
-                        }.mapNotNull { it.await() }
-                    }
-
-                    val personalizedNewReleases = mutableListOf<AlbumItem>()
-                    personalizedArtistPages.forEach { artistPage ->
-                        artistPage.sections.forEach { section ->
-                            val isReleaseSection = section.title.contains("album", ignoreCase = true) || 
-                                                   section.title.contains("single", ignoreCase = true) || 
-                                                   section.title.contains("release", ignoreCase = true)
-                            if (isReleaseSection) {
-                                section.items.filterIsInstance<AlbumItem>().forEach { album ->
-                                    val albumWithArtist = if (album.artists.isNullOrEmpty()) {
-                                        album.copy(artists = listOf(unshoo.ianshulyadav.pixelmusic.innertube.models.Artist(name = artistPage.artist.title, id = artistPage.artist.id)))
-                                    } else album
-                                    personalizedNewReleases.add(albumWithArtist)
+                    coroutineScope {
+                        shuffledArtistIds.forEach { channelId ->
+                            launch {
+                                try {
+                                    val artistPage = YouTube.artist(channelId).getOrNull()
+                                    if (artistPage != null) {
+                                        val releases = mutableListOf<AlbumItem>()
+                                        artistPage.sections.forEach { section ->
+                                            val isReleaseSection = section.title.contains("album", ignoreCase = true) || 
+                                                                   section.title.contains("single", ignoreCase = true) || 
+                                                                   section.title.contains("release", ignoreCase = true)
+                                            if (isReleaseSection) {
+                                                section.items.filterIsInstance<AlbumItem>().forEach { album ->
+                                                    val albumWithArtist = if (album.artists.isNullOrEmpty()) {
+                                                        album.copy(artists = listOf(unshoo.ianshulyadav.pixelmusic.innertube.models.Artist(name = artistPage.artist.title, id = artistPage.artist.id)))
+                                                    } else album
+                                                    releases.add(albumWithArtist)
+                                                }
+                                            }
+                                        }
+                                        if (releases.isNotEmpty()) {
+                                            _uiState.update { currentState ->
+                                                val finalNewReleases = (releases + currentState.newReleaseAlbums)
+                                                    .distinctBy { it.browseId }
+                                                    .sortedByDescending { it.year ?: 0 }
+                                                val updatedState = currentState.copy(newReleaseAlbums = finalNewReleases)
+                                                persistToCache(updatedState)
+                                                updatedState
+                                            }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Timber.e(e, "Error loading artist releases for $channelId")
                                 }
                             }
                         }
-                    }
-                    val sortedPersonalizedReleases = personalizedNewReleases
-                        .distinctBy { it.browseId }
-                        .sortedByDescending { it.year ?: 0 }
-
-                    _uiState.update { currentState ->
-                        val finalNewReleases = (sortedPersonalizedReleases + globalNewReleases).distinctBy { it.browseId }
-                        val updatedState = currentState.copy(newReleaseAlbums = finalNewReleases)
-                        persistToCache(updatedState)
-                        updatedState
                     }
                 } catch (e: Exception) {
                     Timber.e(e, "Error loading Stage 3 Explore data")
                 }
             }
+
         } catch (e: Exception) {
             Timber.e(e, "Error loading Explore screen data")
             _uiState.update {
