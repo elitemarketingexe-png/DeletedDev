@@ -153,9 +153,9 @@ jobs:
           make_latest: true
 
       # ── Telegram — ONLY posts when version is bumped (official release) ───
-      - name: Install Pyrogram for Telegram upload
+      - name: Install Pyrofork for Telegram upload
         if: success() && steps.version_check.outputs.is_new_version == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        run: pip install -q pyrogram tgcrypto
+        run: pip install -q pyrofork tgcrypto
 
       - name: Publish all APKs to Telegram Channel
         if: success() && steps.version_check.outputs.is_new_version == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')

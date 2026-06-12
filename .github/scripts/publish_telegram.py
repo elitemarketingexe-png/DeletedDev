@@ -198,20 +198,30 @@ async def publish():
             )
             print(f"Changelog message sent. ID: {changelog_msg.id}", flush=True)
 
-            for apk_path, display_name, cap in apks:
+            async def upload_document(apk_path, display_name, file_caption, reply_to_id):
                 size_mb = os.path.getsize(apk_path) / (1024 * 1024)
                 print(f"Uploading {display_name} ({size_mb:.1f} MB)...", flush=True)
-
                 await app.send_document(
                     chat_id=chat_id,
                     document=apk_path,
                     file_name=display_name,
-                    caption=cap if cap else None,
+                    caption=file_caption,
                     parse_mode=ParseMode.HTML,
-                    reply_to_message_id=changelog_msg.id,
+                    reply_to_message_id=reply_to_id,
                     force_document=True,
                 )
                 print(f"  OK — sent {display_name}", flush=True)
+
+            # Upload the first APK (Wear OS) synchronously first to act as visual anchor
+            first_apk = apks[0]
+            await upload_document(first_apk[0], first_apk[1], first_apk[2], changelog_msg.id)
+
+            # Upload the remaining concurrently
+            tasks = [
+                upload_document(apk_path, display_name, cap, changelog_msg.id)
+                for apk_path, display_name, cap in apks[1:]
+            ]
+            await asyncio.gather(*tasks)
 
         else:
            
@@ -231,22 +241,30 @@ async def publish():
                 f"• <b>wear:</b> Wear OS smartwatches only</blockquote>"
             )
 
-            for index, (apk_path, display_name, _) in enumerate(apks):
+            async def upload_document(apk_path, display_name, file_caption, reply_to_id):
                 size_mb = os.path.getsize(apk_path) / (1024 * 1024)
                 print(f"Uploading nightly build {display_name} ({size_mb:.1f} MB)...", flush=True)
-
-                file_caption = caption if index == 0 else None
-
                 await app.send_document(
                     chat_id=chat_id,
                     document=apk_path,
                     file_name=display_name,
                     caption=file_caption,
                     parse_mode=ParseMode.HTML,
-                    reply_to_message_id=reply_to,
+                    reply_to_message_id=reply_to_id,
                     force_document=True,
                 )
                 print(f"  OK — sent {display_name}", flush=True)
+
+            # Upload the first APK (Wear OS) synchronously first with the caption
+            first_apk = apks[0]
+            await upload_document(first_apk[0], first_apk[1], caption, reply_to)
+
+            # Upload the remaining concurrently without caption
+            tasks = [
+                upload_document(apk_path, display_name, None, reply_to)
+                for apk_path, display_name, _ in apks[1:]
+            ]
+            await asyncio.gather(*tasks)
 
     print("All APKs published successfully.", flush=True)
 
