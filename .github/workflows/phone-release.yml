@@ -153,16 +153,9 @@ jobs:
           make_latest: true
 
       # ── Telegram — ONLY posts when version is bumped (official release) ───
-      - name: Install Telethon and Cryptg for Telegram upload
+      - name: Install Pyrogram for Telegram upload
         if: success() && steps.version_check.outputs.is_new_version == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        run: pip install -q telethon cryptg
-
-      - name: Restore Telegram session cache
-        if: success() && steps.version_check.outputs.is_new_version == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        uses: actions/cache@v5
-        with:
-          path: bot_session.session
-          key: telegram-session-${{ runner.os }}-bot_session
+        run: pip install -q pyrogram tgcrypto
 
       - name: Publish all APKs to Telegram Channel
         if: success() && steps.version_check.outputs.is_new_version == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
