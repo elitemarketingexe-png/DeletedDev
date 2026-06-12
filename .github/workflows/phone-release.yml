@@ -153,9 +153,9 @@ jobs:
           make_latest: true
 
       # ── Telegram — ONLY posts when version is bumped (official release) ───
-      - name: Install Telethon for Telegram upload
+      - name: Install Telethon and Cryptg for Telegram upload
         if: success() && steps.version_check.outputs.is_new_version == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        run: pip install -q telethon
+        run: pip install -q telethon cryptg
 
       - name: Restore Telegram session cache
         if: success() && steps.version_check.outputs.is_new_version == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')

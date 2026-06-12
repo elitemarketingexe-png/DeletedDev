@@ -18,6 +18,7 @@ Required env vars:
   CHANGELOG             - HTML changelog string (optional)
 """
 
+import asyncio
 import html
 import os
 import subprocess
@@ -73,9 +74,26 @@ def human_readable_size(size, decimal_places=2):
     return f"{size:.{decimal_places}f} {unit}"
 
 
-async def progress(current, total):
-    pct = (current / total) * 100
-    print(f"  {pct:.1f}% — {human_readable_size(current)}/{human_readable_size(total)}", end="\r", flush=True)
+def make_progress(filename):
+    last_reported = -10
+    async def callback(current, total):
+        nonlocal last_reported
+        pct = int((current / total) * 100)
+        if pct >= last_reported + 10 or pct == 100:
+            last_reported = pct
+            print(f"Uploading {filename}: {pct}% ({human_readable_size(current)}/{human_readable_size(total)})", flush=True)
+    return callback
+
+
+async def upload_apk(apk_path, name):
+    print(f"Starting parallel upload of {name} ({human_readable_size(os.path.getsize(apk_path))})...", flush=True)
+    uploaded = await client.upload_file(
+        apk_path,
+        file_name=name,
+        progress_callback=make_progress(name)
+    )
+    print(f"Finished uploading {name}", flush=True)
+    return uploaded
 
 
 def format_changelog_line(line):
@@ -169,20 +187,23 @@ async def run():
         header_msg = await send_message(text)
         print(f"Changelog sent. ID: {header_msg.id}", flush=True)
 
-        # Send all APKs in one batch (ArchiveTune pattern)
+        # Upload all APKs in parallel
         apk_paths = [apk_path for apk_path, _, _ in APKS]
         apk_names = [name for _, name, _ in APKS]
         total_mb = sum(os.path.getsize(p) / (1024 * 1024) for p in apk_paths)
-        print(f"Uploading all {len(apk_paths)} APKs ({total_mb:.1f} MB total) as one batch...", flush=True)
+        print(f"Uploading all {len(apk_paths)} APKs ({total_mb:.1f} MB total) in parallel...", flush=True)
+
+        upload_tasks = [upload_apk(apk_path, name) for apk_path, name, _ in APKS]
+        uploaded_files = await asyncio.gather(*upload_tasks)
+        print("All uploads complete. Preparing to send...", flush=True)
 
         await client.send_file(
             entity=chat_id,
-            file=apk_paths,
+            file=uploaded_files,
             captions=[cap for _, _, cap in APKS],
             parse_mode="html",
             force_document=True,
             reply_to=header_msg.id,
-            progress_callback=progress,
             attributes=[[DocumentAttributeFilename(file_name=name)] for name in apk_names],
         )
         print("All APKs sent.", flush=True)
@@ -205,19 +226,22 @@ async def run():
             f"• <b>wear:</b> Wear OS smartwatches only</blockquote>"
         )
 
-        # Send all APKs in one batch (ArchiveTune pattern)
+        # Upload all APKs in parallel
         apk_paths = [apk_path for apk_path, _, _ in APKS]
         apk_names = [name for _, name, _ in APKS]
         total_mb = sum(os.path.getsize(p) / (1024 * 1024) for p in apk_paths)
-        print(f"Uploading all {len(apk_paths)} APKs ({total_mb:.1f} MB total) as one batch...", flush=True)
+        print(f"Uploading all {len(apk_paths)} APKs ({total_mb:.1f} MB total) in parallel...", flush=True)
+
+        upload_tasks = [upload_apk(apk_path, name) for apk_path, name, _ in APKS]
+        uploaded_files = await asyncio.gather(*upload_tasks)
+        print("All uploads complete. Preparing to send...", flush=True)
 
         send_kwargs = dict(
             entity=chat_id,
-            file=apk_paths,
+            file=uploaded_files,
             caption=caption,
             parse_mode="html",
             force_document=True,
-            progress_callback=progress,
             attributes=[[DocumentAttributeFilename(file_name=name)] for name in apk_names],
         )
         if thread_id:

@@ -215,8 +215,8 @@ jobs:
             | grep versionName | sed -E "s/.*versionName='([^']*)'.*/\1/")
           echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
 
-      - name: Install Telethon for Telegram upload
-        run: pip install -q telethon
+      - name: Install Telethon and Cryptg for Telegram upload
+        run: pip install -q telethon cryptg
 
       - name: Restore Telegram session cache
         uses: actions/cache@v5
