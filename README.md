@@ -50,11 +50,11 @@ Pixel Music incorporates the best concepts of open-source streaming clients and 
 | Feature Dimension | **OpenTune** | **Metrolist** | **ArchiveTune** | **Pixel Music 🎵 (This App)** |
 |:---|:---:|:---:|:---:|:---:|
 | **Core Concept** | YouTube Music Streaming | YouTube Music Streaming | YT Music & Local Hybrid | **Ultimate Hybrid (Local, YT Music, Telegram, Google Drive)** |
-| **Visual Aesthetics** | Classic Material 3 | Dynamic M3 (Utility-focused) | Material 3 Utility | **State-of-the-Art Expressive UI** (Vibrant, glassmorphism, fluid micro-interactions) |
-| **Dynamic Coloring** | Standard Material You | Basic Album Color Sync | Basic Album Color Sync | **Adaptive Palette Extraction** (Dynamic player background, expressive list tiles) |
+| **Visual Aesthetics** | Classic Material 3 | Dynamic M3 (Utility-focused) | Material 3 Utility | **State-of-the-Art Expressive UI** (Glassmorphism, Snapchat sharing, micro-interactions) |
+| **Dynamic Coloring** | Standard Material You | Basic Album Color Sync | Basic Album Color Sync | **Adaptive Palette + Material You** (System Dynamic Theme support, album HSL extraction) |
 | **Audio Core** | ExoPlayer | ExoPlayer + Normalization | ExoPlayer + R128 | **Media3 ExoPlayer + FFmpeg Decoders + 10-Band EQ** |
 | **Lyrics Pipeline** | LRCLIB (Sync) | LRCLIB + Romanization | LRCLIB + Translation | **LRCLIB + Dynamic Offset Sync + Offline caching + manual search** |
-| **AI Integration** | None | None | None | **Generative AI Playlist Creator** (Gemini, DeepSeek, OpenAI support) |
+| **AI & Smart Mixes** | None | None | None | **Generative AI & Last.fm Smart Mix** (8 generation modes, retention pruning) |
 | **Connectivity** | Background Play | Cast, Sleep Timer | Scrobble, Cast | **Android Auto, Chromecast, Wear OS, Last.fm & ListenBrainz** |
 | **Legal/License Safety** | GPL-3.0 | GPL-3.0 | GPL-3.0 | **Proprietary (Personal, non-commercial use only)** |
 
@@ -165,15 +165,29 @@ Key UI/UX visual paradigms adopted from PixelPlayer include:
 * **Offline Caching:** Lyrics are cached in the local Room database to ensure synchronization is preserved even when offline.
 * **Live Translation & Romanization:** Translate foreign lyrics on the fly or view Romanized versions for easier listening (inspired by ArchiveTune's lyrics workflow).
 
-### 🧠 4. Generative AI Playlists
-* **AI Music Assistant:** Feed custom prompts (e.g., *"Make a high-intensity workout mix of synthwave and phonk"* or *"A rainy Sunday morning acoustic playlist"*) to generate highly personalized listening queues.
-* **Multiple Model Support:** Integrates with Google Gemini, DeepSeek, OpenAI, and custom API proxies to let you choose your favorite LLM backend.
+### 🧠 4. Generative AI & Smart Mix Playlists
+* **AI Music Assistant:** Feed custom prompts (e.g., *"Make a high-intensity workout mix of synthwave and phonk"* or *"A rainy Sunday morning acoustic playlist"*) to generate highly personalized listening queues using Gemini, DeepSeek, OpenAI, or custom API proxies.
+* **Smart Mix Playlist Generator (Last.fm Creator):** Replicated and native Compose implementation of LastWave's playlist and discovery tools. Supports 8 generation modes (Top Tracks, Recent Tracks, Similar Tracks/Artists, Genre, Recommendations, etc.) and a dedicated explore screen carousel.
+* **Smart Mix Playlist Retention settings:** Configurable automated deletion policies (24 hours, 7 days, 30 days, or permanent) for generated AI playlists, with automated startup pruning.
+* **Smart Naming & Overwrite Logic:** Auto-generates clean, GenZ-style playlist names (e.g. *"My Vault"*, *"On Repeat"*, *"Algorhythm"*) and updates existing AI playlists in-place to avoid library duplication.
 
-### 📲 5. Connectivity & Companion Ecosystem
+### 🎨 5. UI Customization & Sharing
+* **Material You System Dynamic Colors:** A dedicated "Dynamic (System)" app color palette option utilizing native Android 12+ theme extraction.
+* **Spotify-Style Snapchat Story Sharing:** Native integration with the official Snapchat Creative Kit SDK to share customized song/lyrics cards to Snapchat stories.
+* **Share Card Customizer:** Supports dynamic pastel themes, frosted glassmorphism, deep blurred artwork backgrounds, and wavy seekbar animations.
+* **Flexible Entry Screen:** Customize the app's default landing tab to launch directly into the Explore page, Search tab, or Library.
+
+### 📲 6. Connectivity & Companion Ecosystem
 * **Full Android Auto Support:** Fully compliant Android Auto integration leveraging Media3's robust `MediaLibraryService` for safe, simplified driving interfaces.
 * **Chromecast Integration:** Cast local files and streaming media seamlessly to smart TVs, Chromecast dongles, and Nest speakers.
 * **Wear OS Companion App:** High-performance Wear OS client that supports independent watch playback, queue transfers, local offline watch caching, and remote control of your phone's player.
 * **Audiophile Statistics Hub:** Tracks listening history, daily playing times, favorite genres, most-played artists, and scrobbles natively to **Last.fm** and **ListenBrainz**.
+
+### ⚡ 7. Performance & Compatibility Optimizations
+* **Explore Screen Lazy Loading:** Phased rendering that loads core elements (Home feeds, Charts, New Releases) instantly (<1s) and defers heavy background queries (library details, candidate artist updates) to asynchronous concurrent jobs.
+* **MIUI/HyperOS Lockscreen Art Fix:** Dedicated custom `SharedArtworkContentProvider` implementation to bypass lockscreen background restrictions on Xiaomi/Redmi devices.
+* **Database & Memory Adjustments:** Synchronized thread-safe queries, optimized param counts, and custom R8/ProGuard keep rules to prevent Gson ClassCastExceptions on cached release builds.
+
 
 ---
 
