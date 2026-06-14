@@ -194,8 +194,7 @@ fun PlaylistContainer(
                     isAddingToPlaylist = true,
                     filteredPlaylists = filteredPlaylists,
                     selectedPlaylists = selectedPlaylists,
-                    currentSortOption = currentSortOption,
-                    fallbackImageUri = playlistUiState.mostPlayedRecentSongImage
+                    currentSortOption = currentSortOption
                 )
             } else {
                 val playlistPullToRefreshState = rememberPullToRefreshState()
@@ -221,8 +220,7 @@ fun PlaylistContainer(
                         isSelectionMode = isSelectionMode,
                         selectedPlaylistIds = selectedPlaylistIds,
                         onPlaylistLongPress = onPlaylistLongPress,
-                        onPlaylistSelectionToggle = onPlaylistSelectionToggle,
-                        fallbackImageUri = playlistUiState.mostPlayedRecentSongImage
+                        onPlaylistSelectionToggle = onPlaylistSelectionToggle
                     )
                 }
             }
@@ -258,8 +256,7 @@ fun PlaylistItems(
     isSelectionMode: Boolean = false,
     selectedPlaylistIds: Set<String> = emptySet(),
     onPlaylistLongPress: (Playlist) -> Unit = {},
-    onPlaylistSelectionToggle: (Playlist) -> Unit = {},
-    fallbackImageUri: String? = null
+    onPlaylistSelectionToggle: (Playlist) -> Unit = {}
 ) {
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -335,8 +332,7 @@ fun PlaylistItems(
                     isSelected = selectedPlaylistIds.contains(playlist.id),
                     selectionIndex = selectionIndex,
                     onLongPress = { onPlaylistLongPress(playlist) },
-                    onPlaylistSelectionToggle = { onPlaylistSelectionToggle(playlist) },
-                    fallbackImageUri = fallbackImageUri
+                    onPlaylistSelectionToggle = { onPlaylistSelectionToggle(playlist) }
                 )
             }
         }
@@ -368,8 +364,7 @@ fun PlaylistItem(
     isSelected: Boolean = false,
     selectionIndex: Int = -1,
     onLongPress: () -> Unit = {},
-    onPlaylistSelectionToggle: () -> Unit = {},
-    fallbackImageUri: String? = null
+    onPlaylistSelectionToggle: () -> Unit = {}
 ) {
     val playlistViewModel: PlaylistViewModel = hiltViewModel()
     val playlistPreviewSongIds = remember(playlist.songIds) {
@@ -455,8 +450,7 @@ fun PlaylistItem(
             PlaylistCover(
                 playlist = playlist,
                 playlistSongs = playlistSongs ?: emptyList(),
-                size = 48.dp,
-                fallbackImageUri = fallbackImageUri
+                size = 48.dp
             )
 
             Spacer(modifier = Modifier.width(16.dp))

@@ -77,9 +77,7 @@ data class PlaylistUiState(
 
     // AI Generation State
     val isAiGenerating: Boolean = false,
-    val aiGenerationError: String? = null,
-
-    val mostPlayedRecentSongImage: String? = null
+    val aiGenerationError: String? = null
 )
 
 sealed class PlaylistSongsOrderMode {
@@ -106,7 +104,6 @@ class PlaylistViewModel @Inject constructor(
     val m3uManager: M3uManager,
     private val musicDao: MusicDao,
     private val datastoreRepository: DatastoreRepository,
-    private val engagementDao: com.unshoo.pixelmusic.data.database.EngagementDao,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -151,7 +148,6 @@ class PlaylistViewModel @Inject constructor(
         observeTelegramCloudPlaylistVisibility()
         observeTelegramTopicDisplayMode()
         observePlaylistOrderModes()
-        loadMostPlayedRecentSongImage()
     }
 
     private fun observePlaylistOrderModes() {
@@ -212,24 +208,6 @@ class PlaylistViewModel @Inject constructor(
         _uiState.update { it.copy(telegramTopicDisplayMode = mode) }
         viewModelScope.launch {
             playlistPreferencesRepository.setTelegramTopicDisplayMode(mode)
-        }
-    }
-
-    private fun loadMostPlayedRecentSongImage() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val recentEngagements = engagementDao.getRecentlyPlayedSongs(30)
-                val topSongId = if (recentEngagements.isNotEmpty()) {
-                    recentEngagements.maxByOrNull { it.playCount }?.songId
-                } else {
-                    engagementDao.getTopPlayedSongs(1).firstOrNull()?.songId
-                }
-                val song = topSongId?.let { musicRepository.getSongsByIdsOnce(listOf(it)).firstOrNull() }
-                val artUri = song?.albumArtUriString?.takeIf { it.isNotBlank() }
-                _uiState.update { it.copy(mostPlayedRecentSongImage = artUri) }
-            } catch (e: Exception) {
-                Log.e("PlaylistVM", "Error loading most played/recent song image", e)
-            }
         }
     }
 
