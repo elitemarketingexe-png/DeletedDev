@@ -167,6 +167,14 @@
 -dontwarn io.ktor.**
 -dontwarn kotlinx.coroutines.**
 -dontwarn io.netty.**
+# Ktor client/server plugins can be loaded through generated/plugin metadata in release.
+# Keep them to avoid NoClassDefFoundError in optimized builds.
+-keep class io.ktor.client.** { *; }
+-keep class io.ktor.http.** { *; }
+-keep class io.ktor.util.** { *; }
+-keep class io.ktor.utils.io.** { *; }
+-keep class io.ktor.serialization.** { *; }
+-keep class io.ktor.server.** { *; }
 
 # Ensure internal server can start
 -keep class com.unshoo.pixelmusic.data.telegram.TelegramStreamProxy { *; }

@@ -2054,6 +2054,12 @@ constructor(
         }
     }
 
+    suspend fun setSubscribedArtistIds(ids: Set<String>) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SUBSCRIBED_ARTIST_IDS] = ids
+        }
+    }
+
     val contentLanguageFlow: Flow<String> =
         dataStore.data.map { preferences ->
             preferences[PreferencesKeys.CONTENT_LANGUAGE] ?: "en"

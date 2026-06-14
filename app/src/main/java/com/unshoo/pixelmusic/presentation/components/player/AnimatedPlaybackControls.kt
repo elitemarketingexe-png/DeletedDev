@@ -75,6 +75,9 @@ fun AnimatedPlaybackControls(
     val isPlaying = isPlayingProvider()
     var lastClicked by remember { mutableStateOf<PlaybackButtonType?>(null) }
     val latestIsPlayingProvider by rememberUpdatedState(newValue = isPlayingProvider)
+    val latestOnPrevious by rememberUpdatedState(newValue = onPrevious)
+    val latestOnPlayPause by rememberUpdatedState(newValue = onPlayPause)
+    val latestOnNext by rememberUpdatedState(newValue = onNext)
     val latestLastClicked by rememberUpdatedState(newValue = lastClicked)
     val isPlayPauseLocked =
         lastClicked == PlaybackButtonType.NEXT || lastClicked == PlaybackButtonType.PREVIOUS
@@ -142,7 +145,8 @@ fun AnimatedPlaybackControls(
                     .background(colorPreviousButton)
                     .clickable {
                         lastClicked = PlaybackButtonType.PREVIOUS
-                        onPrevious()
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        latestOnPrevious()
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -189,7 +193,7 @@ fun AnimatedPlaybackControls(
                     .clickable {
                         lastClicked = PlaybackButtonType.PLAY_PAUSE
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onPlayPause()
+                        latestOnPlayPause()
                     },
                 contentAlignment = Alignment.Center
             ) {
@@ -213,7 +217,8 @@ fun AnimatedPlaybackControls(
                     .background(colorNextButton)
                     .clickable {
                         lastClicked = PlaybackButtonType.NEXT
-                        onNext()
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        latestOnNext()
                     },
                 contentAlignment = Alignment.Center
             ) {

@@ -177,7 +177,7 @@ class SyncManager @Inject constructor(
 
             Log.i(TAG, "Startup sync requested - Scheduling Incremental Sync")
             enqueueSyncWork(
-                request = SyncWorker.incrementalSyncWork(),
+                request = SyncWorker.startUpSyncWork(),
                 policy = ExistingWorkPolicy.KEEP,
                 notifyObserver = false
             )

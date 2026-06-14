@@ -1,5 +1,6 @@
 package com.unshoo.pixelmusic.data.worker
 
+import android.app.ActivityManager
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
@@ -68,6 +69,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import timber.log.Timber
 
 enum class SyncMode {
@@ -92,6 +94,8 @@ constructor(
 ) : CoroutineWorker(appContext, workerParams) {
 
     private val contentResolver: ContentResolver = appContext.contentResolver
+    private val isLowRamDevice: Boolean =
+        (appContext.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.isLowRamDevice == true
     private var minSongDurationMs: Int = 10000
     private var minTracksPerAlbum: Int = 1
 
@@ -103,6 +107,20 @@ constructor(
                             inputData.getString(INPUT_SYNC_MODE) ?: SyncMode.INCREMENTAL.name
                     val syncMode = SyncMode.valueOf(syncModeName)
                     val forceMetadata = inputData.getBoolean(INPUT_FORCE_METADATA, false)
+                    var lastProgressUpdateAtMs = 0L
+                    suspend fun reportProgressThrottled(current: Int, total: Int, phaseOrdinal: Int) {
+                        val now = System.currentTimeMillis()
+                        val isTerminal = total > 0 && current >= total
+                        if (!isTerminal && now - lastProgressUpdateAtMs < 350L) return
+                        lastProgressUpdateAtMs = now
+                        setProgress(
+                            workDataOf(
+                                PROGRESS_CURRENT to current,
+                                PROGRESS_TOTAL to total,
+                                PROGRESS_PHASE to phaseOrdinal
+                            )
+                        )
+                    }
 
                     Timber.tag(TAG)
                         .i("Starting MediaStore synchronization (Mode: $syncMode, ForceMetadata: $forceMetadata)...")
@@ -208,8 +226,8 @@ constructor(
                     Timber.tag(TAG)
                         .i("Fetching music from MediaStore (since: $fetchTimestamp seconds)...")
 
-                    // Update every 50 songs or ~5% of library
-                    val progressBatchSize = 50
+                    // Larger progress batches reduce observer/UI invalidations while browsing during sync.
+                    val progressBatchSize = if (isLowRamDevice) 150 else 100
 
                     val songsToInsert =
                             fetchMusicFromMediaStore(
@@ -219,13 +237,7 @@ constructor(
                                     syncMode == SyncMode.REBUILD,
                                     progressBatchSize
                             ) { current, total, phaseOrdinal ->
-                                setProgress(
-                                        workDataOf(
-                                                PROGRESS_CURRENT to current,
-                                                PROGRESS_TOTAL to total,
-                                                PROGRESS_PHASE to phaseOrdinal
-                                        )
-                                )
+                                reportProgressThrottled(current, total, phaseOrdinal)
                             }
 
                     Timber.tag(TAG)
@@ -354,16 +366,13 @@ constructor(
                                     lyricsRepository.scanAndAssignLocalLrcFiles(batchSongs) {
                                             current,
                                             total ->
-                                        // Progress within the current batch
+                                        // Progress within the current batch. Throttle to avoid invalidating
+                                        // observers/UI on every file while the user is browsing the app.
                                         val overallCurrent = totalScannedCount + current
-                                        setProgress(
-                                                workDataOf(
-                                                        PROGRESS_CURRENT to overallCurrent,
-                                                        PROGRESS_TOTAL to totalToScan,
-                                                        PROGRESS_PHASE to
-                                                                SyncProgress.SyncPhase.SCANNING_LRC
-                                                                        .ordinal
-                                                )
+                                        reportProgressThrottled(
+                                            overallCurrent,
+                                            totalToScan,
+                                            SyncProgress.SyncPhase.SCANNING_LRC.ordinal
                                         )
                                     }
                             totalScannedCount += idBatch.size
@@ -922,13 +931,13 @@ constructor(
         // Phase 3: Parallel processing of songs with metadata merging
         onProgress(0, totalCount, SyncProgress.SyncPhase.PROCESSING_FILES.ordinal)
         val processedCount = AtomicInteger(0)
-        val concurrencyLimit = 4 // Reduced concurrency to save memory
+        val concurrencyLimit = if (isLowRamDevice) 1 else 2
         val semaphore = Semaphore(concurrencyLimit)
 
         // Process batches sequentially so each batch's existingMap can be GC'd before the next
         // batch is loaded. The semaphore still limits concurrency within each batch.
         val songs = mutableListOf<SongEntity>()
-        for (batch in songsToProcess.chunked(200)) {
+        for (batch in songsToProcess.chunked(if (isLowRamDevice) 80 else 120)) {
             val ids = batch.map { it.id }
             val existingMap = if (isRebuild) emptyMap() else musicDao.getSongsByIdsListSimple(ids).associateBy { it.id }
             val batchResults = coroutineScope {
@@ -941,7 +950,9 @@ constructor(
                                     raw = raw,
                                     genreMap = genreMap,
                                     deepScan = deepScan,
-                                    forceAlbumArtRefresh = deepScan || localSong != null
+                                    // Do not force refresh cached art for every changed existing track.
+                                    // Embedded artwork extraction can decode huge images and makes sync jank/OOM-prone.
+                                    forceAlbumArtRefresh = deepScan
                                 )
 
                             val song = if (localSong != null) {
@@ -976,6 +987,8 @@ constructor(
                 }.awaitAll()
             }
             songs.addAll(batchResults)
+            // Give Room, UI and playback coroutines a chance to run between batches on midrange devices.
+            yield()
         }
 
         Trace.endSection()
@@ -1137,8 +1150,9 @@ constructor(
                     setOf("mp3", "flac", "m4a", "wav", "ogg", "opus", "aac", "wma", "aiff")
             val newFilesToScan = linkedSetOf<String>()
 
+            var walkedFileCount = 0
             scanRoots.forEach { root ->
-                root.walkTopDown()
+                val candidates = root.walkTopDown()
                     .onEnter { dir ->
                         val name = dir.name
                         if (dir.isHidden || name.startsWith(".")) return@onEnter false
@@ -1146,7 +1160,7 @@ constructor(
                         if (directoryResolver.isBlocked(path)) return@onEnter false
 
                         if (File(dir, ".nomedia").exists()) {
-                            val isAllowed = allowedSet.any { allowed -> 
+                            val isAllowed = allowedSet.any { allowed ->
                                 allowed.absolutePath == path || allowed.absolutePath.startsWith("$path/")
                             }
                             if (!isAllowed) return@onEnter false
@@ -1158,10 +1172,10 @@ constructor(
                             // Check if this specific folder is Explicitly Allowed or is a Parent of an allowed folder
                             // e.g. if Allowed is "Android/media", we MUST enter "Android".
                             // e.g. if Allowed is "Android" (root), we MUST enter "Android".
-                            val isAllowed = allowedSet.any { allowed -> 
+                            val isAllowed = allowedSet.any { allowed ->
                                 allowed.absolutePath == path || allowed.absolutePath.startsWith("$path/")
                             }
-                            
+
                             if (!isAllowed) {
                                 // Apply strict skipping for Android/data and Android/obb if not allowed
                                 val parent = dir.parentFile
@@ -1173,7 +1187,12 @@ constructor(
                     }
                     .filter { it.isFile && it.extension.lowercase() in audioExtensions }
                     .filter { it.absolutePath !in mediaStorePaths } // Only new files
-                    .forEach { newFilesToScan.add(it.absolutePath) }
+
+                for (file in candidates) {
+                    newFilesToScan.add(file.absolutePath)
+                    walkedFileCount++
+                    if (walkedFileCount % 256 == 0) yield()
+                }
             }
 
             if (newFilesToScan.isEmpty()) {
@@ -1376,6 +1395,9 @@ constructor(
                                         INPUT_SYNC_MODE to SyncMode.INCREMENTAL.name
                                 )
                         )
+                        // Do not compete with cold-start composition, image loading and player restore.
+                        // Manual refresh still uses incrementalSyncWork() and starts immediately.
+                        .setInitialDelay(20, TimeUnit.SECONDS)
                         .build()
 
         fun incrementalSyncWork() =
@@ -1646,6 +1668,7 @@ constructor(
             try {
                 val remotePlaylists = YoutubePlaylistDataSource().retrieveAll(settings)
                 remotePlaylists.forEach { playlistInfo ->
+                    yield()
                     val existingPlaylist = appDatabase.playlistRepository().getPlaylistById(playlistInfo.id)
                     val existingSongCount = existingPlaylist?.info?.lastSyncSongCount ?: 0
 
@@ -1664,6 +1687,7 @@ constructor(
                         Log.d(TAG, "Skipping playlist '${playlistInfo.title}' — no changes (${existingSongCount} songs)")
                     }
                     // NOTE: Auto-download removed. Users download via playlist options menu (Component 24).
+                    kotlinx.coroutines.delay(50L)
                 }
                 remotePlaylistsSuccess = true
             } catch (e: Exception) {
@@ -1994,9 +2018,9 @@ constructor(
                     if (localArtistIdsToSubscribe.isNotEmpty()) {
                         val currentSubscribed = userPreferencesRepository.subscribedArtistIdsFlow.first()
                         val newSet = currentSubscribed + localArtistIdsToSubscribe
-                        newSet.forEach { id ->
-                            userPreferencesRepository.subscribeArtist(id, true)
-                        }
+                        // Single DataStore transaction instead of one edit per artist. This avoids
+                        // a burst of preference emissions and UI invalidations during online sync.
+                        userPreferencesRepository.setSubscribedArtistIds(newSet)
                     }
                 }
             } catch (e: Exception) {

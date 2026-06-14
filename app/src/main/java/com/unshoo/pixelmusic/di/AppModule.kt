@@ -273,11 +273,14 @@ object AppModule {
 
         return ImageLoader.Builder(context)
             .okHttpClient(okHttpClient)
-            .dispatcher(Dispatchers.Default) // Use CPU-bound dispatcher for decoding
-            .allowHardware(true) // Re-enable hardware bitmaps for better performance
+            .dispatcher(Dispatchers.Default.limitedParallelism(2)) // Bound concurrent decodes to prevent OOM on large libraries
+            .allowHardware(true) // Hardware bitmaps reduce Java heap pressure for UI album art
             .memoryCache {
                 MemoryCache.Builder(context)
-                    .maxSizePercent(0.20) // Use 20% of app memory for image cache
+                    // 20% of a 256 MB heap leaves too little headroom when ExoPlayer,
+                    // widgets, Compose and large queues are active. Keep the cache lean;
+                    // disk cache still prevents network/file re-fetches.
+                    .maxSizePercent(0.08)
                     .build()
             }
             .diskCache {

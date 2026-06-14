@@ -86,15 +86,13 @@ internal class MiniPlayerDismissGestureHandler(
             }
 
             MiniDismissDragPhase.FREE_DRAG -> {
+                // During a pointer drag we must follow the finger immediately. Starting a new
+                // spring animation for every move event can build up cancellation work on the
+                // main thread and, after long sessions, makes the mini-player feel stuck or
+                // unresponsive. Snap while the finger is down; reserve springs/tweens for release.
                 offsetJob?.cancel()
                 offsetJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                    offsetAnimatable.animateTo(
-                        targetValue = accumulatedDragX,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessHigh
-                        )
-                    )
+                    offsetAnimatable.snapTo(accumulatedDragX)
                 }
             }
 
@@ -105,7 +103,7 @@ internal class MiniPlayerDismissGestureHandler(
     fun onDragEnd() {
         dragPhase = MiniDismissDragPhase.IDLE
         offsetJob?.cancel()
-        val dismissThreshold = screenWidthPx * 0.4f
+        val dismissThreshold = (screenWidthPx * 0.4f).coerceAtLeast(1f)
         if (abs(accumulatedDragX) > dismissThreshold) {
             onDismissStarted()
             val targetDismissOffset = if (accumulatedDragX < 0) -screenWidthPx else screenWidthPx
@@ -130,6 +128,21 @@ internal class MiniPlayerDismissGestureHandler(
                     )
                 )
             }
+        }
+    }
+
+    fun onDragCancel() {
+        dragPhase = MiniDismissDragPhase.IDLE
+        accumulatedDragX = 0f
+        offsetJob?.cancel()
+        offsetJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            offsetAnimatable.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            )
         }
     }
 }
@@ -171,7 +184,8 @@ internal fun Modifier.miniPlayerDismissHorizontalGesture(
                 change.consume()
                 handler.onHorizontalDrag(dragAmount)
             },
-            onDragEnd = { handler.onDragEnd() }
+            onDragEnd = { handler.onDragEnd() },
+            onDragCancel = { handler.onDragCancel() }
         )
     }
 }

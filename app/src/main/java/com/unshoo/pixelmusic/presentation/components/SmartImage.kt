@@ -116,7 +116,9 @@ fun SmartImage(
             val clampedH = if (heightPx > maxSize) maxSize else heightPx
             Size(clampedW, clampedH)
         } else {
-            coil.size.Size.ORIGINAL
+            // Never request unbounded ORIGINAL in scrolling UI. Huge embedded/remote artwork
+            // can decode multi-megabyte bitmaps and exhaust the 256 MB heap after long use.
+            SafeOriginalAlbumArtSize
         }
     }
 

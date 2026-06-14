@@ -316,15 +316,11 @@ private fun RoundedCarousel(
 
         //val clipShape = rememberRoundedClipShape(carouselItemInfo, itemCornerRadius)
 
-        val animatedAlpha by animateFloatAsState(
-            targetValue = if (carouselStyle == CarouselStyle.ONE_PEEK && page > state.pagerState.currentPage + 1) 0f else 1f,
-            animationSpec = tween(durationMillis = 200),
-            label = "CarouselItemAlpha"
-        )
+        val itemAlpha = if (carouselStyle == CarouselStyle.ONE_PEEK && page > state.pagerState.currentPage + 1) 0f else 1f
 
         Box(
             modifier = Modifier
-                .graphicsLayer { alpha = animatedAlpha }
+                .graphicsLayer { alpha = itemAlpha }
                 .carouselItem(
                     index = page,
                     state = state,

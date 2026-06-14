@@ -50,6 +50,7 @@ import androidx.navigation.NavController
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import coil.imageLoader
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Size
 import com.unshoo.pixelmusic.R
@@ -164,7 +165,11 @@ fun LibraryAlbumsTab(
                                 album?.albumArtUriString?.let { uri ->
                                     val request = ImageRequest.Builder(context)
                                         .data(uri)
-                                        .size(Size(256, 256))
+                                        .size(Size(160, 160))
+                                        // Prefetch should not evict visible full-player/list artwork from memory.
+                                        // Disk cache/network warmup is enough; visible cells request memory cache normally.
+                                        .memoryCachePolicy(CachePolicy.DISABLED)
+                                        .diskCachePolicy(CachePolicy.ENABLED)
                                         .build()
                                     imageLoader.enqueue(request)
                                 }
@@ -193,7 +198,11 @@ fun LibraryAlbumsTab(
                                 album?.albumArtUriString?.let { uri ->
                                     val request = ImageRequest.Builder(context)
                                         .data(uri)
-                                        .size(Size(256, 256))
+                                        .size(Size(160, 160))
+                                        // Prefetch should not evict visible full-player/list artwork from memory.
+                                        // Disk cache/network warmup is enough; visible cells request memory cache normally.
+                                        .memoryCachePolicy(CachePolicy.DISABLED)
+                                        .diskCachePolicy(CachePolicy.ENABLED)
                                         .build()
                                     imageLoader.enqueue(request)
                                 }

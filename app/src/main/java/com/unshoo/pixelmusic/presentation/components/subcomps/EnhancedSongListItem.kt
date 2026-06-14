@@ -51,14 +51,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp as lerpDp
 import coil.size.Size
 import com.unshoo.pixelmusic.data.model.Song
-import com.unshoo.pixelmusic.presentation.components.AutoScrollingTextOnDemand
 import com.unshoo.pixelmusic.presentation.components.ShimmerBox
 import com.unshoo.pixelmusic.R
 import com.unshoo.pixelmusic.presentation.components.SmartImage
-import com.unshoo.pixelmusic.presentation.components.SmartImageEntryPoint
-import dagger.hilt.android.EntryPointAccessors
-import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.platform.LocalContext
+import com.unshoo.pixelmusic.presentation.components.SmartImageCache
 import androidx.compose.ui.res.stringResource
 
 @Immutable
@@ -107,13 +103,10 @@ fun EnhancedSongListItem(
     onMoreOptionsClick: (Song) -> Unit,
     onClick: () -> Unit
 ) {
-    val context = LocalContext.current
-    val appContext = context.applicationContext
-    val entryPoint = remember(appContext) {
-        EntryPointAccessors.fromApplication(appContext, SmartImageEntryPoint::class.java)
-    }
-    val userPreferencesRepository = entryPoint.userPreferencesRepository()
-    val performanceModeEnabled by userPreferencesRepository.performanceModeEnabledFlow.collectAsState(initial = false)
+    // Avoid creating a DataStore collector per visible song row. SmartImageCache is a single
+    // app-wide state holder initialized by SmartImage; using it here removes dozens of per-item
+    // Flow subscriptions from large lists.
+    val performanceModeEnabled = SmartImageCache.performanceModeEnabled
 
     val albumArtTargetSizePx = with(LocalDensity.current) { albumArtSize.roundToPx() }
     val isHighlighted = isCurrentSong && !isLoading
@@ -364,24 +357,16 @@ fun EnhancedSongListItem(
                     modifier = Modifier
                         .weight(1f)
                 ) {
-                    if (isHighlighted && !isSelectionMode) {
-                        AutoScrollingTextOnDemand(
-                            text = song.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            gradientEdgeColor = containerColor,
-                            expansionFractionProvider = { 1f },
-                        )
-
-                    } else {
-                        Text(
-                            text = song.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            color = contentColor,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    // Keep list rows cheap: marquee/subcompose per current item can jank scrolling
+                    // when playback changes while the user is browsing. Full player still uses marquee.
+                    Text(
+                        text = song.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        color = contentColor,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = song.displayArtist,

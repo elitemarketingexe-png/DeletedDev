@@ -53,7 +53,9 @@ class SearchStateHolder @Inject constructor(
     private val musicRepository: MusicRepository
 ) {
     companion object {
-        const val SEARCH_DEBOUNCE_MS = 80L
+        // 80ms fired online search while users were still typing and could launch 3 network
+        // requests for ALL filter. 220ms feels instant but removes most wasted work/jank.
+        const val SEARCH_DEBOUNCE_MS = 220L
         const val SEARCH_CACHE_SIZE = 100
         val albumIdMap = java.util.concurrent.ConcurrentHashMap<Long, String>()
     }
@@ -154,6 +156,8 @@ class SearchStateHolder @Inject constructor(
                             // Pre-fetch top song stream URL
                             scope?.launch(Dispatchers.IO) {
                                 try {
+                                    kotlinx.coroutines.delay(800L)
+                                    if (request.requestId != latestSearchRequestId.get()) return@launch
                                     val topSong = immutable.filterIsInstance<SearchResultItem.SongItem>().firstOrNull()
                                     if (topSong?.song?.youtubeId != null) {
                                         val ytSong = com.unshoo.pixelmusic.data.model.youtube.Song(

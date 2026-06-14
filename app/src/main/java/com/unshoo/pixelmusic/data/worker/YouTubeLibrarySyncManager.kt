@@ -10,7 +10,9 @@ import com.unshoo.pixelmusic.data.remote.youtube.toNativeSong
 import com.unshoo.pixelmusic.data.repository.MusicRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import timber.log.Timber
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
 import unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem
@@ -76,9 +78,12 @@ class YouTubeLibrarySyncManager @Inject constructor(
         // Fetch continuation pages (YouTube returns them in batches)
         var continuation = firstPage.continuation
         while (continuation != null) {
+            yield()
             val next = YouTube.libraryContinuation(continuation).getOrNull() ?: break
             allArtistItems += next.items.filterIsInstance<ArtistItem>()
             continuation = next.continuation
+            // Small cooperative pause keeps online sync from monopolizing CPU/network on midrange devices.
+            delay(40L)
         }
 
         if (allArtistItems.isEmpty()) {
@@ -121,9 +126,12 @@ class YouTubeLibrarySyncManager @Inject constructor(
         // Fetch all continuation pages (each has ~100 songs)
         var continuation = firstPage.songsContinuation
         while (continuation != null) {
+            yield()
             val next = YouTube.playlistContinuation(continuation).getOrNull() ?: break
             allSongItems += next.songs
             continuation = next.continuation
+            // Avoid bursts of network parsing + Room invalidations while user is browsing.
+            delay(40L)
         }
 
         if (allSongItems.isEmpty()) {
@@ -150,7 +158,10 @@ class YouTubeLibrarySyncManager @Inject constructor(
         }
 
         if (favoriteEntities.isNotEmpty()) {
-            favoritesDao.insertAll(favoriteEntities)
+            favoriteEntities.chunked(500).forEach { chunk ->
+                favoritesDao.insertAll(chunk)
+                yield()
+            }
             Timber.tag(TAG).d("Marked ${favoriteEntities.size} songs as liked in DB")
         }
     }

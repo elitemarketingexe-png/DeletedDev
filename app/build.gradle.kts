@@ -306,7 +306,9 @@ dependencies {
 
     // UI Utilities & Extra
     implementation(libs.timber)
-    implementation(libs.generativeai)
+    // Gemini uses our lightweight REST client. Avoid the deprecated official SDK because
+    // it depends on Ktor 2.x and crashes when the app's Ktor 3.x stack is present.
+    // implementation(libs.generativeai)
     implementation(libs.smooth.corner.rect.android.compose)
     implementation(libs.reorderables)
     implementation(libs.codeview)

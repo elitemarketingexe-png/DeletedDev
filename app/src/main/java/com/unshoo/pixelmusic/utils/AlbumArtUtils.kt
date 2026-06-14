@@ -2,6 +2,8 @@ package com.unshoo.pixelmusic.utils
 
 import android.content.ContentUris
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
@@ -11,12 +13,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 
 object AlbumArtUtils {
-    private const val CACHE_VERSION_SUFFIX = "_v3"
+    private const val CACHE_VERSION_SUFFIX = "_v4"
+    private const val MAX_CACHED_ART_DIMENSION = 2048
+    private const val MAX_RAW_ART_BYTES_TO_KEEP = 512 * 1024
 
     // P2-1: Dedicated app-level scope to replace GlobalScope.
     // SupervisorJob ensures child failures don't cancel sibling coroutines.
@@ -322,9 +327,10 @@ object AlbumArtUtils {
 
     private fun cacheAlbumArtBytes(appContext: Context, bytes: ByteArray, songId: Long): File {
         val file = getCachedAlbumArtFile(appContext, songId)
+        val safeBytes = downsampleArtworkBytes(bytes)
 
         file.outputStream().use { outputStream ->
-            outputStream.write(bytes)
+            outputStream.write(safeBytes)
         }
         noArtMarkerFile(appContext, songId).delete()
 
@@ -334,6 +340,36 @@ object AlbumArtUtils {
         }
 
         return file
+    }
+
+    private fun downsampleArtworkBytes(bytes: ByteArray): ByteArray {
+        if (bytes.size <= MAX_RAW_ART_BYTES_TO_KEEP) return bytes
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val width = bounds.outWidth
+        val height = bounds.outHeight
+        if (width <= 0 || height <= 0) return bytes
+        if (width <= MAX_CACHED_ART_DIMENSION && height <= MAX_CACHED_ART_DIMENSION) return bytes
+
+        var sampleSize = 1
+        while ((width / sampleSize) > MAX_CACHED_ART_DIMENSION || (height / sampleSize) > MAX_CACHED_ART_DIMENSION) {
+            sampleSize *= 2
+        }
+
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions) ?: return bytes
+        return try {
+            ByteArrayOutputStream().use { output ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 88, output)
+                output.toByteArray().takeIf { it.isNotEmpty() && it.size < bytes.size } ?: bytes
+            }
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     private fun noArtMarkerFile(appContext: Context, songId: Long): File {

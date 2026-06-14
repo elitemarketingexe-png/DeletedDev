@@ -43,6 +43,7 @@ object CrashHandler : Thread.UncaughtExceptionHandler {
     private const val KEY_TIMESTAMP = "crash_timestamp"
     private const val KEY_EXCEPTION_MESSAGE = "crash_exception_message"
     private const val KEY_STACK_TRACE = "crash_stack_trace"
+    private const val MAX_STACK_TRACE_CHARS = 16_000
 
     private lateinit var appContext: Context
     private var defaultHandler: Thread.UncaughtExceptionHandler? = null
@@ -73,7 +74,14 @@ object CrashHandler : Thread.UncaughtExceptionHandler {
 
     private fun saveCrashLog(throwable: Throwable) {
         val timestamp = System.currentTimeMillis()
-        val stackTrace = getStackTraceString(throwable)
+        val isOom = throwable is OutOfMemoryError
+        val stackTrace = if (isOom) {
+            // Avoid StringWriter/PrintWriter expansion during an OOM. A full stack trace can
+            // require many allocations and may recursively fail before the original crash is saved.
+            buildCompactStackTrace(throwable)
+        } else {
+            getStackTraceString(throwable).take(MAX_STACK_TRACE_CHARS)
+        }
         val exceptionMessage = throwable.message ?: throwable.javaClass.simpleName
 
         // Use commit() instead of apply() to ensure data is written synchronously
@@ -92,6 +100,16 @@ object CrashHandler : Thread.UncaughtExceptionHandler {
         val pw = PrintWriter(sw)
         throwable.printStackTrace(pw)
         return sw.toString()
+    }
+
+    private fun buildCompactStackTrace(throwable: Throwable): String {
+        val builder = StringBuilder(1024)
+        builder.append(throwable.javaClass.name)
+        throwable.message?.let { builder.append(": ").append(it) }
+        throwable.stackTrace.take(24).forEach { element ->
+            builder.append('\n').append("    at ").append(element)
+        }
+        return builder.toString()
     }
 
     /**

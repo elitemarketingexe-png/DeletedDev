@@ -21,6 +21,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.first
 
 import com.unshoo.pixelmusic.data.preferences.AlbumArtQuality
+import kotlin.math.abs
 
 // ====== TIPOS/STATE DEL CARRUSEL (wrapper para mantener compatibilidad) ======
 
@@ -32,6 +33,8 @@ fun rememberRoundedParallaxCarouselState(
 ): CarouselState = rememberCarouselState(initialItem = initialPage, itemCount = pageCount)
 
 // ====== TU SECCIÓN: ACOPLADA AL NUEVO API ======
+
+private const val MAX_ANIMATED_CAROUSEL_JUMP = 3
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,144 +53,157 @@ fun AlbumCarouselSection(
 ) {
     if (queue.isEmpty()) return
 
-    key(queue) {
-        // Mantiene compatibilidad con tu llamada actual
-        val initialIndex = remember(currentSong?.id, currentMediaItemIndex, queue) {
-            resolveCurrentQueueIndex(
-                currentSong = currentSong,
-                currentMediaItemIndex = currentMediaItemIndex,
-                queue = queue
-            )
-        }
-
-        val carouselState = rememberRoundedParallaxCarouselState(
-            initialPage = initialIndex,
-            pageCount = { queue.size }
+    // Keep the carousel state stable when queue contents refresh. Keying the whole
+    // subtree by the queue object recreates pager state and can leave horizontal
+    // swipes feeling dead after large library/queue updates.
+    // Mantiene compatibilidad con tu llamada actual
+    val initialIndex = remember(currentSong?.id, currentMediaItemIndex, queue) {
+        resolveCurrentQueueIndex(
+            currentSong = currentSong,
+            currentMediaItemIndex = currentMediaItemIndex,
+            queue = queue
         )
+    }
 
-        // Calculate target size based on quality
-        val targetSize = remember(albumArtQuality) {
-            if (albumArtQuality.maxSize == 0) SafeOriginalAlbumArtSize
-            else Size(albumArtQuality.maxSize, albumArtQuality.maxSize)
-        }
+    val carouselState = rememberRoundedParallaxCarouselState(
+        initialPage = initialIndex,
+        pageCount = { queue.size }
+    )
 
-        // Player -> Carousel
-        val currentSongIndex = remember(currentSong?.id, currentMediaItemIndex, queue) {
-            resolveCurrentQueueIndex(
-                currentSong = currentSong,
-                currentMediaItemIndex = currentMediaItemIndex,
-                queue = queue
-            )
-        }
-        val requestedTargetIndex = remember(requestedScrollIndex, queue) {
-            requestedScrollIndex?.takeIf { it in queue.indices }
-        }
-        val effectiveTargetIndex = requestedTargetIndex ?: currentSongIndex
-        val carouselItemKeys = remember(queue) {
-            buildQueueOccurrenceKeys(queue)
-        }
+    // Calculate target size based on quality
+    val targetSize = remember(albumArtQuality) {
+        if (albumArtQuality.maxSize == 0) SafeOriginalAlbumArtSize
+        else Size(albumArtQuality.maxSize, albumArtQuality.maxSize)
+    }
 
-        PrefetchAlbumNeighbors(
-            isActive = expansionFraction > 0.08f,
-            pagerState = carouselState.pagerState,
-            queue = queue,
-            radius = 1,
-            targetSize = targetSize,
-            anchorIndex = effectiveTargetIndex
+    // Player -> Carousel
+    val currentSongIndex = remember(currentSong?.id, currentMediaItemIndex, queue) {
+        resolveCurrentQueueIndex(
+            currentSong = currentSong,
+            currentMediaItemIndex = currentMediaItemIndex,
+            queue = queue
         )
-        var ignoreNextSettledSelectionForPage by remember { mutableStateOf<Int?>(null) }
-        var programmaticScrollInProgress by remember { mutableStateOf(false) }
-        var lastSettledSongId by remember { mutableStateOf(currentSong?.id) }
-        LaunchedEffect(effectiveTargetIndex, requestedTargetIndex, queue) {
-            snapshotFlow { carouselState.pagerState.isScrollInProgress }
-                .first { !it }
+    }
+    val requestedTargetIndex = remember(requestedScrollIndex, queue) {
+        requestedScrollIndex?.takeIf { it in queue.indices }
+    }
+    val effectiveTargetIndex = requestedTargetIndex ?: currentSongIndex
+    val carouselItemKey: (Int) -> Any = remember(queue) {
+        { index ->
+            queue.getOrNull(index)?.let { song ->
+                "queue_carousel_${song.id}_${song.albumArtUriString.orEmpty().hashCode()}_$index"
+            } ?: "queue_item_$index"
+        }
+    }
+
+    PrefetchAlbumNeighbors(
+        isActive = expansionFraction > 0.08f,
+        pagerState = carouselState.pagerState,
+        queue = queue,
+        radius = 1,
+        targetSize = targetSize,
+        anchorIndex = effectiveTargetIndex
+    )
+    var ignoreNextSettledSelectionForPage by remember { mutableStateOf<Int?>(null) }
+    var programmaticScrollInProgress by remember { mutableStateOf(false) }
+    var lastSettledSongId by remember { mutableStateOf(currentSong?.id) }
+    LaunchedEffect(effectiveTargetIndex, requestedTargetIndex, queue) {
+        snapshotFlow { carouselState.pagerState.isScrollInProgress }
+            .first { !it }
+        
+        val currentPage = carouselState.pagerState.currentPage
+        if (currentPage != effectiveTargetIndex) {
+            val isShiftOnly = currentSong?.id != null && 
+                              currentSong.id == lastSettledSongId && 
+                              requestedTargetIndex == null
             
-            val currentPage = carouselState.pagerState.currentPage
-            if (currentPage != effectiveTargetIndex) {
-                val isShiftOnly = currentSong?.id != null && 
-                                  currentSong.id == lastSettledSongId && 
-                                  requestedTargetIndex == null
-                
-                if (isShiftOnly) {
-                    // Same song moved to a new index: scroll instantly to maintain focus
-                    // and avoid showing the wrong item for the duration of an animation.
-                    carouselState.pagerState.scrollToPage(effectiveTargetIndex)
-                } else {
-                    if (requestedTargetIndex != null) {
-                        ignoreNextSettledSelectionForPage = effectiveTargetIndex
-                    }
-                    programmaticScrollInProgress = true
-                    try {
+            if (isShiftOnly) {
+                // Same song moved to a new index: scroll instantly to maintain focus
+                // and avoid showing the wrong item for the duration of an animation.
+                carouselState.pagerState.scrollToPage(effectiveTargetIndex)
+            } else {
+                if (requestedTargetIndex != null) {
+                    ignoreNextSettledSelectionForPage = effectiveTargetIndex
+                }
+                programmaticScrollInProgress = true
+                try {
+                    val jumpDistance = abs(currentPage - effectiveTargetIndex)
+                    if (jumpDistance > MAX_ANIMATED_CAROUSEL_JUMP) {
+                        // Large queues can jump hundreds/thousands of items when shuffle or an
+                        // external command changes the media item. Animating that jump can keep
+                        // Pager busy long enough that swipe-to-change appears broken, so snap.
+                        carouselState.scrollToItem(effectiveTargetIndex)
+                    } else {
                         carouselState.animateScrollToItem(effectiveTargetIndex)
-                    } finally {
-                        programmaticScrollInProgress = false
                     }
+                } finally {
+                    programmaticScrollInProgress = false
                 }
             }
-            lastSettledSongId = currentSong?.id
         }
+        lastSettledSongId = currentSong?.id
+    }
 
-        val hapticFeedback = LocalHapticFeedback.current
-        // Carousel -> Player (cuando se detiene el scroll)
-        LaunchedEffect(carouselState, currentSongIndex, queue) {
-            snapshotFlow { carouselState.pagerState.isScrollInProgress }
-                .distinctUntilChanged()
-                .filter { !it }
-                .collect {
-                    if (programmaticScrollInProgress) return@collect // Prevent settled event races during transitions
-                    val settled = carouselState.pagerState.currentPage
-                    if (ignoreNextSettledSelectionForPage == settled) {
-                        ignoreNextSettledSelectionForPage = null
-                        return@collect
-                    }
-                    if (settled != currentSongIndex) {
-                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        queue.getOrNull(settled)?.let(onSongSelected)
-                    }
+    val hapticFeedback = LocalHapticFeedback.current
+    // Carousel -> Player (cuando se detiene el scroll)
+    LaunchedEffect(carouselState, currentSongIndex, queue) {
+        snapshotFlow { carouselState.pagerState.isScrollInProgress }
+            .distinctUntilChanged()
+            .filter { !it }
+            .collect {
+                if (programmaticScrollInProgress) return@collect // Prevent settled event races during transitions
+                val settled = carouselState.pagerState.currentPage
+                if (ignoreNextSettledSelectionForPage == settled) {
+                    ignoreNextSettledSelectionForPage = null
+                    return@collect
                 }
-        }
+                if (settled != currentSongIndex) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    queue.getOrNull(settled)?.let(onSongSelected)
+                }
+            }
+    }
 
-        val corner = 18.dp//lerp(36.dp, 15.dp, expansionFraction.coerceIn(0f, 1f))
+    val corner = 18.dp//lerp(36.dp, 15.dp, expansionFraction.coerceIn(0f, 1f))
 
-        BoxWithConstraints(modifier = modifier) {
-            val availableWidth = this.maxWidth
+    BoxWithConstraints(modifier = modifier) {
+        val availableWidth = this.maxWidth
 
-            RoundedHorizontalMultiBrowseCarousel(
-                state = carouselState,
-                modifier = Modifier.fillMaxSize(), // Fill the space provided by the parent's modifier
-                itemSpacing = itemSpacing,
-                itemCornerRadius = corner,
-                suppressNoPeekSettleCorrection = requestedTargetIndex != null || programmaticScrollInProgress,
-                carouselStyle = if (carouselState.pagerState.pageCount == 1) CarouselStyle.NO_PEEK else carouselStyle, // Handle single-item case
-                carouselWidth = availableWidth, // Pass the full width for layout calculations
-                itemKey = { index -> carouselItemKeys.getOrNull(index) ?: "queue_item_$index" },
-                content = { index ->
-                    val song = queue[index]
-                    val isFocusedItem = carouselState.pagerState.currentPage == index
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .aspectRatio(1f)
-                            .clickable(
-                                enabled = isFocusedItem && song.albumId != -1L,
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { onAlbumClick(song) }
-                            )
-                    ) { // Enforce 1:1 aspect ratio for the item itself
-                        OptimizedAlbumArt(
-                            uri = song.albumArtUriString,
-                            title = song.title,
-                            modifier = Modifier.fillMaxSize(),
-                            targetSize = targetSize,
-                            placeholderModel = if (song.albumArtUriString?.startsWith("telegram_art") == true) {
-                                 "${song.albumArtUriString}?quality=thumb"
-                            } else null
+        RoundedHorizontalMultiBrowseCarousel(
+            state = carouselState,
+            modifier = Modifier.fillMaxSize(), // Fill the space provided by the parent's modifier
+            itemSpacing = itemSpacing,
+            itemCornerRadius = corner,
+            suppressNoPeekSettleCorrection = requestedTargetIndex != null || programmaticScrollInProgress,
+            carouselStyle = if (carouselState.pagerState.pageCount == 1) CarouselStyle.NO_PEEK else carouselStyle, // Handle single-item case
+            carouselWidth = availableWidth, // Pass the full width for layout calculations
+            itemKey = carouselItemKey,
+            content = { index ->
+                val song = queue[index]
+                val isFocusedItem = carouselState.pagerState.currentPage == index
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .aspectRatio(1f)
+                        .clickable(
+                            enabled = isFocusedItem && song.albumId != -1L,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { onAlbumClick(song) }
                         )
-                    }
+                ) { // Enforce 1:1 aspect ratio for the item itself
+                    OptimizedAlbumArt(
+                        uri = song.albumArtUriString,
+                        title = song.title,
+                        modifier = Modifier.fillMaxSize(),
+                        targetSize = targetSize,
+                        placeholderModel = if (song.albumArtUriString?.startsWith("telegram_art") == true) {
+                             "${song.albumArtUriString}?quality=thumb"
+                        } else null
+                    )
                 }
-            )
-        }
+            }
+        )
     }
 }
 
@@ -200,6 +216,17 @@ private fun resolveCurrentQueueIndex(
     if (currentMediaItemIndex in queue.indices && queue[currentMediaItemIndex].id == songId) {
         return currentMediaItemIndex
     }
+
+    // Most player updates move by one item. Search a small window around the media3 index
+    // before falling back to an O(n) scan, which keeps very large queues smooth.
+    if (currentMediaItemIndex in queue.indices) {
+        val from = (currentMediaItemIndex - 6).coerceAtLeast(0)
+        val to = (currentMediaItemIndex + 6).coerceAtMost(queue.lastIndex)
+        for (index in from..to) {
+            if (queue[index].id == songId) return index
+        }
+    }
+
     return queue.indexOfFirst { it.id == songId }
         .takeIf { it >= 0 }
         ?: queue.indexOf(currentSong)
@@ -207,11 +234,3 @@ private fun resolveCurrentQueueIndex(
         ?: 0
 }
 
-private fun buildQueueOccurrenceKeys(queue: ImmutableList<Song>): List<String> {
-    val occurrencesBySongId = HashMap<String, Int>()
-    return queue.mapIndexed { index, song ->
-        val occurrence = occurrencesBySongId.getOrDefault(song.id, 0)
-        occurrencesBySongId[song.id] = occurrence + 1
-        "queue_carousel_${song.id}_${occurrence}_${song.albumArtUriString.orEmpty().hashCode()}_$index"
-    }
-}

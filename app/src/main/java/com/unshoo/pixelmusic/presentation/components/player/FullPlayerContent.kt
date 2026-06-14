@@ -166,6 +166,7 @@ import java.util.Locale
 import kotlin.math.roundToLong
 import com.unshoo.pixelmusic.presentation.components.WavySliderExpressive
 import com.unshoo.pixelmusic.presentation.components.ToggleSegmentButton
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
@@ -456,7 +457,8 @@ fun FullPlayerContent(
     }
     val skipRequests = remember {
         MutableSharedFlow<SkipDirection>(
-            extraBufferCapacity = 16
+            extraBufferCapacity = 64,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
         )
     }
     val latestQueue by rememberUpdatedState(currentPlaybackQueue)

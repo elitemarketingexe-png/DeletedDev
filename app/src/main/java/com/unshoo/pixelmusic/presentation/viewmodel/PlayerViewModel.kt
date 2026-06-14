@@ -41,6 +41,7 @@ import androidx.media3.session.MediaController
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Looper
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -316,6 +317,14 @@ class PlayerViewModel @Inject constructor(
     private val sessionToken: SessionToken,
     private val mediaControllerFactory: com.unshoo.pixelmusic.data.media.MediaControllerFactory
 ) : ViewModel() {
+
+    private inline fun runOnMainImmediate(crossinline block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+        } else {
+            viewModelScope.launch(Dispatchers.Main.immediate) { block() }
+        }
+    }
 
     private val _playerUiState = MutableStateFlow(PlayerUiState())
     val playerUiState: StateFlow<PlayerUiState> = _playerUiState.asStateFlow()
@@ -3168,17 +3177,19 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun playLoadedControllerItem(controller: MediaController, targetIndex: Int) {
-        val shouldSeekToStart =
-            controller.currentMediaItemIndex != targetIndex ||
-                controller.playbackState == Player.STATE_ENDED
+        runOnMainImmediate {
+            val shouldSeekToStart =
+                controller.currentMediaItemIndex != targetIndex ||
+                    controller.playbackState == Player.STATE_ENDED
 
-        if (shouldSeekToStart) {
-            controller.seekTo(targetIndex, 0L)
+            if (shouldSeekToStart) {
+                controller.seekTo(targetIndex, 0L)
+            }
+            if (controller.playbackState == Player.STATE_IDLE && controller.mediaItemCount > 0) {
+                controller.prepare()
+            }
+            controller.play()
         }
-        if (controller.playbackState == Player.STATE_IDLE && controller.mediaItemCount > 0) {
-            controller.prepare()
-        }
-        controller.play()
     }
 
     private fun Song.requiresHydration(): Boolean {
@@ -3292,7 +3303,8 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun reorderQueueItem(fromIndex: Int, toIndex: Int) {
-        mediaController?.let { controller ->
+        runOnMainImmediate {
+            val controller = mediaController ?: return@runOnMainImmediate
             if (fromIndex >= 0 && fromIndex < controller.mediaItemCount &&
                 toIndex >= 0 && toIndex < controller.mediaItemCount) {
                 val currentIndexBeforeMove = controller.currentMediaItemIndex
@@ -3555,16 +3567,18 @@ class PlayerViewModel @Inject constructor(
             return
         }
 
-        val controller = mediaController
-        if (controller == null) {
-            pendingRepeatMode = mode
-            return
-        }
+        runOnMainImmediate {
+            val controller = mediaController
+            if (controller == null) {
+                pendingRepeatMode = mode
+                return@runOnMainImmediate
+            }
 
-        if (controller.repeatMode != mode) {
-            controller.repeatMode = mode
+            if (controller.repeatMode != mode) {
+                controller.repeatMode = mode
+            }
+            pendingRepeatMode = null
         }
-        pendingRepeatMode = null
     }
 
     private fun flushPendingRepeatMode() {
@@ -4666,14 +4680,16 @@ class PlayerViewModel @Inject constructor(
 // buildMediaMetadataForSong moved to MediaItemBuilder
 
     private fun syncShuffleStateWithSession(enabled: Boolean) {
-        val controller = mediaController ?: return
-        val args = Bundle().apply {
-            putBoolean(MusicNotificationProvider.EXTRA_SHUFFLE_ENABLED, enabled)
+        runOnMainImmediate {
+            val controller = mediaController ?: return@runOnMainImmediate
+            val args = Bundle().apply {
+                putBoolean(MusicNotificationProvider.EXTRA_SHUFFLE_ENABLED, enabled)
+            }
+            controller.sendCustomCommand(
+                SessionCommand(MusicNotificationProvider.CUSTOM_COMMAND_SET_SHUFFLE_STATE, Bundle()),
+                args
+            )
         }
-        controller.sendCustomCommand(
-            SessionCommand(MusicNotificationProvider.CUSTOM_COMMAND_SET_SHUFFLE_STATE, Bundle()),
-            args
-        )
     }
 
     fun toggleShuffle(currentSongOverride: Song? = null) {
@@ -4832,7 +4848,8 @@ class PlayerViewModel @Inject constructor(
                 saveYoutubeSongsToDb(listOf(song))
             }
         }
-        mediaController?.let { controller ->
+        runOnMainImmediate {
+            val controller = mediaController ?: return@runOnMainImmediate
             val mediaItem = buildPlaybackMediaItem(song)
             controller.addMediaItem(mediaItem)
             // Queue UI is synced via onTimelineChanged listener
@@ -4845,7 +4862,8 @@ class PlayerViewModel @Inject constructor(
                 saveYoutubeSongsToDb(listOf(song))
             }
         }
-        mediaController?.let { controller ->
+        runOnMainImmediate {
+            val controller = mediaController ?: return@runOnMainImmediate
             val mediaItem = buildPlaybackMediaItem(song)
 
             val insertionIndex = if (controller.currentMediaItemIndex != C.INDEX_UNSET) {
@@ -4902,7 +4920,8 @@ class PlayerViewModel @Inject constructor(
                 saveYoutubeSongsToDb(youtubeSongs)
             }
         }
-        mediaController?.let { controller ->
+        runOnMainImmediate {
+            val controller = mediaController ?: return@runOnMainImmediate
             val mediaItems = songs.map { buildPlaybackMediaItem(it) }
             controller.addMediaItems(mediaItems)
         }
@@ -5776,9 +5795,10 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun clearQueueExceptCurrent() {
-        mediaController?.let { controller ->
+        runOnMainImmediate {
+            val controller = mediaController ?: return@runOnMainImmediate
             val currentSongIndex = controller.currentMediaItemIndex
-            if (currentSongIndex == C.INDEX_UNSET) return@let
+            if (currentSongIndex == C.INDEX_UNSET) return@runOnMainImmediate
             val indicesToRemove = (0 until controller.mediaItemCount)
                 .filter { it != currentSongIndex }
                 .sortedDescending()
@@ -5885,8 +5905,10 @@ class PlayerViewModel @Inject constructor(
                 }
             },
             clearPlayback = {
-                mediaController?.stop()
-                mediaController?.clearMediaItems()
+                runOnMainImmediate {
+                    mediaController?.stop()
+                    mediaController?.clearMediaItems()
+                }
             },
             clearStablePlaybackState = {
                 playbackStateHolder.updateStablePlayerState {
@@ -6217,15 +6239,17 @@ class PlayerViewModel @Inject constructor(
 
                 // Update the player's current MediaItem to refresh notification artwork
                 // This is efficient: only replaces metadata, not the media stream
-                val controller = playbackStateHolder.mediaController
-                if (controller != null) {
-                    val currentIndex = controller.currentMediaItemIndex
-                    if (currentIndex >= 0 && currentIndex < controller.mediaItemCount) {
-                        val currentPosition = controller.currentPosition
-                        val newMediaItem = MediaItemBuilder.build(updatedSong)
-                        controller.replaceMediaItem(currentIndex, newMediaItem)
-                        // Restore position since replaceMediaItem may reset it
-                        controller.seekTo(currentIndex, currentPosition)
+                runOnMainImmediate {
+                    val controller = playbackStateHolder.mediaController
+                    if (controller != null) {
+                        val currentIndex = controller.currentMediaItemIndex
+                        if (currentIndex >= 0 && currentIndex < controller.mediaItemCount) {
+                            val currentPosition = controller.currentPosition
+                            val newMediaItem = MediaItemBuilder.build(updatedSong)
+                            controller.replaceMediaItem(currentIndex, newMediaItem)
+                            // Restore position since replaceMediaItem may reset it
+                            controller.seekTo(currentIndex, currentPosition)
+                        }
                     }
                 }
             }
@@ -6482,11 +6506,13 @@ class PlayerViewModel @Inject constructor(
 
                     if (playbackStateHolder.stablePlayerState.value.currentSong?.id == song.id) {
                         playbackStateHolder.updateStablePlayerState { it.copy(currentSong = updatedSong) }
-                        val controller = playbackStateHolder.mediaController
-                        if (controller != null) {
-                            val idx = controller.currentMediaItemIndex
-                            if (idx != C.INDEX_UNSET) {
-                                controller.replaceMediaItem(idx, MediaItemBuilder.build(updatedSong))
+                        runOnMainImmediate {
+                            val controller = playbackStateHolder.mediaController
+                            if (controller != null) {
+                                val idx = controller.currentMediaItemIndex
+                                if (idx != C.INDEX_UNSET) {
+                                    controller.replaceMediaItem(idx, MediaItemBuilder.build(updatedSong))
+                                }
                             }
                         }
                     }

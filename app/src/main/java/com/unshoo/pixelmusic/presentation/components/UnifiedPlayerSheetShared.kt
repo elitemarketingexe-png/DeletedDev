@@ -33,6 +33,7 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,6 +79,9 @@ internal fun MiniPlayerContentInternal(
     val previousInteraction = remember { MutableInteractionSource() }
     val playPauseInteraction = remember { MutableInteractionSource() }
     val nextInteraction = remember { MutableInteractionSource() }
+    val latestOnPrevious = rememberUpdatedState(onPrevious)
+    val latestOnPlayPause = rememberUpdatedState(onPlayPause)
+    val latestOnNext = rememberUpdatedState(onNext)
     val miniPlayerIndication = remember { ripple(bounded = false) }
 
     Row(
@@ -158,7 +162,7 @@ internal fun MiniPlayerContentInternal(
                     enabled = controlsEnabled
                 ) {
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onPrevious()
+                    latestOnPrevious.value()
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -183,7 +187,7 @@ internal fun MiniPlayerContentInternal(
                     enabled = controlsEnabled
                 ) {
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onPlayPause()
+                    latestOnPlayPause.value()
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -213,7 +217,10 @@ internal fun MiniPlayerContentInternal(
                     interactionSource = nextInteraction,
                     indication = miniPlayerIndication,
                     enabled = controlsEnabled
-                ) { onNext() },
+                ) {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    latestOnNext.value()
+                },
             contentAlignment = Alignment.Center
         ) {
             Icon(
