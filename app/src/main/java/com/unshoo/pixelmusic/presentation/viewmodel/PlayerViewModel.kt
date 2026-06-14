@@ -3649,10 +3649,50 @@ class PlayerViewModel @Inject constructor(
 
         val isYoutube = mediaId.startsWith("youtube_")
         if (isYoutube) {
-            val cacheKey = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.snapshot().entries
+            val videoId = mediaId.substringAfter("youtube_")
+            
+            // 1. Try to find cache key by exact URL match
+            var cacheKey = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.snapshot().entries
                 .find { it.value == uri.toString() }?.key
-            val cachedBitrate = cacheKey?.let { com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamBitrateLruCache.get(it) }
-            val cachedMime = cacheKey?.let { com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamMimeTypeLruCache.get(it) }
+            
+            // 2. If it's a remote URL and no exact match, try matching entries for this videoId where itag parameter matches
+            if (cacheKey == null && uri.toString().startsWith("http")) {
+                val playingUriString = uri.toString()
+                cacheKey = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.snapshot().entries
+                    .filter { it.key.startsWith("${videoId}_") }
+                    .find { entry ->
+                        val cachedUrl = entry.value
+                        val playingItag = playingUriString.substringAfter("itag=", "").substringBefore("&")
+                        val cachedItag = cachedUrl.substringAfter("itag=", "").substringBefore("&")
+                        playingItag.isNotEmpty() && playingItag == cachedItag
+                    }?.key
+            }
+            
+            // 3. Fallback: find any cache key starting with videoId
+            if (cacheKey == null) {
+                cacheKey = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.snapshot().keys
+                    .find { it.startsWith("${videoId}_") }
+            }
+
+            // Look up the cached bitrate
+            var cachedBitrate = cacheKey?.let { com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamBitrateLruCache.get(it) }
+            if (cachedBitrate == null) {
+                cachedBitrate = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamBitrateLruCache.let { cache ->
+                    cache.get("${videoId}_high")
+                        ?: cache.get("${videoId}_low")
+                        ?: cache.snapshot().keys.find { it.startsWith("${videoId}_") }?.let { cache.get(it) }
+                }
+            }
+
+            // Look up the cached mime type
+            var cachedMime = cacheKey?.let { com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamMimeTypeLruCache.get(it) }
+            if (cachedMime == null) {
+                cachedMime = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamMimeTypeLruCache.let { cache ->
+                    cache.get("${videoId}_high")
+                        ?: cache.get("${videoId}_low")
+                        ?: cache.snapshot().keys.find { it.startsWith("${videoId}_") }?.let { cache.get(it) }
+                }
+            }
             
             _playbackAudioMetadata.update { current ->
                 if (current.mediaId != mediaId) return@update current
@@ -3661,7 +3701,13 @@ class PlayerViewModel @Inject constructor(
                     mimeType = current.mimeType ?: cachedMime
                 )
             }
-            return
+            
+            // Only return early if this is a remote streaming URL.
+            // If it is a local file (e.g., downloaded), we want to fall through to the MediaMetadataRetriever probe below
+            // so we can get the actual file metadata (sample rate, bit depth, precise bitrate, etc.).
+            if (uri.toString().startsWith("http")) {
+                return
+            }
         }
 
         if (metadataProbeMediaId == mediaId && metadataProbeJob?.isActive == true) return
