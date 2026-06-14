@@ -53,6 +53,16 @@ interface MusicRepository {
         sortOption: com.unshoo.pixelmusic.data.model.SortOption
     ): Flow<PagingData<Artist>>
 
+    fun getPaginatedSubscribedYouTubeArtists(
+        sortOption: com.unshoo.pixelmusic.data.model.SortOption,
+        subscribedIds: Set<String>
+    ): Flow<PagingData<Artist>>
+
+    fun getPaginatedAllLibraryArtistsMinSongs(
+        sortOption: com.unshoo.pixelmusic.data.model.SortOption,
+        minSongCount: Int = 5
+    ): Flow<PagingData<Artist>>
+
     /**
      * Returns paginated favorite songs for efficient display.
      * @return Flow of PagingData<Song> for use with LazyPagingItems.

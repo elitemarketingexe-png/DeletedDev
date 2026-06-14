@@ -342,6 +342,12 @@ class PlayerViewModel @Inject constructor(
             initialValue = persistentListOf()
         )
 
+    val artistLibraryFilter: StateFlow<String> = userPreferencesRepository.artistLibraryFilterFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = "SUBSCRIBED"
+    )
+
     val searchSource: StateFlow<com.unshoo.pixelmusic.data.preferences.SearchSource> = userPreferencesRepository.searchSourceFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -4416,7 +4422,25 @@ class PlayerViewModel @Inject constructor(
         songsToPlay: List<Song>,
         startSongId: String,
         playlistId: String?
-    ): PreparedPlaybackQueue = withContext(Dispatchers.Default) {
+    ): PreparedPlaybackQueue = withContext(Dispatchers.IO) {
+        val preferTelegram = userPreferencesRepository.preferTelegramAlternativeFlow.first()
+        val telegramByKey = if (preferTelegram && songsToPlay.any { it.contentUriString.startsWith("youtube://") || it.youtubeId != null }) {
+            musicRepository.getTelegramSongsOnce()
+                .asSequence()
+                .filter { it.contentUriString.startsWith("telegram://") }
+                .mapNotNull { telegramSong ->
+                    val key = telegramAlternativeKey(telegramSong.title, telegramSong.artist)
+                    key?.let { it to telegramSong }
+                }
+                .toMap()
+        } else {
+            emptyMap()
+        }
+
+        if (telegramByKey.isNotEmpty()) {
+            ensureTelegramPlaybackObserversStarted()
+        }
+
         val mediaItems = ArrayList<MediaItem>(songsToPlay.size)
         var startIndex = 0
         var foundStartIndex = false
@@ -4427,13 +4451,30 @@ class PlayerViewModel @Inject constructor(
                 foundStartIndex = true
             }
 
-            mediaItems += buildPlaybackMediaItem(song, playlistId)
+            val baseItem = buildPlaybackMediaItem(song, playlistId)
+            val telegramAlternative = telegramAlternativeKey(song.title, song.artist)?.let(telegramByKey::get)
+            mediaItems += if (telegramAlternative != null) {
+                // Stream audio from Telegram, but keep the YouTube MediaMetadata/artwork/title so
+                // the queue/full-player visuals remain the online YouTube Music version.
+                baseItem.buildUpon()
+                    .setUri(Uri.parse(telegramAlternative.contentUriString))
+                    .build()
+            } else {
+                baseItem
+            }
         }
 
         PreparedPlaybackQueue(
             mediaItems = mediaItems,
             startIndex = startIndex
         )
+    }
+
+    private fun telegramAlternativeKey(title: String, artist: String): String? {
+        val normalizedTitle = title.normalizeMetadataText()
+        val normalizedArtist = artist.normalizeMetadataText()
+        if (normalizedTitle.isNullOrBlank() || normalizedArtist.isNullOrBlank()) return null
+        return "${normalizedTitle.lowercase(Locale.ROOT)}|${normalizedArtist.lowercase(Locale.ROOT)}"
     }
 
 
@@ -5646,6 +5687,12 @@ class PlayerViewModel @Inject constructor(
             viewModelScope.launch {
                 userPreferencesRepository.setArtistsSortOption(sortOption.storageKey)
             }
+        }
+    }
+
+    fun setArtistLibraryFilter(filter: String) {
+        viewModelScope.launch {
+            userPreferencesRepository.setArtistLibraryFilter(filter)
         }
     }
 

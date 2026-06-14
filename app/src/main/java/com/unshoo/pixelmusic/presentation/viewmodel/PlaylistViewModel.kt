@@ -13,6 +13,7 @@ import com.unshoo.pixelmusic.data.model.Song
 import com.unshoo.pixelmusic.data.model.SortOption
 import com.unshoo.pixelmusic.data.playlist.M3uManager
 import com.unshoo.pixelmusic.data.preferences.PlaylistPreferencesRepository
+import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
 import com.unshoo.pixelmusic.data.remote.youtube.DatastoreRepository
 import com.unshoo.pixelmusic.data.repository.MusicRepository
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
@@ -63,6 +64,7 @@ import kotlin.math.absoluteValue
 data class PlaylistUiState(
     val playlists: List<Playlist> = emptyList(),
     val showTelegramCloudPlaylists: Boolean = true,
+    val showSmartMixPlaylists: Boolean = true,
     val telegramTopicDisplayMode: TelegramTopicDisplayMode = TelegramTopicDisplayMode.CHANNELS_AND_TOPICS,
     val currentPlaylistSongs: List<Song> = emptyList(),
     val currentPlaylistDetails: Playlist? = null,
@@ -99,6 +101,7 @@ data class ImportProgressState(
 class PlaylistViewModel @Inject constructor(
     val playlistPreferencesRepository: PlaylistPreferencesRepository,
     private val musicRepository: MusicRepository,
+    private val userPreferencesRepository: UserPreferencesRepository,
     private val dailyMixManager: DailyMixManager,
     private val aiPlaylistGenerator: AiPlaylistGenerator,
     val m3uManager: M3uManager,
@@ -146,6 +149,7 @@ class PlaylistViewModel @Inject constructor(
     init {
         loadPlaylistsAndInitialSortOption()
         observeTelegramCloudPlaylistVisibility()
+        observeSmartMixPlaylistVisibility()
         observeTelegramTopicDisplayMode()
         observePlaylistOrderModes()
     }
@@ -172,7 +176,10 @@ class PlaylistViewModel @Inject constructor(
             playlistPreferencesRepository.userPlaylistsFlow.collect { playlists ->
                 val currentSortOption =
                     _uiState.value.currentPlaylistSortOption // Use the most up-to-date sort option
-                val sortedPlaylists = sortPlaylistsList(playlists, currentSortOption)
+                val sortedPlaylists = sortPlaylistsList(
+                    filterSmartMixPlaylists(playlists, _uiState.value.showSmartMixPlaylists),
+                    currentSortOption
+                )
                 _uiState.update { it.copy(playlists = sortedPlaylists) }
             }
         }
@@ -193,6 +200,28 @@ class PlaylistViewModel @Inject constructor(
             playlistPreferencesRepository.showTelegramCloudPlaylistsFlow.collect { show ->
                 _uiState.update { it.copy(showTelegramCloudPlaylists = show) }
             }
+        }
+    }
+
+    private fun observeSmartMixPlaylistVisibility() {
+        viewModelScope.launch {
+            userPreferencesRepository.showSmartMixPlaylistsFlow.collect { show ->
+                val currentSort = _uiState.value.currentPlaylistSortOption
+                val all = playlistPreferencesRepository.userPlaylistsFlow.first()
+                _uiState.update {
+                    it.copy(
+                        showSmartMixPlaylists = show,
+                        playlists = sortPlaylistsList(filterSmartMixPlaylists(all, show), currentSort)
+                    )
+                }
+            }
+        }
+    }
+
+    private fun filterSmartMixPlaylists(playlists: List<Playlist>, show: Boolean): List<Playlist> {
+        if (show) return playlists
+        return playlists.filterNot { playlist ->
+            playlist.source == "LASTFM_MIX" || playlist.source == "AI" || playlist.isAiGenerated
         }
     }
 

@@ -1656,6 +1656,62 @@ interface MusicDao {
         sortOrder: String
     ): PagingSource<Int, ArtistEntity>
 
+    /** ArchiveTune-style subscribed artist view: only artists from the user's YouTube account. */
+    @Query("""
+        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri,
+               artists.channel_id, COUNT(DISTINCT songs.id) AS track_count
+        FROM artists
+        LEFT JOIN song_artist_cross_ref ON song_artist_cross_ref.artist_id = artists.id
+        LEFT JOIN songs ON song_artist_cross_ref.song_id = songs.id
+        WHERE artists.id < 0
+          AND (
+              artists.channel_id IN (:subscribedIds)
+              OR CAST(artists.id AS TEXT) IN (:subscribedIds)
+          )
+        GROUP BY artists.id
+        ORDER BY
+            CASE WHEN :sortOrder = 'artist_name_az' THEN artists.name END COLLATE NOCASE ASC,
+            CASE WHEN :sortOrder = 'artist_name_za' THEN artists.name END COLLATE NOCASE DESC,
+            CASE WHEN :sortOrder = 'artist_num_songs_desc' THEN track_count END DESC,
+            CASE WHEN :sortOrder = 'artist_num_songs_asc' THEN track_count END ASC,
+            artists.name COLLATE NOCASE ASC,
+            artists.id ASC
+    """)
+    fun getSubscribedYouTubeArtistsPaginated(
+        subscribedIds: List<String>,
+        sortOrder: String
+    ): PagingSource<Int, ArtistEntity>
+
+    /** All artists from the user's library, but only meaningful artists with >= minSongCount songs. */
+    @Query("""
+        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri,
+               artists.channel_id, COUNT(DISTINCT songs.id) AS track_count
+        FROM artists
+        INNER JOIN song_artist_cross_ref ON song_artist_cross_ref.artist_id = artists.id
+        INNER JOIN songs ON song_artist_cross_ref.song_id = songs.id AND (
+            songs.source_type = 0
+            OR songs.is_favorite = 1
+            OR (songs.file_path IS NOT NULL AND songs.file_path != '')
+            OR CAST(songs.id AS TEXT) IN (SELECT song_id FROM playlist_songs)
+            OR songs.content_uri_string IN (SELECT REPLACE(song_id, 'youtube_', 'youtube://') FROM playlist_songs)
+            OR CAST(songs.id AS TEXT) IN (SELECT song_id FROM song_engagements WHERE play_count > 0)
+            OR songs.content_uri_string IN (SELECT REPLACE(song_id, 'youtube_', 'youtube://') FROM song_engagements WHERE play_count > 0)
+        )
+        GROUP BY artists.id
+        HAVING track_count >= :minSongCount
+        ORDER BY
+            CASE WHEN :sortOrder = 'artist_name_az' THEN artists.name END COLLATE NOCASE ASC,
+            CASE WHEN :sortOrder = 'artist_name_za' THEN artists.name END COLLATE NOCASE DESC,
+            CASE WHEN :sortOrder = 'artist_num_songs_desc' THEN track_count END DESC,
+            CASE WHEN :sortOrder = 'artist_num_songs_asc' THEN track_count END ASC,
+            artists.name COLLATE NOCASE ASC,
+            artists.id ASC
+    """)
+    fun getAllLibraryArtistsMinSongsPaginated(
+        minSongCount: Int,
+        sortOrder: String
+    ): PagingSource<Int, ArtistEntity>
+
     @Query("""
         SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri,
                artists.channel_id, COUNT(DISTINCT songs.id) AS track_count

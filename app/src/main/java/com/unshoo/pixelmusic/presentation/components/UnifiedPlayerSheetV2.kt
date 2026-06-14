@@ -5,9 +5,7 @@ import com.unshoo.pixelmusic.presentation.components.ExpressiveOfflineDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.MutatorMutex
 import androidx.compose.foundation.background
@@ -315,11 +313,6 @@ fun UnifiedPlayerSheetV2(
     var previousSheetState by remember { mutableStateOf(currentSheetContentState) }
     LaunchedEffect(showPlayerContentArea, currentSheetContentState) {
         val targetExpanded = showPlayerContentArea && currentSheetContentState == PlayerSheetState.EXPANDED
-        val shouldBounceCollapse =
-            showPlayerContentArea &&
-                previousSheetState == PlayerSheetState.EXPANDED &&
-                currentSheetContentState == PlayerSheetState.COLLAPSED
-
         previousSheetState = currentSheetContentState
         animatePlayerSheet(targetExpanded = targetExpanded)
 
@@ -336,17 +329,13 @@ fun UnifiedPlayerSheetV2(
                             1.0f at 250
                         }
                     )
-                } else if (shouldBounceCollapse) {
-                    visualOvershootScaleY.snapTo(0.96f)
+                } else {
+                    // No bounce on close: deterministic collapse feels smoother and avoids
+                    // visible jank when the user dismisses while a list/page is still scrolling.
                     visualOvershootScaleY.animateTo(
                         targetValue = 1f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessLow
-                        )
+                        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing)
                     )
-                } else {
-                    visualOvershootScaleY.snapTo(1f)
                 }
             }
         } else {

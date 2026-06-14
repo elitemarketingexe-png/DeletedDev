@@ -328,6 +328,9 @@ constructor(
         val SCROBBLE_MIN_SONG_DURATION = intPreferencesKey("scrobble_min_song_duration")
         val SCROBBLE_DELAY_SECONDS = intPreferencesKey("scrobble_delay_seconds")
         val GENERATED_PLAYLISTS_RETENTION_PERIOD = stringPreferencesKey("generated_playlists_retention_period")
+        val YOUTUBE_PLAYLIST_UPLOAD_SYNC_ENABLED = booleanPreferencesKey("youtube_playlist_upload_sync_enabled")
+        val SHOW_SMART_MIX_PLAYLISTS = booleanPreferencesKey("show_smart_mix_playlists")
+        val ARTIST_LIBRARY_FILTER = stringPreferencesKey("artist_library_filter")
     }
 
     val preferTelegramAlternativeFlow: Flow<Boolean> =
@@ -345,6 +348,40 @@ constructor(
             dataStore.data.map { preferences ->
                 preferences[PreferencesKeys.PERFORMANCE_MODE_ENABLED] ?: false
             }
+
+    val youtubePlaylistUploadSyncEnabledFlow: Flow<Boolean> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_PLAYLIST_UPLOAD_SYNC_ENABLED] ?: true
+        }
+
+    suspend fun setYoutubePlaylistUploadSyncEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_PLAYLIST_UPLOAD_SYNC_ENABLED] = enabled
+        }
+    }
+
+    val showSmartMixPlaylistsFlow: Flow<Boolean> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.SHOW_SMART_MIX_PLAYLISTS] ?: true
+        }
+
+    suspend fun setShowSmartMixPlaylists(show: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SHOW_SMART_MIX_PLAYLISTS] = show
+        }
+    }
+
+    val artistLibraryFilterFlow: Flow<String> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.ARTIST_LIBRARY_FILTER] ?: "SUBSCRIBED"
+        }.distinctUntilChanged()
+
+    suspend fun setArtistLibraryFilter(filter: String) {
+        val safeFilter = if (filter == "ALL_5_PLUS") "ALL_5_PLUS" else "SUBSCRIBED"
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ARTIST_LIBRARY_FILTER] = safeFilter
+        }
+    }
 
     suspend fun setPerformanceModeEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
@@ -2070,9 +2107,9 @@ constructor(
         }
     }
 
-    suspend fun setSubscribedArtistIds(ids: Set<String>) {
+    suspend fun setSubscribedArtistIds(artistIds: Set<String>) {
         dataStore.edit { preferences ->
-            preferences[PreferencesKeys.SUBSCRIBED_ARTIST_IDS] = ids
+            preferences[PreferencesKeys.SUBSCRIBED_ARTIST_IDS] = artistIds
         }
     }
 

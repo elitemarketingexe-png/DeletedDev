@@ -91,6 +91,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -98,6 +99,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -111,9 +113,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
 import coil.size.Size
 import com.unshoo.pixelmusic.R
+import com.unshoo.pixelmusic.data.model.Playlist
 import com.unshoo.pixelmusic.data.model.Song
 import com.unshoo.pixelmusic.presentation.components.MiniPlayerHeight
+import com.unshoo.pixelmusic.presentation.components.PlaylistArtCollage
 import com.unshoo.pixelmusic.presentation.components.PlaylistBottomSheet
+import com.unshoo.pixelmusic.presentation.components.PlaylistCover
 import com.unshoo.pixelmusic.presentation.components.QueuePlaylistSongItem
 import com.unshoo.pixelmusic.presentation.components.SongPickerBottomSheet
 import com.unshoo.pixelmusic.presentation.components.ExpressiveScrollBar
@@ -365,6 +370,15 @@ fun PlaylistDetailScreen(
             ) {
                 val actionButtonsHeight = 42.dp
                 val playbackControlBottomPadding = if (isFolderPlaylist) 8.dp else 6.dp
+                DynamicPlaylistCoverHero(
+                    playlist = currentPlaylist,
+                    songs = localReorderableSongs,
+                    songCountLabel = stringResource(
+                        R.string.presentation_batch_f_status_bullet_step,
+                        formatSongCount(songsInPlaylist.size),
+                        formatTotalDuration(songsInPlaylist)
+                    )
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1341,6 +1355,144 @@ private fun ExportPlaylistSheet(
                     Spacer(Modifier.width(6.dp))
                     Text(shareLabel, style = MaterialTheme.typography.labelLarge)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DynamicPlaylistCoverHero(
+    playlist: Playlist,
+    songs: List<Song>,
+    songCountLabel: String
+) {
+    val fallbackSongs = remember(songs) {
+        songs.filter { !it.albumArtUriString.isNullOrBlank() }.take(4)
+    }
+    val heroImageModel = remember(playlist.coverImageUri, fallbackSongs) {
+        playlist.coverImageUri?.takeIf { it.isNotBlank() }
+            ?: fallbackSongs.firstOrNull()?.albumArtUriString
+    }
+    val baseColor = playlist.coverColorArgb?.let(::Color)
+        ?: MaterialTheme.colorScheme.primaryContainer
+    val bottomColor = MaterialTheme.colorScheme.surfaceContainerLowest
+    val textColor = MaterialTheme.colorScheme.onSurface
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(184.dp)
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .clip(AbsoluteSmoothCornerShape(28.dp, 60, 28.dp, 60, 28.dp, 60, 28.dp, 60))
+            .background(baseColor.copy(alpha = 0.38f))
+    ) {
+        if (!heroImageModel.isNullOrBlank()) {
+            SmartImage(
+                model = if (heroImageModel.startsWith("/")) java.io.File(heroImageModel) else heroImageModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                targetSize = Size(900, 900),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(22.dp)
+                    .graphicsLayer {
+                        scaleX = 1.12f
+                        scaleY = 1.12f
+                        alpha = 0.72f
+                    }
+            )
+        } else {
+            PlaylistArtCollage(
+                songs = fallbackSongs,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(22.dp)
+                    .graphicsLayer {
+                        scaleX = 1.15f
+                        scaleY = 1.15f
+                        alpha = 0.58f
+                    }
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.00f to baseColor.copy(alpha = 0.18f),
+                            0.45f to baseColor.copy(alpha = 0.38f),
+                            0.78f to bottomColor.copy(alpha = 0.88f),
+                            1.00f to bottomColor
+                        )
+                    )
+                )
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            bottomColor.copy(alpha = 0.70f),
+                            Color.Transparent,
+                            baseColor.copy(alpha = 0.24f)
+                        )
+                    )
+                )
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(18.dp),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(116.dp)
+                    .clip(AbsoluteSmoothCornerShape(26.dp, 60, 26.dp, 60, 26.dp, 60, 26.dp, 60))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.72f))
+            ) {
+                if (!playlist.coverImageUri.isNullOrBlank()) {
+                    SmartImage(
+                        model = if (playlist.coverImageUri.startsWith("/")) java.io.File(playlist.coverImageUri) else playlist.coverImageUri,
+                        contentDescription = playlist.name,
+                        contentScale = ContentScale.Crop,
+                        targetSize = Size(512, 512),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    // If no explicit playlist art exists, use the most recent/available song artwork collage
+                    // as both icon and cover instead of a generic icon.
+                    PlaylistArtCollage(
+                        songs = fallbackSongs,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                Text(
+                    text = playlist.name,
+                    style = MaterialTheme.typography.headlineSmall.copy(fontFamily = GoogleSansRounded),
+                    color = textColor,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = songCountLabel,
+                    style = MaterialTheme.typography.labelLarge.copy(fontFamily = GoogleSansRounded),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

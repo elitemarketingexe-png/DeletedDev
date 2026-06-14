@@ -8,6 +8,7 @@ import com.unshoo.pixelmusic.data.database.FavoritesEntity
 import com.unshoo.pixelmusic.data.database.MusicDao
 import com.unshoo.pixelmusic.data.remote.youtube.toNativeSong
 import com.unshoo.pixelmusic.data.repository.MusicRepository
+import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -33,6 +34,7 @@ class YouTubeLibrarySyncManager @Inject constructor(
     private val musicDao: MusicDao,
     private val favoritesDao: FavoritesDao,
     private val musicRepository: MusicRepository,
+    private val userPreferencesRepository: UserPreferencesRepository,
 ) {
 
     companion object {
@@ -104,6 +106,13 @@ class YouTubeLibrarySyncManager @Inject constructor(
         }
 
         musicDao.insertArtistsIgnoreConflicts(entities)
+        val subscribedIds = buildSet {
+            entities.forEach { entity ->
+                entity.channelId?.takeIf { it.isNotBlank() }?.let(::add)
+                add(entity.id.toString())
+            }
+        }
+        userPreferencesRepository.setSubscribedArtistIds(subscribedIds)
         Timber.tag(TAG).d("Synced ${entities.size} subscribed artists to DB")
     }
 

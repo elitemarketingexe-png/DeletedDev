@@ -662,7 +662,7 @@ fun SongInfoBottomSheet(
                                             }
                                         }
 
-                                        if (song.youtubeId != null) {
+                                        if (song.youtubeId != null || song.telegramFileId != null) {
                                             item {
                                                 FilledTonalButton(
                                                     modifier = Modifier
@@ -692,7 +692,11 @@ fun SongInfoBottomSheet(
                                                                 Toast.makeText(context, "Download cancelled", Toast.LENGTH_SHORT).show()
                                                             }
                                                             else -> {
-                                                                songInfoViewModel.downloadYoutubeSong(song)
+                                                                if (song.telegramFileId != null && song.youtubeId == null) {
+                                                                    songInfoViewModel.downloadTelegramSong(song)
+                                                                } else {
+                                                                    songInfoViewModel.downloadYoutubeSong(song)
+                                                                }
                                                                 Toast.makeText(context, "Download started", Toast.LENGTH_SHORT).show()
                                                             }
                                                         }

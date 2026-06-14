@@ -95,7 +95,9 @@ import androidx.compose.material.icons.outlined.Explicit
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.PlaylistPlay
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material3.AlertDialog
@@ -1619,6 +1621,20 @@ fun SettingsCategoryScreen(
                             }
 
                             SettingsSubsection(title = "Smart Mix Playlists") {
+                                SwitchSettingItem(
+                                    title = "Show Smart Mix playlists in Library",
+                                    subtitle = "Display or hide Last.fm/AI-generated Smart Mix playlists on the Library playlists page.",
+                                    checked = uiState.showSmartMixPlaylists,
+                                    onCheckedChange = { settingsViewModel.setShowSmartMixPlaylists(it) },
+                                    leadingIcon = { Icon(Icons.Outlined.PlaylistPlay, null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                SwitchSettingItem(
+                                    title = "Sync local playlists to YouTube Music",
+                                    subtitle = "When off, PixelMusic imports YouTube Music playlists but will not create or modify playlists on YouTube Music.",
+                                    checked = uiState.youtubePlaylistUploadSyncEnabled,
+                                    onCheckedChange = { settingsViewModel.setYoutubePlaylistUploadSyncEnabled(it) },
+                                    leadingIcon = { Icon(Icons.Outlined.CloudSync, null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
                                 ThemeSelectorItem(
                                     label = "Generated Playlists Retention",
                                     description = "Choose how long to keep generated Last.fm mix playlists in your library.",

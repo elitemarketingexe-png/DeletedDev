@@ -155,7 +155,9 @@ data class SettingsUiState(
     val scrobbleDelayPercent: Float = 0.5f,
     val scrobbleMinSongDuration: Int = 30,
     val scrobbleDelaySeconds: Int = 180,
-    val generatedPlaylistsRetentionPeriod: String = "permanent"
+    val generatedPlaylistsRetentionPeriod: String = "permanent",
+    val youtubePlaylistUploadSyncEnabled: Boolean = true,
+    val showSmartMixPlaylists: Boolean = true
 )
 
 data class FailedSongInfo(
@@ -786,6 +788,30 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.generatedPlaylistsRetentionPeriodFlow.collect { period ->
                 _uiState.update { it.copy(generatedPlaylistsRetentionPeriod = period) }
+            }
+        }
+
+        viewModelScope.launch {
+            userPreferencesRepository.youtubePlaylistUploadSyncEnabledFlow.collect { enabled ->
+                _uiState.update { it.copy(youtubePlaylistUploadSyncEnabled = enabled) }
+            }
+        }
+
+        viewModelScope.launch {
+            userPreferencesRepository.showSmartMixPlaylistsFlow.collect { show ->
+                _uiState.update { it.copy(showSmartMixPlaylists = show) }
+            }
+        }
+
+        viewModelScope.launch {
+            userPreferencesRepository.youtubePlaylistUploadSyncEnabledFlow.collect { enabled ->
+                _uiState.update { it.copy(youtubePlaylistUploadSyncEnabled = enabled) }
+            }
+        }
+
+        viewModelScope.launch {
+            userPreferencesRepository.showSmartMixPlaylistsFlow.collect { show ->
+                _uiState.update { it.copy(showSmartMixPlaylists = show) }
             }
         }
 
@@ -1792,6 +1818,18 @@ class SettingsViewModel @Inject constructor(
     fun setGeneratedPlaylistsRetentionPeriod(period: String) {
         viewModelScope.launch {
             userPreferencesRepository.setGeneratedPlaylistsRetentionPeriod(period)
+        }
+    }
+
+    fun setYoutubePlaylistUploadSyncEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setYoutubePlaylistUploadSyncEnabled(enabled)
+        }
+    }
+
+    fun setShowSmartMixPlaylists(show: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setShowSmartMixPlaylists(show)
         }
     }
 }

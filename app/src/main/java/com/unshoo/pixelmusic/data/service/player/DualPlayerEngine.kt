@@ -401,13 +401,43 @@ class DualPlayerEngine @Inject constructor(
         }
     }
 
+    private fun applyAudioOffloadToActivePlayers() {
+        if (::playerA.isInitialized) applyAudioOffload(playerA)
+        if (::playerB.isInitialized) applyAudioOffload(playerB)
+    }
+
+    private fun applyAudioOffload(player: ExoPlayer) {
+        val mode = if (audioOffloadEnabled) {
+            TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
+        } else {
+            TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED
+        }
+        val offloadPreferences = TrackSelectionParameters.AudioOffloadPreferences.Builder()
+            .setAudioOffloadMode(mode)
+            .build()
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setAudioOffloadPreferences(offloadPreferences)
+            .build()
+
+        // Media3 versions expose different offload scheduling APIs. Mirror ArchiveTune's
+        // defensive reflection so the setting works across builds instead of silently no-oping.
+        val schedulingEnabled = audioOffloadEnabled && !transitionRunning
+        listOf("experimentalSetOffloadSchedulingEnabled", "setOffloadSchedulingEnabled", "setOffloadEnabled")
+            .firstNotNullOfOrNull { name ->
+                runCatching { player.javaClass.getMethod(name, Boolean::class.javaPrimitiveType) }.getOrNull()
+            }
+            ?.let { method -> runCatching { method.invoke(player, schedulingEnabled) } }
+    }
+
     init {
         initialize()
         scope.launch {
             userPreferencesRepository.audioOffloadEnabledFlow.collect { enabled ->
                 if (audioOffloadEnabled != enabled) {
                     audioOffloadEnabled = enabled
-                    rebuildPlayersPreservingMasterState("Audio offload setting changed to $enabled")
+                    // ArchiveTune-style: apply offload preferences in-place. Rebuilding players
+                    // on every toggle causes audible gaps and UI churn on low-end devices.
+                    applyAudioOffloadToActivePlayers()
                 }
             }
         }
@@ -733,18 +763,7 @@ class DualPlayerEngine @Inject constructor(
             .setLoadControl(loadControl)
             .build().apply {
             setAudioAttributes(audioAttributes, false)
-            val offloadPreferences = TrackSelectionParameters.AudioOffloadPreferences.Builder()
-                .setAudioOffloadMode(
-                    if (audioOffloadEnabled) {
-                        TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED
-                    } else {
-                        TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED
-                    }
-                )
-                .build()
-            trackSelectionParameters = trackSelectionParameters.buildUpon()
-                .setAudioOffloadPreferences(offloadPreferences)
-                .build()
+            applyAudioOffload(this)
             setHandleAudioBecomingNoisy(true)
             setWakeMode(C.WAKE_MODE_LOCAL)
             playWhenReady = false

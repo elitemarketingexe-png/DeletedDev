@@ -189,6 +189,15 @@ fun SearchScreen(
         searchQuery = ""
         playerViewModel.performSearch("")
         playerViewModel.loadSearchHistory()
+
+        // UX: when the user opens Search, focus the input and show the keyboard immediately.
+        // A short delay lets the SearchBar finish composing before FocusRequester is used;
+        // the second show() handles OEM keyboards that ignore the first request during tab transitions.
+        delay(220L)
+        runCatching { searchInputFocusRequester.requestFocus() }
+        keyboardController?.show()
+        delay(80L)
+        keyboardController?.show()
     }
 
 

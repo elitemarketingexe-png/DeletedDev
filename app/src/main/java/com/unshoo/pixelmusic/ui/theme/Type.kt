@@ -23,6 +23,16 @@ object FontSettings {
     var useSystemFont by mutableStateOf(false)
 }
 
+/**
+ * Unicode-safe app typeface.
+ *
+ * PixelMusic displays local/YouTube/Telegram metadata, so song titles can contain Hindi,
+ * Arabic, CJK, Cyrillic, emoji, combining marks, etc. Bundled decorative fonts do not
+ * reliably contain all of those glyphs. Android's platform sans family is backed by the
+ * system Noto/Roboto fallback stack, which gives the best Unicode coverage on-device.
+ */
+val UnicodeSafeFontFamily: FontFamily = FontFamily.SansSerif
+
 private val montserrat = GoogleFont("Montserrat")
 private val provider = GoogleFont.Provider(
     providerAuthority = "com.google.android.gms.fonts",
@@ -42,7 +52,7 @@ val MontserratFamily = FontFamily(
 
 val ExpTitleTypography = Typography(
     displayLarge = TextStyle(
-        fontFamily = MontserratFamily,
+        fontFamily = UnicodeSafeFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 60.sp,
         textGeometricTransform = TextGeometricTransform(scaleX = 1.5f),
@@ -51,7 +61,7 @@ val ExpTitleTypography = Typography(
         platformStyle = PlatformTextStyle(includeFontPadding = false)
     ),
     displayMedium = TextStyle(
-        fontFamily = MontserratFamily,
+        fontFamily = UnicodeSafeFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 50.sp,
         //textGeometricTransform = TextGeometricTransform(scaleX = 1f),
@@ -60,7 +70,7 @@ val ExpTitleTypography = Typography(
         platformStyle = PlatformTextStyle(includeFontPadding = false)
     ),
     titleMedium = TextStyle(
-        fontFamily = MontserratFamily,
+        fontFamily = UnicodeSafeFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 32.sp,
         textGeometricTransform = TextGeometricTransform(scaleX = 1.3f),
@@ -118,7 +128,7 @@ val ActualGoogleSansRounded = FontFamily(
 )
 
 val GoogleSansRounded: FontFamily
-    get() = if (FontSettings.useSystemFont) FontFamily.Default else ActualGoogleSansRounded
+    get() = if (FontSettings.useSystemFont) FontFamily.Default else UnicodeSafeFontFamily
 
 private fun createBaseTypography(family: FontFamily): Typography = Typography(
     displayLarge = TextStyle(
@@ -228,7 +238,7 @@ private fun createBaseTypography(family: FontFamily): Typography = Typography(
     )
 )
 
-private val DefaultAppTypography = createBaseTypography(ActualGoogleSansRounded)
+private val DefaultAppTypography = createBaseTypography(UnicodeSafeFontFamily)
 private val SystemFontTypography = createBaseTypography(FontFamily.Default)
 
 val Typography: Typography

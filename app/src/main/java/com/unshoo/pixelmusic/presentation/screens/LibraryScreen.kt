@@ -1142,6 +1142,7 @@ fun LibraryScreen(
                         val albumsLazyPagingItems = libraryViewModel.albumsPagingFlow.collectAsLazyPagingItems()
                         val artistsLazyPagingItems = libraryViewModel.artistsPagingFlow.collectAsLazyPagingItems()
                         val favoritePagingItems = libraryViewModel.favoritesPagingFlow.collectAsLazyPagingItems()
+                        val artistLibraryFilter by playerViewModel.artistLibraryFilter.collectAsStateWithLifecycle()
                         val isLibraryLoading by libraryViewModel.isLoadingLibrary.collectAsStateWithLifecycle()
                         val hasCurrentSong by remember(playerViewModel) {
                             playerViewModel.stablePlayerState
@@ -1606,6 +1607,8 @@ fun LibraryScreen(
                                             playerViewModel = playerViewModel,
                                             bottomBarHeight = bottomBarHeightDp,
                                             currentArtistSortOption = playerUiState.currentArtistSortOption,
+                                            artistLibraryFilter = artistLibraryFilter,
+                                            onArtistLibraryFilterChange = playerViewModel::setArtistLibraryFilter,
                                             onArtistClick = { artistId ->
                                                 navController.navigateSafelyReplacing(
                                                     route = Screen.ArtistDetail.createRoute(artistId),

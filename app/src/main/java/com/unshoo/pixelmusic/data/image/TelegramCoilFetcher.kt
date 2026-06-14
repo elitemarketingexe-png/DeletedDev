@@ -337,11 +337,13 @@ class TelegramCoilFetcher(
         return when (content) {
             is TdApi.MessageAudio -> {
                 val audio = content.audio
-                // Priority 1: Main album cover thumbnail (from TDLib)
-                // Priority 2: External album covers (from Spotify/Apple Music metadata)
-                val thumbnail = audio.albumCoverThumbnail
-                    ?: audio.externalAlbumCovers?.maxByOrNull { it.width * it.height }
-                thumbnail?.file?.id
+                // Prefer the highest-resolution cover TDLib exposes. albumCoverThumbnail is
+                // often tiny; externalAlbumCovers can contain original/large provider art.
+                val candidates = buildList {
+                    audio.albumCoverThumbnail?.let(::add)
+                    audio.externalAlbumCovers?.let(::addAll)
+                }
+                candidates.maxByOrNull { it.width * it.height }?.file?.id
             }
             is TdApi.MessageDocument -> {
                 content.document.thumbnail?.file?.id
