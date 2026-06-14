@@ -811,6 +811,7 @@ class PlayerViewModel @Inject constructor(
     private var pendingDeleteSong: Song? = null
     private var pendingDeleteCallback: ((Boolean) -> Unit)? = null
     private var lastRegisteredVideoId: String? = null
+    private var youtubePlaybackHistoryJob: Job? = null
 
     private val _albumNavigationRequests = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val albumNavigationRequests = _albumNavigationRequests.asSharedFlow()
@@ -3951,24 +3952,8 @@ class PlayerViewModel @Inject constructor(
                     clearPreparingSongIfMatching(playerCtrl.currentMediaItem?.mediaId)
                     startProgressUpdates()
 
-                    val currentItem = playerCtrl.currentMediaItem
-                    val songId = currentItem?.mediaId
-                    if (songId != null) {
-                        val song = resolveSongFromMediaItem(currentItem)
-                        val videoId = song?.youtubeId ?: if (songId.startsWith("youtube_")) songId.substringAfter("youtube_") else null
-                        if (videoId != null && videoId != lastRegisteredVideoId) {
-                            lastRegisteredVideoId = videoId
-                            viewModelScope.launch(Dispatchers.IO) {
-                                val baseUrl = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[videoId]
-                                if (baseUrl != null) {
-                                    val playlistId = currentItem.mediaMetadata.extras?.getString("playlistId")
-                                    unshoo.ianshulyadav.pixelmusic.innertube.YouTube.registerPlayback(
-                                        playlistId = playlistId,
-                                        playbackTracking = baseUrl
-                                    )
-                                }
-                            }
-                        }
+                    playerCtrl.currentMediaItem?.let { currentItem ->
+                        registerYoutubePlaybackHistoryIfNeeded(currentItem)
                     }
                 } else {
                     stopProgressUpdates()
@@ -3989,6 +3974,9 @@ class PlayerViewModel @Inject constructor(
                 transitionSchedulerJob?.cancel()
                 lyricsStateHolder.cancelLoading()
                 lastRegisteredVideoId = null
+                if (playerCtrl.isPlaying) {
+                    mediaItem?.let { registerYoutubePlaybackHistoryIfNeeded(it) }
+                }
                 transitionSchedulerJob = viewModelScope.launch {
                     if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                         val activeEotSongId = EotStateHolder.eotTargetSongId.value
@@ -4719,6 +4707,84 @@ class PlayerViewModel @Inject constructor(
     }
 
 // buildMediaMetadataForSong moved to MediaItemBuilder
+
+    private fun registerYoutubePlaybackHistoryIfNeeded(mediaItem: MediaItem) {
+        val song = resolveSongFromMediaItem(mediaItem)
+        val videoId = song?.youtubeId
+            ?: mediaItem.mediaId.takeIf { it.startsWith("youtube_") }?.substringAfter("youtube_")
+            ?: mediaItem.localConfiguration?.uri?.toString()
+                ?.takeIf { it.startsWith("youtube://") }
+                ?.substringAfter("youtube://")
+            ?: return
+
+        if (videoId.isBlank() || videoId == lastRegisteredVideoId) return
+
+        val playlistId = mediaItem.mediaMetadata.extras?.getString("playlistId")
+        youtubePlaybackHistoryJob?.cancel()
+        youtubePlaybackHistoryJob = viewModelScope.launch(Dispatchers.IO) {
+            val registered = registerYoutubePlaybackHistory(videoId, playlistId)
+            if (registered) {
+                lastRegisteredVideoId = videoId
+            }
+        }
+    }
+
+    private suspend fun registerYoutubePlaybackHistory(videoId: String, playlistId: String?): Boolean {
+        suspend fun registerTracking(baseUrl: String): Boolean {
+            return unshoo.ianshulyadav.pixelmusic.innertube.YouTube.registerPlayback(
+                playlistId = playlistId,
+                playbackTracking = baseUrl,
+                videoId = videoId
+            ).onFailure { throwable ->
+                if (throwable is CancellationException) throw throwable
+                Timber.w(throwable, "Failed to register YouTube playback history for %s", videoId)
+            }.isSuccess
+        }
+
+        com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[videoId]?.let { cachedUrl ->
+            if (registerTracking(cachedUrl)) return true
+            com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache.remove(videoId, cachedUrl)
+        }
+
+        val trackingUrl = runCatching {
+            val signatureTimestamp = unshoo.ianshulyadav.pixelmusic.innertube.NewPipeUtils
+                .getSignatureTimestamp(videoId)
+                .getOrNull()
+            unshoo.ianshulyadav.pixelmusic.innertube.YouTube.player(
+                videoId = videoId,
+                playlistId = playlistId,
+                client = unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.WEB_REMIX,
+                signatureTimestamp = signatureTimestamp,
+                setLogin = true
+            ).getOrNull()
+                ?.playbackTracking
+                ?.videostatsPlaybackUrl
+                ?.baseUrl
+        }.getOrNull()
+
+        if (!trackingUrl.isNullOrBlank()) {
+            com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[videoId] = trackingUrl
+            if (registerTracking(trackingUrl)) return true
+        }
+
+        // Final fallback: resolve the stream with local disabled. This path also stores playbackTracking
+        // inside YoutubeHelper when YouTube returns it.
+        runCatching {
+            val ytSong = com.unshoo.pixelmusic.data.model.youtube.Song(
+                youtubeId = videoId,
+                title = videoId,
+                artist = "",
+                thumbnailHref = ""
+            )
+            com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.getSongPlayerUrl(
+                context = context,
+                song = ytSong,
+                allowLocal = false
+            )
+        }
+        val resolvedTracking = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[videoId]
+        return !resolvedTracking.isNullOrBlank() && registerTracking(resolvedTracking)
+    }
 
     private fun syncShuffleStateWithSession(enabled: Boolean) {
         runOnMainImmediate {

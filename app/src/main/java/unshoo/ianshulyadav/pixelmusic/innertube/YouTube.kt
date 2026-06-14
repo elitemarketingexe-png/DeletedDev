@@ -71,7 +71,7 @@ import unshoo.ianshulyadav.pixelmusic.innertube.pages.SearchResult
 import unshoo.ianshulyadav.pixelmusic.innertube.pages.SearchSuggestionPage
 import unshoo.ianshulyadav.pixelmusic.innertube.pages.SearchSummary
 import unshoo.ianshulyadav.pixelmusic.innertube.pages.SearchSummaryPage
-import unshoo.ianshulyadav.pixelmusic.innertube.utils.PoTokenGenerator
+import com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator
 import io.ktor.client.call.body
 import io.ktor.client.statement.bodyAsText
 
@@ -1364,7 +1364,24 @@ object YouTube {
         setLogin: Boolean = true,
         authState: PlaybackAuthState = currentPlaybackAuthState(),
     ): Result<PlayerResponse> = runCatching {
-        val resolvedPoToken = resolvePlayerPoToken(client, poToken, authState)
+        val botGuardTokens = if (authState.webClientPoTokenEnabled) {
+            val sessionId = authState.visitorData ?: authState.dataSyncId ?: authState.sessionId
+            if (!sessionId.isNullOrBlank()) {
+                BotGuardTokenGenerator.mintToken(videoId, sessionId)
+            } else {
+                null
+            }
+        } else {
+            null
+        }
+        val resolvedPoToken = poToken
+            ?: botGuardTokens?.playerToken
+            ?: resolvePlayerPoToken(client, poToken, authState)
+        val requestAuthState = if (botGuardTokens != null) {
+            authState.copy(poTokenPlayer = botGuardTokens.playerToken, poTokenGvs = botGuardTokens.sessionToken)
+        } else {
+            authState
+        }
         innerTube.player(
             client = client,
             videoId = videoId,
@@ -1372,13 +1389,14 @@ object YouTube {
             signatureTimestamp = signatureTimestamp,
             poToken = resolvedPoToken,
             setLogin = setLogin,
-            authState = authState,
+            authState = requestAuthState,
         ).body<PlayerResponse>()
     }
 
     suspend fun registerPlayback(
         playlistId: String? = null,
         playbackTracking: String,
+        videoId: String? = null,
         authState: PlaybackAuthState = currentPlaybackAuthState(),
     ) = runCatching {
         val cpn = (1..16).map {
@@ -1393,12 +1411,23 @@ object YouTube {
             "https://music.youtube.com",
         )
 
+        val botGuardTokens = if (authState.webClientPoTokenEnabled && !videoId.isNullOrBlank()) {
+            val sessionId = authState.visitorData ?: authState.dataSyncId ?: authState.sessionId
+            if (!sessionId.isNullOrBlank()) BotGuardTokenGenerator.mintToken(videoId, sessionId) else null
+        } else {
+            null
+        }
+        val requestAuthState = if (botGuardTokens != null) {
+            authState.copy(poTokenPlayer = botGuardTokens.playerToken, poTokenGvs = botGuardTokens.sessionToken)
+        } else {
+            authState
+        }
         innerTube.registerPlayback(
             url = playbackUrl,
             playlistId = playlistId,
             cpn = cpn,
-            poToken = resolveGvsPoToken(authState),
-            authState = authState,
+            poToken = botGuardTokens?.sessionToken ?: resolveGvsPoToken(requestAuthState),
+            authState = requestAuthState,
         )
     }
 

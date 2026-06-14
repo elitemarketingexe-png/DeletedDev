@@ -24,6 +24,7 @@ import com.unshoo.pixelmusic.utils.CrashHandler
 import com.unshoo.pixelmusic.utils.AppLocaleManager
 import com.unshoo.pixelmusic.utils.MediaItemBuilder
 import com.unshoo.pixelmusic.utils.MediaMetadataRetrieverPool
+import com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -86,6 +87,7 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         super.onCreate()
 
         MediaItemBuilder.initialize(this)
+        BotGuardTokenGenerator.initialize(this)
 
         // Initialize Last.fm client
         com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(
@@ -166,6 +168,15 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         }
 
         startupScope.launch {
+            kotlinx.coroutines.delay(2_500L)
+            val sessionId = unshoo.ianshulyadav.pixelmusic.innertube.YouTube.currentPlaybackAuthState().visitorData
+                ?: unshoo.ianshulyadav.pixelmusic.innertube.YouTube.currentPlaybackAuthState().dataSyncId
+            if (!sessionId.isNullOrBlank()) {
+                BotGuardTokenGenerator.preWarm(sessionId)
+            }
+        }
+
+        startupScope.launch {
             AlbumArtUtils.migrateLegacyCacheLocation(this@PixelMusicApplication)
             val savedLimit = runCatching {
                 userPreferencesRepository.get().albumArtCacheLimitMbFlow.first()
@@ -207,6 +218,7 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
             artistImageRepository.get().clearCache()
             telegramRepository.get().clearMemoryCache()
             MediaMetadataRetrieverPool.clear()
+            startupScope.launch { BotGuardTokenGenerator.onAppBackgrounded() }
         }
 
         libraryStateHolder.get().trimMemory(level)

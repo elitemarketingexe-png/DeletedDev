@@ -235,5 +235,10 @@
 -dontwarn javax.script.**
 -dontwarn org.mozilla.javascript.engine.**
 
+# Keep JavaScript bridge method names used by WebView-based BotGuard PoToken generation.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
 # Keep desugared library classes (prevent R8 from stripping backported JDK APIs)
 -keep class j$.** { *; }
