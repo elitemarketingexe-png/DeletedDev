@@ -4146,23 +4146,28 @@ class PlayerViewModel @Inject constructor(
                     playbackStateHolder.updateStablePlayerState { it.copy(totalDuration = resolvedDuration) }
                     startProgressUpdates()
                 }
-                if (playbackState == Player.STATE_IDLE && playerCtrl.mediaItemCount == 0) {
-                    clearPreparingSongIfMatching()
-                    if (!isCastConnecting.value && !isRemotePlaybackActive.value) {
-                        lyricsStateHolder.cancelLoading()
-                        playbackStateHolder.updateStablePlayerState {
-                            it.copy(
-                                currentSong = null,
-                                isPlaying = false,
-                                playWhenReady = false,
-                                lyrics = null,
-                                isLoadingLyrics = false,
-                                totalDuration = 0L
-                            )
+                if (playbackState == Player.STATE_IDLE) {
+                    if (playerCtrl.mediaItemCount > 0 && playerCtrl.playWhenReady) {
+                        Timber.tag("PlayerViewModel").w("STATE_IDLE recovery: re-preparing player.")
+                        playerCtrl.prepare()
+                    } else if (playerCtrl.mediaItemCount == 0) {
+                        clearPreparingSongIfMatching()
+                        if (!isCastConnecting.value && !isRemotePlaybackActive.value) {
+                            lyricsStateHolder.cancelLoading()
+                            playbackStateHolder.updateStablePlayerState {
+                                it.copy(
+                                    currentSong = null,
+                                    isPlaying = false,
+                                    playWhenReady = false,
+                                    lyrics = null,
+                                    isLoadingLyrics = false,
+                                    totalDuration = 0L
+                                )
+                            }
+                            playbackStateHolder.clearCurrentPositionHints()
+                            playbackStateHolder.setCurrentPosition(0L)
+                            resetPlaybackAudioMetadata()
                         }
-                        playbackStateHolder.clearCurrentPositionHints()
-                        playbackStateHolder.setCurrentPosition(0L)
-                        resetPlaybackAudioMetadata()
                     }
                 }
             }
