@@ -71,6 +71,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -920,6 +921,28 @@ class MusicService : MediaLibraryService() {
             restorePlaybackQueueSnapshotIfNeeded()
             mediaSession?.let { refreshMediaSessionUi(it) }
             requestWidgetFullUpdate(force = true)
+        }
+
+        // React to theme preference changes by force-updating the widget and Wear OS state immediately
+        serviceScope.launch {
+            themePreferencesRepository.playerThemePreferenceFlow.drop(1).collect {
+                requestWidgetFullUpdate(force = true)
+            }
+        }
+        serviceScope.launch {
+            themePreferencesRepository.colorPalettePreferenceFlow.drop(1).collect {
+                requestWidgetFullUpdate(force = true)
+            }
+        }
+        serviceScope.launch {
+            themePreferencesRepository.albumArtPaletteStyleFlow.drop(1).collect {
+                requestWidgetFullUpdate(force = true)
+            }
+        }
+        serviceScope.launch {
+            themePreferencesRepository.albumArtColorAccuracyFlow.drop(1).collect {
+                requestWidgetFullUpdate(force = true)
+            }
         }
 
         serviceScope.launch {
