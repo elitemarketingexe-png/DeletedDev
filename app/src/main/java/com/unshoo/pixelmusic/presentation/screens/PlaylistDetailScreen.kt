@@ -1388,15 +1388,13 @@ private fun DynamicPlaylistCoverHero(
     }
     val baseColor = playlist.coverColorArgb?.let(::Color)
         ?: MaterialTheme.colorScheme.primaryContainer
-    val bottomColor = MaterialTheme.colorScheme.surfaceContainerLowest
+    val bottomColor = MaterialTheme.colorScheme.surface
     val textColor = MaterialTheme.colorScheme.onSurface
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(184.dp)
-            .padding(horizontal = 20.dp, vertical = 8.dp)
-            .clip(AbsoluteSmoothCornerShape(28.dp, 60, 28.dp, 60, 28.dp, 60, 28.dp, 60))
+            .height(200.dp)
             .background(baseColor.copy(alpha = 0.38f))
     ) {
         if (!heroImageModel.isNullOrBlank()) {
@@ -1459,7 +1457,7 @@ private fun DynamicPlaylistCoverHero(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(18.dp),
+                .padding(start = 20.dp, end = 20.dp, bottom = 16.dp, top = 8.dp),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
