@@ -51,7 +51,15 @@ object QueuePreloadManager {
 
     private val playerListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            triggerPreload()
+            triggerPreload(includeCurrent = false)
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (isPlaying) {
+                // App may have been paused/idle long enough for googlevideo URLs to expire.
+                // Warm the current item immediately, then the next items, so resume/skip is fast.
+                triggerPreload(includeCurrent = true)
+            }
         }
     }
 
@@ -97,7 +105,7 @@ object QueuePreloadManager {
         updatePlayer(player)
     }
 
-    private fun triggerPreload() {
+    private fun triggerPreload(includeCurrent: Boolean = false) {
         val currentScope = scope ?: return
         val player = playerRef ?: return
         val ctx = appContext ?: return
@@ -115,16 +123,18 @@ object QueuePreloadManager {
 
             val (currentIndex, totalCount) = playerState
 
-            val indicesAhead =
-                (currentIndex + 1)..(currentIndex + settings.preloadQueueSize).coerceAtMost(totalCount - 1)
+            if (totalCount <= 0 || currentIndex < 0) return@launch
+            val startIndex = if (includeCurrent) currentIndex else currentIndex + 1
+            val endIndex = (currentIndex + settings.preloadQueueSize).coerceAtMost(totalCount - 1)
+            if (startIndex > endIndex) return@launch
+            val indicesAhead = startIndex..endIndex
 
             for (i in indicesAhead) {
                 val mediaItem = withContext(Dispatchers.Main) {
                     if (playerRef != null && i < player.mediaItemCount) player.getMediaItemAt(i) else null
                 } ?: continue
 
-                val videoId = mediaItem.mediaId
-                if (videoId.isBlank()) continue
+                val videoId = resolveYoutubeVideoId(mediaItem) ?: continue
 
                 // Build a minimal Song from the MediaItem for URL resolution
                 val song = Song(
@@ -143,8 +153,9 @@ object QueuePreloadManager {
                     printe("QueuePreloadManager: failed to preload stream for $videoId: ${e.message}")
                 }
 
-                // 1b. Prefetch first 512KB of the audio stream
-                if (!streamUrl.isNullOrBlank() && streamUrl.startsWith("http")) {
+                // 1b. Prefetch audio only for current/next item. Prefetching many 512KB ranges
+                // can heat devices and waste battery, while current+next covers the UX-critical path.
+                if (!streamUrl.isNullOrBlank() && streamUrl.startsWith("http") && i <= currentIndex + 1) {
                     prefetchAudioBytes(ctx, videoId, streamUrl)
                 }
 
@@ -170,9 +181,26 @@ object QueuePreloadManager {
                 }
 
                 // Small delay between preloads to avoid hammering the network
-                delay(500)
+                delay(if (includeCurrent && i == currentIndex) 120 else 350)
             }
         }
+    }
+
+    private fun resolveYoutubeVideoId(mediaItem: MediaItem): String? {
+        val mediaId = mediaItem.mediaId
+        if (mediaId.startsWith("youtube_")) return mediaId.removePrefix("youtube_").takeIf { it.isNotBlank() }
+        mediaItem.localConfiguration?.uri?.toString()
+            ?.takeIf { it.startsWith("youtube://") }
+            ?.substringAfter("youtube://")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+        mediaItem.mediaMetadata.extras
+            ?.getString(com.unshoo.pixelmusic.utils.MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI)
+            ?.takeIf { it.startsWith("youtube://") }
+            ?.substringAfter("youtube://")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+        return mediaId.takeIf { it.isNotBlank() && !it.startsWith("-") }
     }
 
     private suspend fun prefetchAudioBytes(ctx: Context, videoId: String, streamUrl: String) {
