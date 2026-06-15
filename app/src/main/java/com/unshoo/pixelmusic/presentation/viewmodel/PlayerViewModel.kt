@@ -2450,6 +2450,7 @@ class PlayerViewModel @Inject constructor(
             return
         }    // Local playback logic
         // Local playback logic
+        dualPlayerEngine.cancelNext()
         if (playbackContext.size <= 1) {
             if (isVoluntaryPlay) incrementSongScore(song)
             playWithArchiveTuneQueueBuilder(song, queueName, playlistId)

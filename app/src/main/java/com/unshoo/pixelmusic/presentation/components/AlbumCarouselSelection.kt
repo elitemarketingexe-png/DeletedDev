@@ -107,6 +107,14 @@ fun AlbumCarouselSection(
     var ignoreNextSettledSelectionForPage by remember { mutableStateOf<Int?>(null) }
     var programmaticScrollInProgress by remember { mutableStateOf(false) }
     var lastSettledSongId by remember { mutableStateOf(currentSong?.id) }
+    var lastSelectedSongIdFromCarousel by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(currentSong?.id) {
+        if (currentSong?.id == lastSelectedSongIdFromCarousel) {
+            lastSelectedSongIdFromCarousel = null
+        }
+    }
+
     LaunchedEffect(effectiveTargetIndex, requestedTargetIndex, queue) {
         snapshotFlow { carouselState.pagerState.isScrollInProgress }
             .first { !it }
@@ -122,6 +130,14 @@ fun AlbumCarouselSection(
                 // and avoid showing the wrong item for the duration of an animation.
                 carouselState.pagerState.scrollToPage(effectiveTargetIndex)
             } else {
+                if (requestedTargetIndex == null && lastSelectedSongIdFromCarousel != null) {
+                    if (currentSong?.id == lastSettledSongId) {
+                        return@LaunchedEffect
+                    } else {
+                        lastSelectedSongIdFromCarousel = null
+                    }
+                }
+
                 if (requestedTargetIndex != null) {
                     ignoreNextSettledSelectionForPage = effectiveTargetIndex
                 }
@@ -159,7 +175,10 @@ fun AlbumCarouselSection(
                 }
                 if (settled != currentSongIndex) {
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                    queue.getOrNull(settled)?.let(onSongSelected)
+                    queue.getOrNull(settled)?.let { selectedSong ->
+                        lastSelectedSongIdFromCarousel = selectedSong.id
+                        onSongSelected(selectedSong)
+                    }
                 }
             }
     }
