@@ -633,7 +633,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND source_type = 0
+                AND (source_type = 0 OR (file_path IS NOT NULL AND file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -659,7 +659,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND source_type = 0
+                AND (source_type = 0 OR (file_path IS NOT NULL AND file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -700,7 +700,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND songs.source_type = 0
+                AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -755,7 +755,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND source_type = 0
+                AND (source_type = 0 OR (file_path IS NOT NULL AND file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -860,7 +860,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND songs.source_type = 0
+                AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -901,7 +901,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND songs.source_type = 0
+                AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -929,7 +929,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND songs.source_type = 0
+                AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -973,7 +973,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND songs.source_type = 0
+                AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -1206,7 +1206,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND songs.source_type = 0
+                AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -1267,7 +1267,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND songs.source_type = 0
+                AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -1341,7 +1341,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND songs.source_type = 0
+                AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
             )
             OR (
                 :filterMode = 2
@@ -1602,7 +1602,7 @@ interface MusicDao {
                         :filterMode = 0
                         OR (
                             :filterMode = 1
-                            AND songs.source_type = 0
+                            AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
                         )
                         OR (
                             :filterMode = 2
@@ -1756,7 +1756,7 @@ interface MusicDao {
                    :filterMode = 0
                    OR (
                        :filterMode = 1
-                       AND songs.source_type = 0
+                       AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
                    )
                    OR (
                        :filterMode = 2
@@ -2202,7 +2202,7 @@ interface MusicDao {
             :filterMode = 0
             OR (
                 :filterMode = 1
-                AND songs.source_type = 0
+                AND (songs.source_type = 0 OR (songs.file_path IS NOT NULL AND songs.file_path != ''))
             )
             OR (
                 :filterMode = 2

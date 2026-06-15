@@ -301,6 +301,7 @@ constructor(
         val FORCE_HIGH_QUALITY_ON_MOBILE = booleanPreferencesKey("force_high_quality_on_mobile")
         val ALBUM_ART_QUALITY_MOBILE = stringPreferencesKey("album_art_quality_mobile")
         val CACHE_LIKED_SONGS_OFFLINE = booleanPreferencesKey("cache_liked_songs_offline")
+        val CACHE_MOST_PLAYED_SONGS_OFFLINE = booleanPreferencesKey("cache_most_played_songs_offline")
         val STORAGE_LIMIT_MB = intPreferencesKey("storage_limit_mb") // 0 = unlimited
         val FOLDER_ARTWORK_PREFERENCE = stringPreferencesKey("folder_artwork_preference")
         val SUBSCRIBED_ARTIST_IDS = stringSetPreferencesKey("subscribed_artist_ids")
@@ -1074,13 +1075,24 @@ constructor(
         }
     }
 
+    val cacheMostPlayedSongsOfflineFlow: Flow<Boolean> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.CACHE_MOST_PLAYED_SONGS_OFFLINE] ?: false
+        }.distinctUntilChanged()
+
+    suspend fun setCacheMostPlayedSongsOffline(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.CACHE_MOST_PLAYED_SONGS_OFFLINE] = enabled
+        }
+    }
+
     /**
      * Storage limit in MB for downloaded songs and album art.
-     * 0 = unlimited. Default: 2048 MB (2 GB).
+     * 0 = unlimited. Default: 1536 MB (1.5 GB).
      */
     val storageLimitMbFlow: Flow<Int> =
         dataStore.data.map { preferences ->
-            (preferences[PreferencesKeys.STORAGE_LIMIT_MB] ?: 2048).coerceIn(0, 10240)
+            (preferences[PreferencesKeys.STORAGE_LIMIT_MB] ?: 1536).coerceIn(0, 10240)
         }
 
     suspend fun setStorageLimitMb(limitMb: Int) {

@@ -2450,7 +2450,6 @@ class PlayerViewModel @Inject constructor(
             return
         }    // Local playback logic
         // Local playback logic
-        dualPlayerEngine.cancelNext()
         if (playbackContext.size <= 1) {
             if (isVoluntaryPlay) incrementSongScore(song)
             playWithArchiveTuneQueueBuilder(song, queueName, playlistId)
@@ -2473,7 +2472,7 @@ class PlayerViewModel @Inject constructor(
 
             if (controller != null && reusableTargetIndex != null) {
                 cancelPendingDirectPlaybackBuild()
-                playLoadedControllerItem(controller, reusableTargetIndex)
+                playLoadedControllerItem(controller, reusableTargetIndex, song)
                 if (isVoluntaryPlay) {
                     incrementSongScore(song)
                     if (playlistId != null && queueName != "None") {
@@ -3186,8 +3185,28 @@ class PlayerViewModel @Inject constructor(
         return songIndexInQueue.takeIf { mediaIdAtTarget == songId }
     }
 
-    private fun playLoadedControllerItem(controller: MediaController, targetIndex: Int) {
+    private fun playLoadedControllerItem(controller: MediaController, targetIndex: Int, targetSong: Song? = null) {
         runOnMainImmediate {
+            // Optimistically update the canonical UI state. Media3 may deliver the transition
+            // callback later (or not at all if rapid seeks collapse), which made the metadata card
+            // stay on the previous song while the carousel/audio moved ahead.
+            targetSong?.let { song ->
+                playbackStateHolder.setCurrentPosition(0L)
+                playbackStateHolder.updateStablePlayerState { state ->
+                    state.copy(
+                        currentSong = song,
+                        currentMediaItemIndex = targetIndex,
+                        isPlaying = true,
+                        playWhenReady = true,
+                        totalDuration = song.duration.coerceAtLeast(0L),
+                        lyrics = null,
+                        isLoadingLyrics = true
+                    )
+                }
+                resetLyricsSearchState()
+                loadLyricsForCurrentSong()
+            }
+
             val shouldSeekToStart =
                 controller.currentMediaItemIndex != targetIndex ||
                     controller.playbackState == Player.STATE_ENDED
@@ -3199,6 +3218,24 @@ class PlayerViewModel @Inject constructor(
                 controller.prepare()
             }
             controller.play()
+
+            viewModelScope.launch {
+                delay(2_500L)
+                runOnMainImmediate {
+                    val stuckAtStart = controller.currentMediaItemIndex == targetIndex &&
+                        controller.playWhenReady &&
+                        controller.currentPosition < 1_000L &&
+                        (controller.playbackState == Player.STATE_BUFFERING || controller.playbackState == Player.STATE_IDLE)
+                    if (stuckAtStart) {
+                        controller.currentMediaItem?.localConfiguration?.uri?.toString()?.let { uri ->
+                            dualPlayerEngine.invalidateResolvedUri(uri)
+                        }
+                        controller.prepare()
+                        controller.seekTo(targetIndex, 0L)
+                        controller.play()
+                    }
+                }
+            }
         }
     }
 
@@ -4147,28 +4184,23 @@ class PlayerViewModel @Inject constructor(
                     playbackStateHolder.updateStablePlayerState { it.copy(totalDuration = resolvedDuration) }
                     startProgressUpdates()
                 }
-                if (playbackState == Player.STATE_IDLE) {
-                    if (playerCtrl.mediaItemCount > 0 && playerCtrl.playWhenReady) {
-                        Timber.tag("PlayerViewModel").w("STATE_IDLE recovery: re-preparing player.")
-                        playerCtrl.prepare()
-                    } else if (playerCtrl.mediaItemCount == 0) {
-                        clearPreparingSongIfMatching()
-                        if (!isCastConnecting.value && !isRemotePlaybackActive.value) {
-                            lyricsStateHolder.cancelLoading()
-                            playbackStateHolder.updateStablePlayerState {
-                                it.copy(
-                                    currentSong = null,
-                                    isPlaying = false,
-                                    playWhenReady = false,
-                                    lyrics = null,
-                                    isLoadingLyrics = false,
-                                    totalDuration = 0L
-                                )
-                            }
-                            playbackStateHolder.clearCurrentPositionHints()
-                            playbackStateHolder.setCurrentPosition(0L)
-                            resetPlaybackAudioMetadata()
+                if (playbackState == Player.STATE_IDLE && playerCtrl.mediaItemCount == 0) {
+                    clearPreparingSongIfMatching()
+                    if (!isCastConnecting.value && !isRemotePlaybackActive.value) {
+                        lyricsStateHolder.cancelLoading()
+                        playbackStateHolder.updateStablePlayerState {
+                            it.copy(
+                                currentSong = null,
+                                isPlaying = false,
+                                playWhenReady = false,
+                                lyrics = null,
+                                isLoadingLyrics = false,
+                                totalDuration = 0L
+                            )
                         }
+                        playbackStateHolder.clearCurrentPositionHints()
+                        playbackStateHolder.setCurrentPosition(0L)
+                        resetPlaybackAudioMetadata()
                     }
                 }
             }
@@ -4898,16 +4930,8 @@ class PlayerViewModel @Inject constructor(
         }
 
         if (videoId != null && targetFavoriteState) {
-            withContext(Dispatchers.IO) {
-                try {
-                    val appDb = com.unshoo.pixelmusic.data.database.youtube.AppDatabase.getInstance(context)
-                    appDb.songRepository().markAsPermanentlyDownloaded(videoId)
-                } catch (e: Exception) {
-                    Timber.w(e, "Failed to mark YouTube song as permanently downloaded")
-                }
-            }
-
-            // Component 26: Cache liked songs offline
+            // Optional manual behavior: only download liked songs if the user explicitly enabled it.
+            // Do not mark songs as downloaded unless the audio file actually exists.
             val shouldCache = userPreferencesRepository.cacheLikedSongsOfflineFlow.first()
             if (shouldCache) {
                 val workRequest = OneTimeWorkRequestBuilder<SongDownloadWorker>()

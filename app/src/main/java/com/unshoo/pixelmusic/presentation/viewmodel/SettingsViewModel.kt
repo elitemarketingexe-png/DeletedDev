@@ -125,7 +125,8 @@ data class SettingsUiState(
     val forceHighQualityOnMobile: Boolean = false,
     val albumArtQualityMobile: AlbumArtQuality = AlbumArtQuality.LOW,
     val cacheLikedSongsOffline: Boolean = false,
-    val storageLimitMb: Int = 2048,
+    val cacheMostPlayedSongsOffline: Boolean = false,
+    val storageLimitMb: Int = 1536,
     val preloadQueueEnabled: Boolean = true,
     val preloadQueueSize: Int = 5,
     val autoQueueEnabled: Boolean = true,
@@ -859,6 +860,12 @@ class SettingsViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            userPreferencesRepository.cacheMostPlayedSongsOfflineFlow.collect { enabled ->
+                _uiState.update { it.copy(cacheMostPlayedSongsOffline = enabled) }
+            }
+        }
+
+        viewModelScope.launch {
             userPreferencesRepository.storageLimitMbFlow.collect { limit ->
                 _uiState.update { it.copy(storageLimitMb = limit) }
             }
@@ -1415,6 +1422,12 @@ class SettingsViewModel @Inject constructor(
     fun setCacheLikedSongsOffline(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setCacheLikedSongsOffline(enabled)
+        }
+    }
+
+    fun setCacheMostPlayedSongsOffline(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setCacheMostPlayedSongsOffline(enabled)
         }
     }
 

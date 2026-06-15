@@ -3,10 +3,13 @@ package com.unshoo.pixelmusic.data.remote.youtube
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.os.Environment
+import androidx.datastore.preferences.core.intPreferencesKey
 import com.unshoo.pixelmusic.data.model.youtube.Song
+import com.unshoo.pixelmusic.data.preferences.dataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -128,6 +131,7 @@ object DownloadHelper {
                 }
             }
 
+            enforceStorageLimit(context, keepFile = outputFile)
             return@withContext outputFile.absolutePath
 
         } catch (e: Exception) {
@@ -136,6 +140,32 @@ object DownloadHelper {
             outputFile.delete()
             return@withContext null
         }
+    }
+
+    private suspend fun enforceStorageLimit(context: Context, keepFile: File? = null) = withContext(Dispatchers.IO) {
+        val limitMb = runCatching {
+            context.dataStore.data.first()[intPreferencesKey("storage_limit_mb")] ?: 1536
+        }.getOrDefault(1536).coerceIn(0, 10240)
+        if (limitMb <= 0) return@withContext
+
+        val audioDir = UmihiHelper.getDownloadDirectory(context, Constants.Downloads.AUDIO_FILES_FOLDER)
+        val imageDir = UmihiHelper.getDownloadDirectory(context, Constants.Downloads.THUMBNAILS_FOLDER)
+        val limitBytes = limitMb.toLong() * 1024L * 1024L
+
+        fun allCacheFiles(): List<File> = listOf(audioDir, imageDir)
+            .flatMap { dir -> dir.listFiles()?.filter { it.isFile } ?: emptyList() }
+
+        var files = allCacheFiles()
+        var totalBytes = files.sumOf { it.length() }
+        if (totalBytes <= limitBytes) return@withContext
+
+        files.sortedBy { it.lastModified().takeIf { ts -> ts > 0L } ?: Long.MIN_VALUE }
+            .forEach { file ->
+                if (totalBytes <= limitBytes) return@forEach
+                if (keepFile != null && file.absolutePath == keepFile.absolutePath) return@forEach
+                val size = file.length()
+                if (file.delete()) totalBytes -= size
+            }
     }
 
     fun copyToPublicDownload(context: Context, sourceFilePath: String, songTitle: String, artistName: String): File? {

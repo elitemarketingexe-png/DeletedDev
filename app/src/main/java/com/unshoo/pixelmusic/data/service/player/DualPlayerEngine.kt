@@ -229,20 +229,9 @@ class DualPlayerEngine @Inject constructor(
             // The lock for any truly stale entries will expire naturally when those
             // video-IDs are no longer the active item.
             val incomingUriStr = mediaItem?.localConfiguration?.uri?.toString()
-            // Only evict resolved URIs that are neither the incoming song nor the outgoing
-            // song still being read during a crossfade. Keeping one extra entry prevents
-            // ExoPlayer from re-entering the slow runBlocking resolution path for the
-            // outgoing track's ongoing buffered reads.
-            if (activePlaybackResolvedUris.size > 2) {
-                activePlaybackResolvedUris.keys
-                    .filter { it != incomingUriStr }
-                    .drop(1) // preserve one extra (outgoing track) for crossfade data reads
-                    .forEach { activePlaybackResolvedUris.remove(it) }
-            } else {
-                activePlaybackResolvedUris.keys
-                    .filter { it != incomingUriStr }
-                    .forEach { activePlaybackResolvedUris.remove(it) }
-            }
+            activePlaybackResolvedUris.keys
+                .filter { it != incomingUriStr }
+                .forEach { activePlaybackResolvedUris.remove(it) }
             cancelAudioOffloadFallback()
             
             // If the transition was not automatic (e.g. user skip or playlist change),
@@ -264,27 +253,7 @@ class DualPlayerEngine @Inject constructor(
             }
             applyWakeModeForCurrentItem()
 
-            // --- Immediate Pre-Resolution of the CURRENT Song ---
-            // ExoPlayer's ResolvingDataSource will call resolveDataSpec() milliseconds after
-            // this transition callback. By launching resolution NOW (before the 600ms debounce),
-            // we populate the LRU cache so resolveDataSpec finds a cache hit and never blocks
-            // the loader thread with a runBlocking network call.
-            val currentSongUri = mediaItem?.localConfiguration?.uri
-            if (currentSongUri != null) {
-                val currentScheme = currentSongUri.scheme
-                if (currentScheme == "youtube" || currentScheme == "telegram" || currentScheme == "gdrive") {
-                    scope.launch(Dispatchers.IO) {
-                        try {
-                            resolveCloudUri(currentSongUri)
-                            Timber.tag("DualPlayerEngine").d("Pre-resolved current song URI immediately: %s", currentScheme)
-                        } catch (e: Exception) {
-                            Timber.tag("DualPlayerEngine").w(e, "Failed to pre-resolve current song URI")
-                        }
-                    }
-                }
-            }
-
-            // --- Debounced Pre-Resolution of Next/Prev Tracks ---
+            // --- Pre-Resolve Next/Prev Tracks with Debounce to prevent flooding ---
             preResolutionJob?.cancel()
             preResolutionJob = scope.launch {
                 delay(600) // Wait for user to stop skipping/navigating
@@ -419,6 +388,12 @@ class DualPlayerEngine @Inject constructor(
     fun isTransitionRunning(): Boolean = transitionRunning
 
     fun getAudioSessionId(): Int = playerA.audioSessionId
+
+    fun invalidateResolvedUri(uriString: String) {
+        resolvedUriCache.remove(uriString)
+        activePlaybackResolvedUris.remove(uriString)
+        activeResolutions.remove(uriString)?.cancel()
+    }
 
     private var isReleased = false
     internal val resolvedUriCache = LruCache<String, Uri>(100)
@@ -743,14 +718,11 @@ class DualPlayerEngine @Inject constructor(
                 // Only resolve custom schemes that cannot be loaded natively by ExoPlayer
                 if (scheme == "telegram" || scheme == "gdrive" || scheme == "youtube") {
                     val originalUri = uri.toString()
-
-                    // Fast path 1: local file path
                     val localPath = localFilePathCache[originalUri]
                     if (localPath != null && java.io.File(localPath).exists()) {
                         return dataSpec.buildUpon().setUri(Uri.fromFile(java.io.File(localPath))).build()
                     }
 
-                    // Fast path 2: DualPlayerEngine resolvedUriCache
                     val resolved = resolvedUriCache.get(originalUri)
                     if (resolved != null) {
                         if (isResolvedUriFresh(originalUri, resolved)) {
@@ -761,49 +733,16 @@ class DualPlayerEngine @Inject constructor(
                         }
                     }
 
-                    // Fast path 3: YoutubeHelper.streamUrlLruCache
-                    // This is populated by the immediate pre-resolution launched in onMediaItemTransition.
-                    // Checking it here avoids the expensive runBlocking network call on loader threads.
-                    if (scheme == "youtube") {
-                        val videoId = originalUri.removePrefix("youtube://")
-                        val cachedYtUrl = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.get("${videoId}_high")
-                            ?: com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.get("${videoId}_low")
-                        if (!cachedYtUrl.isNullOrBlank() && cachedYtUrl.startsWith("http")) {
-                            val cachedUri = Uri.parse(cachedYtUrl)
-                            if (isResolvedUriFresh(originalUri, cachedUri)) {
-                                resolvedUriCache.put(originalUri, cachedUri)
-                                activePlaybackResolvedUris[originalUri] = cachedUri
-                                Timber.tag("DualPlayerEngine").d("resolveDataSpec: YoutubeHelper LRU cache HIT for %s", videoId)
-                                return dataSpec.buildUpon().setUri(cachedUri).build()
-                            }
-                        }
-                    }
-
-                    // Slow path: runBlocking with timeout.
-                    // This should only be reached if immediate pre-resolution (launched in onMediaItemTransition)
-                    // hasn't completed yet. The 8-second timeout prevents indefinite loader thread blocking
-                    // that would starve ExoPlayer's thread pool and freeze the UI.
                     try {
-                        val fallbackResolved = runBlocking {
-                            kotlinx.coroutines.withTimeout(8_000L) {
-                                resolveCloudUri(uri)
-                            }
-                        }
+                        val fallbackResolved = runBlocking { resolveCloudUri(uri) }
                         if (fallbackResolved != uri) {
                             return dataSpec.buildUpon().setUri(fallbackResolved).build()
                         }
-                    } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                        // Throw IOException so ExoPlayer surfaces a load error instead of
-                        // buffering forever on an unresolvable URI.
-                        Timber.tag("DualPlayerEngine").e("resolveDataSpec timed out after 8s for scheme='%s'. Signalling load error.", scheme)
-                        throw java.io.IOException("Stream URL resolution timed out for: $originalUri")
-                    } catch (e: java.io.IOException) {
-                        throw e // re-throw so ExoPlayer handles the load error
                     } catch (e: Exception) {
                         Timber.tag("DualPlayerEngine").w(e, "Synchronous resolveCloudUri failed for %s", originalUri)
                     }
                     
-                    Timber.tag("DualPlayerEngine").d("resolveDataSpec: Cache MISS for %s - using original URI", scheme)
+                    Timber.tag("DualPlayerEngine").d("resolveDataSpec: Cache MISS for %s - attempting to use original URI", scheme)
                 }
                 return dataSpec
             }
@@ -1081,21 +1020,14 @@ class DualPlayerEngine @Inject constructor(
         transitionJob?.cancel()
         transitionRunning = false
         resetPreparedWindowState()
-        // Reset pauseAtEndOfMediaItems and volume on BOTH players before stopping playerB.
-        // This prevents a cancelled crossfade from leaving either player silently paused
-        // at 00:00 (the rapid-skip freeze bug where pauseAtEnd=true survives cancellation).
-        if (::playerA.isInitialized) {
-            playerA.pauseAtEndOfMediaItems = false
-            playerA.volume = 1f
+        if (::playerB.isInitialized && playerB.mediaItemCount > 0) {
+            try {
+                playerB.stop()
+                playerB.clearMediaItems()
+            } catch (e: Exception) { /* Ignore */ }
         }
-        if (::playerB.isInitialized) {
-            playerB.pauseAtEndOfMediaItems = false
-            if (playerB.mediaItemCount > 0) {
-                try {
-                    playerB.stop()
-                    playerB.clearMediaItems()
-                } catch (e: Exception) { /* Ignore */ }
-            }
+        if (::playerA.isInitialized) {
+            playerA.volume = 1f
         }
         incomingTrackReplayGainVolume = null
         setPauseAtEndOfMediaItems(false)
@@ -1116,17 +1048,6 @@ class DualPlayerEngine @Inject constructor(
                 if (::playerB.isInitialized) playerB.stop()
             } finally {
                 transitionRunning = false
-                // Always reset pauseAtEndOfMediaItems on both players in the finally block.
-                // CancellationException bypasses the catch block, so without this, a cancelled
-                // crossfade leaves pauseAtEnd=true on the player, causing the next track to
-                // silently pause at 00:00 (the rapid-skip freeze bug).
-                if (::playerA.isInitialized) {
-                    playerA.pauseAtEndOfMediaItems = false
-                    if (playerA.volume < 0.01f) playerA.volume = 1f
-                }
-                if (::playerB.isInitialized) {
-                    playerB.pauseAtEndOfMediaItems = false
-                }
                 onTransitionFinishedListeners.forEach { it() }
             }
         }

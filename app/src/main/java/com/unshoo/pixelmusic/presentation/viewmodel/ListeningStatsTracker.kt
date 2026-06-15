@@ -11,6 +11,7 @@ import com.unshoo.pixelmusic.data.DailyMixManager
 import com.unshoo.pixelmusic.data.database.EngagementDao
 import com.unshoo.pixelmusic.data.database.MusicDao
 import com.unshoo.pixelmusic.data.model.Song
+import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
 import com.unshoo.pixelmusic.data.remote.youtube.SongDownloadWorker
 import com.unshoo.pixelmusic.data.stats.PlaybackStatsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -21,6 +22,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
@@ -43,7 +45,8 @@ class ListeningStatsTracker @Inject constructor(
     private val dailyMixManager: DailyMixManager,
     private val playbackStatsRepository: PlaybackStatsRepository,
     private val engagementDao: EngagementDao,
-    private val musicDao: MusicDao
+    private val musicDao: MusicDao,
+    private val userPreferencesRepository: UserPreferencesRepository
 ) {
     private var currentSession: ActiveSession? = null
     private var pendingVoluntarySongId: String? = null
@@ -393,9 +396,11 @@ class ListeningStatsTracker @Inject constructor(
             genre = genre,
             album = album
         )
-        // Auto-cache YouTube songs played 3+ times: trigger a background download
-        // so frequently-listened songs become fully available offline.
-        triggerAutoCacheIfNeeded(songId)
+        // Optional: cache most played YouTube songs. Disabled by default to avoid
+        // unexpected downloads, storage use, heat, and battery drain.
+        if (userPreferencesRepository.cacheMostPlayedSongsOfflineFlow.first()) {
+            triggerAutoCacheIfNeeded(songId)
+        }
     }
 
     /**

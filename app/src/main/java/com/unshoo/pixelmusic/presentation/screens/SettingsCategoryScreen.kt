@@ -1132,11 +1132,18 @@ fun SettingsCategoryScreen(
                                     leadingIcon = { Icon(painterResource(R.drawable.outline_high_quality_24), null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
                                 SwitchSettingItem(
-                                    title = stringResource(R.string.setcat_cache_liked_songs_title),
-                                    subtitle = stringResource(R.string.setcat_cache_liked_songs_desc),
+                                    title = "Cache liked songs manually",
+                                    subtitle = "When you like a YouTube song, download it for offline use. Off by default to prevent unexpected downloads.",
                                     checked = uiState.cacheLikedSongsOffline,
                                     onCheckedChange = { settingsViewModel.setCacheLikedSongsOffline(it) },
                                     leadingIcon = { Icon(painterResource(R.drawable.round_favorite_border_24), null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                SwitchSettingItem(
+                                    title = "Cache most played songs",
+                                    subtitle = "Automatically download YouTube songs after repeated plays. Keep off if you do not want automatic downloads.",
+                                    checked = uiState.cacheMostPlayedSongsOffline,
+                                    onCheckedChange = { settingsViewModel.setCacheMostPlayedSongsOffline(it) },
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_auto_delete_24), null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
                                 ThemeSelectorItem(
                                     label = "Playback Client",
