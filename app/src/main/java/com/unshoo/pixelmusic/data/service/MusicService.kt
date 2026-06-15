@@ -2624,13 +2624,24 @@ class MusicService : MediaLibraryService() {
         )
 
         // Merge theme preference reads into a single context switch
-        val (playerTheme, paletteStyle, colorAccuracyLevel) = withContext(Dispatchers.IO) {
-            Triple(
-                themePreferencesRepository.playerThemePreferenceFlow.first(),
-                AlbumArtPaletteStyle.fromStorageKey(themePreferencesRepository.albumArtPaletteStyleFlow.first().storageKey),
-                AlbumArtColorAccuracy.clamp(themePreferencesRepository.albumArtColorAccuracyFlow.first())
+        data class ThemeParams(
+            val playerTheme: String,
+            val paletteStyle: AlbumArtPaletteStyle,
+            val colorAccuracyLevel: Int,
+            val colorPalette: String
+        )
+        val params = withContext(Dispatchers.IO) {
+            ThemeParams(
+                playerTheme = themePreferencesRepository.playerThemePreferenceFlow.first(),
+                paletteStyle = AlbumArtPaletteStyle.fromStorageKey(themePreferencesRepository.albumArtPaletteStyleFlow.first().storageKey),
+                colorAccuracyLevel = AlbumArtColorAccuracy.clamp(themePreferencesRepository.albumArtColorAccuracyFlow.first()),
+                colorPalette = themePreferencesRepository.colorPalettePreferenceFlow.first()
             )
         }
+        val playerTheme = params.playerTheme
+        val paletteStyle = params.paletteStyle
+        val colorAccuracyLevel = params.colorAccuracyLevel
+        val colorPalette = params.colorPalette
 
         val schemePair: ColorSchemePair? = when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && playerTheme == ThemePreference.DYNAMIC ->
@@ -2638,6 +2649,18 @@ class MusicService : MediaLibraryService() {
                     light = dynamicLightColorScheme(applicationContext),
                     dark = dynamicDarkColorScheme(applicationContext)
                 )
+            playerTheme == ThemePreference.GLOBAL -> {
+                if (colorPalette == "DYNAMIC" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    ColorSchemePair(
+                        light = dynamicLightColorScheme(applicationContext),
+                        dark = dynamicDarkColorScheme(applicationContext)
+                    )
+                } else {
+                    val darkScheme = com.unshoo.pixelmusic.ui.theme.getStaticColorScheme(colorPalette, true)
+                    val lightScheme = com.unshoo.pixelmusic.ui.theme.getStaticColorScheme(colorPalette, false)
+                    ColorSchemePair(light = lightScheme, dark = darkScheme)
+                }
+            }
             artUriString != null ->
                 // Skip heavy palette recomputation when art, style, and accuracy haven't changed
                 if (

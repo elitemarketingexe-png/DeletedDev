@@ -736,7 +736,8 @@ fun SettingsCategoryScreen(
                                         "SAGE" to stringResource(R.string.setcat_color_palette_sage),
                                         "PURPLE" to stringResource(R.string.setcat_color_palette_purple),
                                         "BLUE" to stringResource(R.string.setcat_color_palette_blue),
-                                        "ORANGE" to stringResource(R.string.setcat_color_palette_orange)
+                                        "ORANGE" to stringResource(R.string.setcat_color_palette_orange),
+                                        "GREY" to stringResource(R.string.setcat_color_palette_grey)
                                     ),
                                     selectedKey = uiState.colorPalette,
                                     onSelectionChanged = { settingsViewModel.setColorPalette(it) },
@@ -757,6 +758,7 @@ fun SettingsCategoryScreen(
                                     description = stringResource(R.string.setcat_player_theme_desc),
                                     options = mapOf(
                                         ThemePreference.ALBUM_ART to stringResource(R.string.setcat_player_theme_album_art),
+                                        ThemePreference.GLOBAL to stringResource(R.string.setcat_player_theme_global),
                                         ThemePreference.DYNAMIC to stringResource(R.string.setcat_player_theme_dynamic)
                                     ),
                                     selectedKey = uiState.playerThemePreference,

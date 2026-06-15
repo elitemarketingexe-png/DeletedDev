@@ -341,12 +341,80 @@ val OrangeLightColorScheme = lightColorScheme(
     onError = Color.White
 )
 
-private fun getStaticColorScheme(palette: String, darkTheme: Boolean): androidx.compose.material3.ColorScheme {
+// --- Dark & Grey Palette (Monochrome/Minimal) ---
+private val GreyDarkBackground = Color(0xFF121212)
+private val GreyDarkSurface = Color(0xFF1E1E1E)
+private val GreyDarkPrimary = Color(0xFFE0E0E0)
+private val GreyDarkSecondary = Color(0xFF9E9E9E)
+private val GreyDarkTertiary = Color(0xFFCCCCCC)
+private val GreyDarkOnPrimary = Color(0xFF121212)
+private val GreyDarkOnBackground = Color(0xFFF2F2F7)
+private val GreyDarkOnSurface = Color(0xFFF2F2F7)
+private val GreyDarkOnSurfaceVariant = Color(0xFFAEAEB2)
+
+private val GreyLightBackground = Color(0xFFF2F2F7)
+private val GreyLightSurface = Color(0xFFFFFFFF)
+private val GreyLightPrimary = Color(0xFF1C1C1E)
+private val GreyLightOnPrimary = Color(0xFFFFFFFF)
+private val GreyLightPrimaryContainer = Color(0xFFE5E5EA)
+private val GreyLightOnPrimaryContainer = Color(0xFF1C1C1E)
+private val GreyLightSecondary = Color(0xFF636366)
+private val GreyLightSecondaryContainer = Color(0xFFE5E5EA)
+private val GreyLightOnSecondaryContainer = Color(0xFF2C2C2E)
+private val GreyLightTertiary = Color(0xFF48484A)
+private val GreyLightOnBackground = Color(0xFF1C1C1E)
+private val GreyLightOnSurface = Color(0xFF1C1C1E)
+private val GreyLightSurfaceVariant = Color(0xFFE5E5EA)
+private val GreyLightOnSurfaceVariant = Color(0xFF636366)
+private val GreyLightOutline = Color(0xFF8E8E93)
+
+val GreyDarkColorScheme = darkColorScheme(
+    primary = GreyDarkPrimary,
+    secondary = GreyDarkSecondary,
+    tertiary = GreyDarkTertiary,
+    background = GreyDarkBackground,
+    surface = GreyDarkSurface,
+    onPrimary = GreyDarkOnPrimary,
+    onSecondary = GreyDarkOnPrimary,
+    onTertiary = GreyDarkOnPrimary,
+    onBackground = GreyDarkOnBackground,
+    onSurface = GreyDarkOnSurface,
+    onSurfaceVariant = GreyDarkOnSurfaceVariant,
+    error = Color(0xFFFF5252),
+    onError = Color.White
+)
+
+val GreyLightColorScheme = lightColorScheme(
+    primary = GreyLightPrimary,
+    onPrimary = GreyLightOnPrimary,
+    primaryContainer = GreyLightPrimaryContainer,
+    onPrimaryContainer = GreyLightOnPrimaryContainer,
+    secondary = GreyLightSecondary,
+    onSecondary = GreyLightOnPrimary,
+    secondaryContainer = GreyLightSecondaryContainer,
+    onSecondaryContainer = GreyLightOnSecondaryContainer,
+    tertiary = GreyLightTertiary,
+    onTertiary = PixelMusicBlack,
+    background = GreyLightBackground,
+    onBackground = GreyLightOnBackground,
+    surface = GreyLightSurface,
+    onSurface = GreyLightOnSurface,
+    surfaceVariant = GreyLightSurfaceVariant,
+    onSurfaceVariant = GreyLightOnSurfaceVariant,
+    outline = GreyLightOutline,
+    outlineVariant = GreyLightOutline.copy(alpha = 0.6f),
+    surfaceTint = GreyLightPrimary,
+    error = Color(0xFFD32F2F),
+    onError = Color.White
+)
+
+fun getStaticColorScheme(palette: String, darkTheme: Boolean): androidx.compose.material3.ColorScheme {
     return if (darkTheme) {
         when (palette) {
             "PURPLE" -> PurpleDarkColorScheme
             "BLUE" -> BlueDarkColorScheme
             "ORANGE" -> OrangeDarkColorScheme
+            "GREY" -> GreyDarkColorScheme
             else -> SageDarkColorScheme
         }
     } else {
@@ -354,6 +422,7 @@ private fun getStaticColorScheme(palette: String, darkTheme: Boolean): androidx.
             "PURPLE" -> PurpleLightColorScheme
             "BLUE" -> BlueLightColorScheme
             "ORANGE" -> OrangeLightColorScheme
+            "GREY" -> GreyLightColorScheme
             else -> SageLightColorScheme
         }
     }

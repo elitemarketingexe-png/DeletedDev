@@ -508,6 +508,15 @@ class PhoneDirectWatchTransferCoordinator @Inject constructor(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && playerTheme == ThemePreference.DYNAMIC) {
             return buildWearThemePalette(dynamicDarkColorScheme(application))
         }
+        if (playerTheme == ThemePreference.GLOBAL) {
+            val colorPalette = themePreferencesRepository.colorPalettePreferenceFlow.first()
+            if (colorPalette == "DYNAMIC" && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                return buildWearThemePalette(dynamicDarkColorScheme(application))
+            } else {
+                val darkScheme = com.unshoo.pixelmusic.ui.theme.getStaticColorScheme(colorPalette, true)
+                return buildWearThemePalette(darkScheme)
+            }
+        }
 
         val artUriString = song.albumArtUriString?.takeIf { it.isNotBlank() }
         if (artUriString != null) {
