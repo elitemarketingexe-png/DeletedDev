@@ -197,47 +197,36 @@ fun SongPickerContent(
                                 onClick = { playerViewModel.setPlaylistPickerStorageFilter(filter) },
                                 transformOrigin = if (index == 0) TransformOrigin(0f, 0.5f) else TransformOrigin(1f, 0.5f)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    when (filter) {
-                                        StorageFilter.LOCAL -> {
-                                            Icon(
-                                                painter = painterResource(id = R.drawable.ic_phonef),
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                        StorageFilter.TELEGRAM -> {
-                                            Icon(
-                                                painter = painterResource(id = R.drawable.telegram),
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                        StorageFilter.YOUTUBE -> {
-                                            Icon(
-                                                painter = painterResource(id = R.drawable.ic_youtube),
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                        else -> {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Dataset,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
+                                when (filter) {
+                                    StorageFilter.LOCAL -> {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_phonef),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
                                     }
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = stringResource(labelRes),
-                                        fontFamily = GoogleSansRounded,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(end = 4.dp)
-                                    )
+                                    StorageFilter.TELEGRAM -> {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.telegram),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    StorageFilter.YOUTUBE -> {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_youtube),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = Color.Unspecified
+                                        )
+                                    }
+                                    else -> {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Dataset,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

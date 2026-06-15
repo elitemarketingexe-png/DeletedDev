@@ -378,9 +378,10 @@ fun LibraryActionRow(
                             modifier = Modifier.size(genHeight)
                         ) {
                              Icon(
-                                imageVector = finalIcon,
-                                contentDescription = tooltipText
-                            )
+                                 imageVector = finalIcon,
+                                 contentDescription = tooltipText,
+                                 tint = if (currentStorageFilter == com.unshoo.pixelmusic.data.model.StorageFilter.YOUTUBE) Color.Unspecified else androidx.compose.material3.LocalContentColor.current
+                             )
                         }
                     }
                 }
