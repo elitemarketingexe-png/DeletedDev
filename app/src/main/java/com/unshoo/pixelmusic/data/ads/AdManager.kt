@@ -20,6 +20,7 @@ object AdManager {
     private const val KEY_LAST_POPUP_TIME = "last_popup_time"
     private const val KEY_POPUP_STATUS = "popup_status"
     private const val KEY_LAST_AD_WATCH_TIME = "last_ad_watch_time"
+    private const val KEY_LAST_POPUP_OPEN_COUNT = "last_popup_open_count"
 
     private var rewardedAd: RewardedAd? = null
     private var isLoading = false
@@ -124,15 +125,13 @@ object AdManager {
             val openCount = prefs.getInt(KEY_APP_OPEN_COUNT, 0)
             if (openCount < 5) return false
 
-            val lastPopupTime = prefs.getLong(KEY_LAST_POPUP_TIME, 0L)
-            if (lastPopupTime == 0L) return true
+            val lastPopupOpenCount = prefs.getInt(KEY_LAST_POPUP_OPEN_COUNT, 0)
+            if (lastPopupOpenCount == 0) return true
 
             val popupStatus = prefs.getString(KEY_POPUP_STATUS, "none")
-            val elapsedTime = System.currentTimeMillis() - lastPopupTime
-            val daysRequired = if (popupStatus == "watched") 3 else 2
-            val timeRequiredMs = daysRequired * 24L * 60L * 60L * 1000L
+            val launchesRequired = if (popupStatus == "watched") 15 else 10
             
-            return elapsedTime >= timeRequiredMs
+            return (openCount - lastPopupOpenCount) >= launchesRequired
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to check if support popup should be shown", e)
             return false
@@ -142,7 +141,11 @@ object AdManager {
     fun recordPopupShown(context: Context) {
         try {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putLong(KEY_LAST_POPUP_TIME, System.currentTimeMillis()).apply()
+            val openCount = prefs.getInt(KEY_APP_OPEN_COUNT, 0)
+            prefs.edit()
+                .putLong(KEY_LAST_POPUP_TIME, System.currentTimeMillis())
+                .putInt(KEY_LAST_POPUP_OPEN_COUNT, openCount)
+                .apply()
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to record popup shown", e)
         }
