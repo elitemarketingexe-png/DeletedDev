@@ -3,9 +3,7 @@ package com.unshoo.pixelmusic.presentation.screens.youtube
 import android.webkit.CookieManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.unshoo.pixelmusic.data.remote.youtube.Constants
 import com.unshoo.pixelmusic.data.remote.youtube.DatastoreRepository
-import com.unshoo.pixelmusic.data.remote.youtube.UmihiHelper.printd
 import com.unshoo.pixelmusic.data.model.youtube.Cookies
 import com.unshoo.pixelmusic.data.worker.SyncManager
 import com.unshoo.pixelmusic.data.worker.YouTubeLibrarySyncManager
@@ -25,22 +23,19 @@ class AuthViewModel @Inject constructor(
     private val youTubeLibrarySyncManager: YouTubeLibrarySyncManager
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsState())
-    //  val uiState = _uiState.asStateFlow()
 
     private val _eventsChannel = MutableSharedFlow<ScreenEvent.Out>()
     val eventFlow = _eventsChannel.asSharedFlow()
 
     fun onPageFinished(url: String?) {
         viewModelScope.launch {
-            if (url?.contains(Constants.Auth.END_URL) == true && !_uiState.value.isLoggedIn) {
-                val cookies = CookieManager.getInstance().getCookie(url).orEmpty()
+            val cookieManager = CookieManager.getInstance()
+            val cookies = cookieManager.getCookie("https://music.youtube.com").orEmpty()
+            if ((cookies.contains("SAPISID") || cookies.contains("__Secure-3PAPISID")) && !_uiState.value.isLoggedIn) {
                 saveCookies(Cookies(cookies))
                 _uiState.update { it.copy(isLoggedIn = true) }
                 _eventsChannel.emit(ScreenEvent.Out.LoginCompleted)
-                // Immediately hydrate account-owned artists/liked songs so Library is not empty
-                // while the heavier playlist/song sync runs in WorkManager.
                 launch(kotlinx.coroutines.Dispatchers.IO) { youTubeLibrarySyncManager.syncNow(force = true) }
-                // Trigger a lighter incremental sync; full local rescans on login make the app laggy.
                 syncManager.incrementalSync()
             }
         }
@@ -54,7 +49,6 @@ class AuthViewModel @Inject constructor(
     }
 
     private fun saveCookies(cookies: Cookies) {
-        printd("Got cookies: $cookies")
         viewModelScope.launch {
             datastoreRepository.saveCookies(cookies)
             YouTube.cookie = cookies.toRawCookie()

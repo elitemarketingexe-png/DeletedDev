@@ -534,6 +534,16 @@ fun SettingsCategoryScreen(
                                     trailingIcon = { Icon(Icons.Rounded.ChevronRight, stringResource(R.string.cd_open), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                                     onClick = { navController.navigateSafely(Screen.ArtistSettings.route) }
                                 )
+                                SettingsItem(
+                                    title = "Download Directory",
+                                    subtitle = "Configure storage location for downloaded songs",
+                                    leadingIcon = { Icon(Icons.Outlined.Folder, null, tint = MaterialTheme.colorScheme.secondary) },
+                                    trailingIcon = { Icon(Icons.Rounded.ChevronRight, stringResource(R.string.cd_open), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    onClick = {
+                                        showExplorerSheet = true
+                                        settingsViewModel.openExplorer()
+                                    }
+                                )
                             }
 
                             SettingsSubsection(title = stringResource(R.string.setcat_filtering)) {
@@ -541,7 +551,7 @@ fun SettingsCategoryScreen(
                                     label = stringResource(R.string.setcat_min_song_duration),
                                     value = minSongDurationDraft,
                                     valueRange = 0f..120000f,
-                                    steps = 23, // 0, 5, 10, 15, ... 120 seconds (24 positions, 23 steps)
+                                    steps = 23,
                                     onValueChange = { minSongDurationDraft = it },
                                     onValueChangeFinished = {
                                         val selectedDuration = minSongDurationDraft.toInt()

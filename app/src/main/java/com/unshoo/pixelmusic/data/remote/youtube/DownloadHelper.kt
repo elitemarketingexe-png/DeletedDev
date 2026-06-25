@@ -168,7 +168,7 @@ object DownloadHelper {
             }
     }
 
-    fun copyToPublicDownload(context: Context, sourceFilePath: String, songTitle: String, artistName: String): File? {
+    suspend fun copyToPublicDownload(context: Context, sourceFilePath: String, songTitle: String, artistName: String): File? {
         try {
             val sourceFile = File(sourceFilePath)
             if (!sourceFile.exists()) return null
@@ -177,10 +177,13 @@ object DownloadHelper {
             val safeArtist = artistName.replace(Regex("[\\\\/:*?\"\\<>|]"), "_")
             val fileName = "$safeTitle - $safeArtist.webm"
 
-            val publicDownloadDir = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                "PixelMusic"
-            )
+            val repo = DatastoreRepository(context)
+            val customPath = repo.customDownloadPath.first()
+            val publicDownloadDir = if (customPath.isNotBlank()) {
+                File(customPath)
+            } else {
+                File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "PixelMusic")
+            }
             if (!publicDownloadDir.exists()) {
                 publicDownloadDir.mkdirs()
             }

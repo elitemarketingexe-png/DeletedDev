@@ -195,7 +195,6 @@ fun AccountsScreen(
                 )
             }
 
-            // YouTube Account Card (Crimson brand themed)
             item {
                 YouTubeAccountCard(
                     account = youtubeAccount,
@@ -212,6 +211,9 @@ fun AccountsScreen(
                     },
                     onLogout = {
                         viewModel.logout(ExternalServiceAccount.YOUTUBE)
+                    },
+                    onToggleSync = {
+                        viewModel.toggleSync(it)
                     }
                 )
             }
@@ -734,7 +736,8 @@ private fun YouTubeAccountCard(
     isSyncing: Boolean,
     onSignIn: () -> Unit,
     onSync: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onToggleSync: (Boolean) -> Unit = {}
 ) {
     val cardShape = AbsoluteSmoothCornerShape(28.dp, 60)
     val isConnected = account != null
@@ -747,8 +750,8 @@ private fun YouTubeAccountCard(
             .background(
                 brush = Brush.linearGradient(
                     colors = listOf(
-                        Color(0xFF4A0E17), // Deep burgundy
-                        Color(0xFF8C1D24)  // Warm crimson red
+                        Color(0xFF4A0E17),
+                        Color(0xFF8C1D24)
                     )
                 ),
                 shape = cardShape
@@ -833,6 +836,31 @@ private fun YouTubeAccountCard(
                             color = Color.White
                         )
                     }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Live Library Sync",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    androidx.compose.material3.Switch(
+                        checked = account.isSyncEnabled,
+                        onCheckedChange = onToggleSync,
+                        colors = androidx.compose.material3.SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF8C1D24),
+                            checkedTrackColor = Color.White,
+                            uncheckedThumbColor = Color.White,
+                            uncheckedTrackColor = Color.White.copy(alpha = 0.3f)
+                        )
+                    )
                 }
 
                 HorizontalDivider(color = Color.White.copy(alpha = 0.15f))

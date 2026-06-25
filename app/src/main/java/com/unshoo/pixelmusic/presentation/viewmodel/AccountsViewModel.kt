@@ -34,7 +34,8 @@ data class ExternalAccountUiModel(
     val title: String,
     val accountLabel: String,
     val syncedContentLabel: String,
-    val isLoggingOut: Boolean
+    val isLoggingOut: Boolean,
+    val isSyncEnabled: Boolean = true
 )
 
 data class AccountsUiState(
@@ -56,9 +57,18 @@ class AccountsViewModel @Inject constructor(
 
     val isSyncing = syncManager.isSyncing
 
+    val syncEnabled: StateFlow<Boolean> = datastoreRepository.syncEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
     fun syncLibrary() {
         viewModelScope.launch {
             syncManager.sync()
+        }
+    }
+
+    fun toggleSync(enabled: Boolean) {
+        viewModelScope.launch {
+            datastoreRepository.saveSyncEnabled(enabled)
         }
     }
 
@@ -103,7 +113,7 @@ class AccountsViewModel @Inject constructor(
                         val me = telegramRepository.getMe()
                         me?.firstName?.trim()?.takeIf { it.isNotEmpty() }
                     }
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     null
                 }
             } else {
@@ -123,8 +133,9 @@ class AccountsViewModel @Inject constructor(
         ) { it.toList() },
         loggingOutServices,
         datastoreRepository.ytUsername,
-        telegramUsernameFlow
-    ) { states, activeLogouts, ytName, tgName ->
+        telegramUsernameFlow,
+        datastoreRepository.syncEnabled
+    ) { states, activeLogouts, ytName, tgName, ytSyncEnabled ->
         val (telegramConnected, telegramChannelCount) = states[0] as Pair<Boolean, Int>
         val (gDriveConnected, gDriveFolderCount) = states[1] as Pair<Boolean, Int>
         val (youtubeConnected, youtubePlaylistCount) = states[2] as Pair<Boolean, Int>
@@ -178,12 +189,13 @@ class AccountsViewModel @Inject constructor(
                         service = ExternalServiceAccount.YOUTUBE,
                         title = "YouTube Client",
                         accountLabel = if (ytName.isNotBlank()) ytName else "YouTube session connected",
-                        syncedContentLabel = formatCount(
+                        syncedContentLabel = if (ytSyncEnabled) formatCount(
                             count = youtubePlaylistCount,
                             singular = "synced playlist",
                             plural = "synced playlists"
-                        ),
-                        isLoggingOut = ExternalServiceAccount.YOUTUBE in activeLogouts
+                        ) else "Sync Paused",
+                        isLoggingOut = ExternalServiceAccount.YOUTUBE in activeLogouts,
+                        isSyncEnabled = ytSyncEnabled
                     )
                 )
             }
@@ -231,7 +243,10 @@ class AccountsViewModel @Inject constructor(
                         ExternalServiceAccount.YOUTUBE -> {
                             datastoreRepository.saveCookies(com.unshoo.pixelmusic.data.model.youtube.Cookies(""))
                             datastoreRepository.saveDataSyncId("")
-                            // Do not clear downloaded songs/playlists on logout. Offline downloads are local user data.
+                            val cookieManager = android.webkit.CookieManager.getInstance()
+                            cookieManager.removeAllCookies(null)
+                            cookieManager.flush()
+                            android.webkit.WebStorage.getInstance().deleteAllData()
                         }
                         ExternalServiceAccount.LASTFM -> {
                             userPreferencesRepository.setLastfmSession("")

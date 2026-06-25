@@ -185,7 +185,6 @@ class PlaybackStatsRepository @Inject constructor(
         val coercedTimestamp = timestamp.coerceAtLeast(0L)
         val coercedDuration = durationMs.coerceAtLeast(0L)
         val start = (coercedTimestamp - coercedDuration).coerceAtLeast(0L)
-        // Sanitize placeholder values — don't store known fallback/unknown strings
         val safeGenre = genre?.takeIf { it.isNotBlank() && it !in UNKNOWN_GENRE_KEYS }
         val safeAlbum = album?.takeIf { it.isNotBlank() && it !in UNKNOWN_ALBUM_KEYS }
         val sanitizedEvent = PlaybackEvent(
@@ -206,6 +205,21 @@ class PlaybackStatsRepository @Inject constructor(
                 events.removeAll { it.endMillis() < cutoff }
             }
             events += sanitizedEvent
+            events
+        }
+        if (writeSucceeded) {
+            notifyStatsChanged()
+        }
+    }
+
+    suspend fun recordPlaybackBatch(batch: List<PlaybackEvent>) = withContext(Dispatchers.IO) {
+        if (batch.isEmpty()) return@withContext
+        val writeSucceeded = updateEventsAtomically { events ->
+            val maxCutoff = batch.maxOf { it.endMillis() } - MAX_HISTORY_AGE_MS
+            if (maxCutoff > 0) {
+                events.removeAll { it.endMillis() < maxCutoff }
+            }
+            events += batch
             events
         }
         if (writeSucceeded) {

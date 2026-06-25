@@ -42,10 +42,6 @@ import com.unshoo.pixelmusic.data.preferences.SearchSource
 import com.unshoo.pixelmusic.data.repository.MusicRepository
 import kotlinx.coroutines.flow.first
 
-/**
- * Pure YouTube Music search — all local library search removed.
- * Queries go directly to YouTube Music API; results are cached in LRU.
- */
 @Singleton
 class SearchStateHolder @Inject constructor(
     @param:dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
@@ -53,8 +49,6 @@ class SearchStateHolder @Inject constructor(
     private val musicRepository: MusicRepository
 ) {
     companion object {
-        // 80ms fired online search while users were still typing and could launch 3 network
-        // requests for ALL filter. 220ms feels instant but removes most wasted work/jank.
         const val SEARCH_DEBOUNCE_MS = 220L
         const val SEARCH_CACHE_SIZE = 100
         val albumIdMap = java.util.concurrent.ConcurrentHashMap<Long, String>()
@@ -138,7 +132,6 @@ class SearchStateHolder @Inject constructor(
                         return@collectLatest
                     }
 
-                    // Instantly show cache if available, otherwise fallback to longest prefix match
                     val cached = searchResultCache.get(query) ?: getLongestPrefixMatch(query)
                     if (cached != null) {
                         _searchResults.value = cached
@@ -148,8 +141,6 @@ class SearchStateHolder @Inject constructor(
                         val results = withContext(Dispatchers.IO) {
                             val remote = searchYouTube(query, _selectedSearchFilter.value)
                             if (remote.isEmpty()) {
-                                // Helpful fallback: if YouTube returns nothing but the user has an exact/local
-                                // file match, show it instead of a dead "No results" state.
                                 musicRepository.searchAllOnce(query, _selectedSearchFilter.value)
                             } else {
                                 remote
@@ -160,7 +151,6 @@ class SearchStateHolder @Inject constructor(
                             _searchResults.value = immutable
                             searchResultCache.put(query, immutable)
 
-                            // Pre-fetch top song stream URL
                             scope?.launch(Dispatchers.IO) {
                                 try {
                                     kotlinx.coroutines.delay(800L)
@@ -356,9 +346,15 @@ class SearchStateHolder @Inject constructor(
 
     fun updateSearchFilter(filterType: SearchFilterType) {
         _selectedSearchFilter.value = filterType
+        activeSearchQuery?.let { query ->
+            if (query.isNotBlank()) {
+                performSearch(query)
+            }
+        }
     }
 
     fun performSearch(query: String) {
+        activeSearchQuery = query.trim()
         val requestId = latestSearchRequestId.incrementAndGet()
         if (query.trim().isBlank()) {
             _searchResults.value = persistentListOf()

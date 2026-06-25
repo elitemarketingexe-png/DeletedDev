@@ -2,7 +2,8 @@ package com.unshoo.pixelmusic.presentation.screens
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
@@ -10,7 +11,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,7 +24,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -49,20 +48,19 @@ fun TabAnimation(
     val offsetX = remember { Animatable(0f) }
     var hasAnimatedSelectionChange by remember { mutableStateOf(false) }
 
-    val animationSpec = tween<Float>(durationMillis = 250, easing = FastOutSlowInEasing)
+    val springSpec = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
 
     val backgroundColor by animateColorAsState(
         targetValue = if (isSelected) selectedColor else unselectedColor,
         animationSpec = tween(durationMillis = 200),
-        label = "Tab Background Color"
+        label = "TabBackground"
     )
     val contentColor by animateColorAsState(
         targetValue = if (isSelected) onSelectedColor else onUnselectedColor,
         animationSpec = tween(durationMillis = 200),
-        label = "Tab Content Color"
+        label = "TabContent"
     )
 
-    // Animate only on actual selection changes, not on the first composition.
     LaunchedEffect(selectedIndex) {
         if (!hasAnimatedSelectionChange) {
             hasAnimatedSelectionChange = true
@@ -73,8 +71,8 @@ fun TabAnimation(
 
         if (isSelected) {
             launch {
-                scale.animateTo(1.05f, animationSpec = animationSpec)
-                scale.animateTo(1f, animationSpec = animationSpec)
+                scale.animateTo(1.08f, animationSpec = springSpec)
+                scale.animateTo(1f, animationSpec = springSpec)
             }
         } else {
             scale.snapTo(1f)
@@ -82,20 +80,17 @@ fun TabAnimation(
 
         if (!isSelected) {
             val distance = index - selectedIndex
-            if (abs(distance) == 1) { // Only affect direct neighbors
+            if (abs(distance) == 1) {
                 val direction = if (distance > 0) 1 else -1
-                // Move neighbors slightly
-                val offsetValue = 12f * direction
+                val offsetValue = 14f * direction
                 launch {
-                    offsetX.animateTo(offsetValue, animationSpec = animationSpec)
-                    offsetX.animateTo(0f, animationSpec = animationSpec)
+                    offsetX.animateTo(offsetValue, animationSpec = springSpec)
+                    offsetX.animateTo(0f, animationSpec = springSpec)
                 }
             } else {
-                // Instantly reset offset for non-neighbor tabs
                 offsetX.snapTo(0f)
             }
         } else {
-            // Ensure the selected tab itself has no offset
             offsetX.snapTo(0f)
         }
     }
@@ -105,6 +100,7 @@ fun TabAnimation(
             .padding(all = 5.dp)
             .graphicsLayer {
                 scaleX = scale.value
+                scaleY = scale.value
                 translationX = offsetX.value
                 this.transformOrigin = transformOrigin
             }

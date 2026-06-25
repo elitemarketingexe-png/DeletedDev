@@ -64,29 +64,23 @@ interface LocalSongDataSource {
     @Delete
     suspend fun delete(song: Song)
 
-    /** Get all song IDs that exist in the local DB. Used for delta sync. */
     @Query("SELECT youtubeId FROM songs WHERE youtubeId IN (:ids)")
     suspend fun getExistingSongIdsRaw(ids: List<String>): List<String>
 
-    /** Chunked wrapper to handle very large YouTube playlists without SQLite variable-limit issues. */
     suspend fun getExistingSongIds(ids: List<String>): List<String> {
         if (ids.isEmpty()) return emptyList()
         return ids.distinct().chunked(800).flatMap { chunk -> getExistingSongIdsRaw(chunk) }
     }
 
-    /** Mark a song as permanently downloaded by the user (won't be auto-deleted). */
     @Query("UPDATE songs SET isPermanentlyDownloaded = 1, downloadTimestamp = :timestamp WHERE youtubeId = :songId")
     suspend fun markAsPermanentlyDownloaded(songId: String, timestamp: Long = System.currentTimeMillis())
 
-    /** Update the genre for a song. */
     @Query("UPDATE songs SET genre = :genre WHERE youtubeId = :songId")
     suspend fun updateGenre(songId: String, genre: String)
 
-    /** Update the audio file path for a song. */
     @Query("UPDATE songs SET audioFilePath = :audioPath WHERE youtubeId = :songId")
     suspend fun updateAudioPath(songId: String, audioPath: String)
 
-    /** Get songs without a genre fetched yet. */
     @Query("SELECT * FROM songs WHERE genre IS NULL OR genre = ''")
     suspend fun getSongsWithoutGenre(): List<Song>
 }

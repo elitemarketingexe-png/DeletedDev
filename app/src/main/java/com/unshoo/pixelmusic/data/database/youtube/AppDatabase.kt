@@ -45,9 +45,6 @@ abstract class AppDatabase : RoomDatabase() {
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
 
-        /**
-         * Utility method to run blocks on a dedicated background thread, used for io/database work.
-         */
         private val IO_EXECUTOR = Executors.newSingleThreadExecutor()
         fun ioThread(f: () -> Unit) {
             IO_EXECUTOR.execute(f)

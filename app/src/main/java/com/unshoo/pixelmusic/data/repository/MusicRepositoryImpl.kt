@@ -742,7 +742,59 @@ class MusicRepositoryImpl @Inject constructor(
             entities.map { it.toSong() }
         }
 
-        return localSearchFlow.flowOn(Dispatchers.IO)
+        val downloadedFlow = flow {
+            try {
+                val downloaded = com.unshoo.pixelmusic.data.database.youtube.AppDatabase.getInstance(context).songRepository().getDownloadedSongs()
+                val matching = downloaded.filter { ySong ->
+                    if (titleOnly) {
+                        ySong.title.contains(query, ignoreCase = true)
+                    } else {
+                        ySong.title.contains(query, ignoreCase = true) || ySong.artist.contains(query, ignoreCase = true)
+                    }
+                }.map { ySong ->
+                    val primaryArtistId = toUnifiedYoutubeArtistId(ySong.artist.takeIf { it.isNotBlank() } ?: "Unknown Artist")
+                    Song(
+                        id = "youtube_${ySong.youtubeId}",
+                        title = ySong.title,
+                        artist = ySong.artist,
+                        artistId = primaryArtistId,
+                        artists = listOf(
+                            com.unshoo.pixelmusic.data.model.ArtistRef(
+                                id = primaryArtistId,
+                                name = ySong.artist.takeIf { it.isNotBlank() } ?: "Unknown Artist",
+                                isPrimary = true
+                            )
+                        ),
+                        album = "YouTube Music",
+                        albumId = toUnifiedYoutubeAlbumId("YouTube Music"),
+                        albumArtist = null,
+                        path = ySong.audioFilePath ?: "",
+                        contentUriString = "youtube://${ySong.youtubeId}",
+                        albumArtUriString = ySong.thumbnailPath ?: ySong.thumbnailHref,
+                        duration = parseDurationStringToMillis(ySong.duration),
+                        genre = ySong.genre ?: "YouTube Music",
+                        lyrics = null,
+                        isFavorite = false,
+                        trackNumber = 0,
+                        discNumber = null,
+                        year = 0,
+                        dateAdded = ySong.downloadTimestamp,
+                        dateModified = 0,
+                        mimeType = "audio/opus",
+                        bitrate = null,
+                        sampleRate = null,
+                        youtubeId = ySong.youtubeId
+                    )
+                }
+                emit(matching)
+            } catch (_: Exception) {
+                emit(emptyList())
+            }
+        }
+
+        return combine(localSearchFlow, downloadedFlow) { local, downloaded ->
+            (local + downloaded).distinctBy { it.id }
+        }.flowOn(Dispatchers.IO)
     }
 
 
@@ -1708,7 +1760,13 @@ class MusicRepositoryImpl @Inject constructor(
     }
 
     override suspend fun insertYoutubeSongs(songs: List<Song>): Unit = withContext(Dispatchers.IO) {
+        if (songs.isEmpty()) return@withContext
         val ytSongs = mutableListOf<com.unshoo.pixelmusic.data.model.youtube.Song>()
+        val songsToInsert = ArrayList<SongEntity>(songs.size)
+        val artistsToInsert = LinkedHashMap<Long, ArtistEntity>()
+        val albumsToInsert = LinkedHashMap<Long, AlbumEntity>()
+        val crossRefsToInsert = mutableListOf<com.unshoo.pixelmusic.data.database.SongArtistCrossRef>()
+
         songs.forEach { song ->
             val youtubeId = song.youtubeId 
                 ?: if (song.id.startsWith("youtube_")) song.id.substringAfter("youtube_")
@@ -1716,17 +1774,95 @@ class MusicRepositoryImpl @Inject constructor(
                    else null
             if (youtubeId != null) {
                 val songId = toUnifiedYoutubeSongId(youtubeId)
-                // Always upsert — don't skip if exists, so stale metadata (title/thumbnail/duration)
-                // gets refreshed when the playlist is re-synced
-                insertYoutubeSongSkeleton(
-                    youtubeId = youtubeId,
-                    title = song.title,
-                    artist = song.artist,
-                    thumbnailUrl = song.albumArtUriString,
-                    duration = song.duration,
-                    genre = song.genre ?: "YouTube Music",
-                    album = song.album
+                val artistNames = parseYoutubeArtistNames(song.artist)
+                val primaryArtistName = artistNames.firstOrNull() ?: "Unknown Artist"
+                val primaryArtistId = toUnifiedYoutubeArtistId(primaryArtistName)
+
+                artistNames.forEachIndexed { index, name ->
+                    val artistId = toUnifiedYoutubeArtistId(name)
+                    if (!artistsToInsert.containsKey(artistId)) {
+                        artistsToInsert[artistId] = ArtistEntity(
+                            id = artistId,
+                            name = name,
+                            trackCount = 0,
+                            imageUrl = null
+                        )
+                    }
+                    crossRefsToInsert.add(
+                        com.unshoo.pixelmusic.data.database.SongArtistCrossRef(
+                            songId = songId,
+                            artistId = artistId,
+                            isPrimary = index == 0
+                        )
+                    )
+                }
+
+                val albumName = song.album?.takeIf { it.isNotBlank() } ?: "YouTube Music"
+                val albumId = toUnifiedYoutubeAlbumId(albumName)
+                if (!albumsToInsert.containsKey(albumId)) {
+                    albumsToInsert[albumId] = AlbumEntity(
+                        id = albumId,
+                        title = albumName,
+                        artistName = primaryArtistName,
+                        artistId = primaryArtistId,
+                        songCount = 0,
+                        dateAdded = System.currentTimeMillis(),
+                        year = 0,
+                        albumArtUriString = song.albumArtUriString
+                    )
+                }
+
+                val youtubeArtistRefs = artistNames.mapIndexed { idx, name ->
+                    ArtistRef(
+                        id = toUnifiedYoutubeArtistId(name),
+                        name = name,
+                        isPrimary = idx == 0
+                    )
+                }
+                val artistsJson = try {
+                    val arr = JSONArray()
+                    youtubeArtistRefs.forEach { ref ->
+                        val obj = JSONObject()
+                        obj.put("id", ref.id)
+                        obj.put("name", ref.name)
+                        obj.put("primary", ref.isPrimary)
+                        arr.put(obj)
+                    }
+                    arr.toString()
+                } catch (e: Exception) {
+                    null
+                }
+
+                songsToInsert.add(
+                    SongEntity(
+                        id = songId,
+                        title = song.title,
+                        artistName = song.artist.ifBlank { primaryArtistName },
+                        artistId = primaryArtistId,
+                        albumArtist = null,
+                        albumName = albumName,
+                        albumId = albumId,
+                        contentUriString = "youtube://$youtubeId",
+                        albumArtUriString = song.albumArtUriString,
+                        duration = song.duration,
+                        genre = song.genre?.takeIf { it.isNotBlank() } ?: "YouTube Music",
+                        filePath = "",
+                        parentDirectoryPath = "youtube://",
+                        isFavorite = false,
+                        lyrics = null,
+                        trackNumber = 0,
+                        year = 0,
+                        dateAdded = System.currentTimeMillis(),
+                        mimeType = "audio/opus",
+                        bitrate = null,
+                        sampleRate = null,
+                        telegramChatId = null,
+                        telegramFileId = null,
+                        artistsJson = artistsJson,
+                        sourceType = SourceType.YOUTUBE
+                    )
                 )
+
                 ytSongs.add(
                     com.unshoo.pixelmusic.data.model.youtube.Song(
                         youtubeId = youtubeId,
@@ -1740,6 +1876,16 @@ class MusicRepositoryImpl @Inject constructor(
                 )
             }
         }
+
+        if (songsToInsert.isNotEmpty()) {
+            musicDao.insertMusicDataWithCrossRefs(
+                songs = songsToInsert,
+                albums = albumsToInsert.values.toList(),
+                artists = artistsToInsert.values.toList(),
+                crossRefs = crossRefsToInsert
+            )
+        }
+
         if (ytSongs.isNotEmpty()) {
             try {
                 val songRepo = com.unshoo.pixelmusic.data.database.youtube.AppDatabase.getInstance(context).songRepository()

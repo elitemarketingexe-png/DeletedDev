@@ -201,12 +201,7 @@ fun ExploreScreen(
                         }
                     }
                 } else {
-                    val homeSectionsFiltered = remember(uiState.homePageSections) {
-                        uiState.homePageSections.filter {
-                            !it.title.contains("quick picks", ignoreCase = true) &&
-                            !it.title.contains("quick", ignoreCase = true)
-                        }
-                    }
+                    val homeSectionsFiltered = uiState.homePageSections
                     val bottomPadding = if (currentSongId != null) MiniPlayerHeight else 0.dp
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -216,7 +211,6 @@ fun ExploreScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
-                        // Category Filter Chips
                         item(key = "explore_filters") {
                             Row(
                                 modifier = Modifier
@@ -225,7 +219,7 @@ fun ExploreScreen(
                                     .padding(horizontal = 16.dp, vertical = 8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                val categories = listOf("All", "For You", "New Releases", "Charts")
+                                val categories = listOf("All", "Smart Mix", "For You", "New Releases", "Charts")
                                 categories.forEach { category ->
                                     FilterChip(
                                         selected = uiState.selectedFilter == category,
@@ -244,7 +238,45 @@ fun ExploreScreen(
                             }
                         }
 
-                        // 1) Detailed Charts at the very top
+                        if (uiState.selectedFilter == "All" || uiState.selectedFilter == "Smart Mix") {
+                            item(key = "smart_mix_category") {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
+                                        .clickable { navController.navigateSafely(Screen.SmartMix.route) },
+                                    shape = AbsoluteSmoothCornerShape(24.dp, 60),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(20.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Smart Mix Studio",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                                            )
+                                            Text(
+                                                text = "Generate AI adaptive playlists matching your mood and tempo",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         if (uiState.chartsPage != null && uiState.chartsPage!!.sections.isNotEmpty()) {
                             uiState.chartsPage!!.sections.forEachIndexed { index, chartSection ->
                                 item(key = "chart_${chartSection.title}_${index}_header") {
@@ -315,7 +347,6 @@ fun ExploreScreen(
                             }
                         }
 
-                        // 2) New Releases
                         if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "New Releases") &&
                             uiState.newReleaseAlbums.isNotEmpty()
                         ) {
@@ -339,7 +370,6 @@ fun ExploreScreen(
                             }
                         }
 
-                        // 3) Quick Picks homepage style grid
                         if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") &&
                             quickPicks.isNotEmpty()
                         ) {
@@ -358,12 +388,11 @@ fun ExploreScreen(
                             }
                         }
 
-                        // 3.5) Recent Mixes (last.fm) Section
-                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") &&
+                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "Smart Mix" || uiState.selectedFilter == "For You") &&
                             uiState.recentMixes.isNotEmpty()
                         ) {
                             item(key = "recent_mixes_header") {
-                                SectionHeader(title = "Recent Mixes (last.fm)")
+                                SectionHeader(title = "Recent Mixes")
                             }
                             item(key = "recent_mixes_carousel") {
                                 LazyRow(
@@ -383,9 +412,7 @@ fun ExploreScreen(
                             }
                         }
 
-                         // 4) Homepage "For You" sections (includes personal playlists like "Your Playlists" or "Community Playlists" as index 0)
                         if (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") {
-
                             homeSectionsFiltered.forEachIndexed { index, section ->
                                 item(key = "home_section_${section.title}_${index}_header") {
                                     val isSectionQuickPicks = section.title.contains("quick picks", ignoreCase = true)

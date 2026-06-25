@@ -12,7 +12,6 @@ import com.unshoo.pixelmusic.data.model.youtube.Cookies
 import com.unshoo.pixelmusic.data.model.youtube.UmihiSettings
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 
 val Context.youtubeDataStore: DataStore<Preferences> by preferencesDataStore(name = Constants.Datastore.NAME)
 
@@ -43,6 +42,8 @@ open class DatastoreRepository(private val context: Context) {
         val YT_USERNAME = stringPreferencesKey("yt_username")
         val YT_HANDLE = stringPreferencesKey("yt_handle")
         val YT_AVATAR_URL = stringPreferencesKey("yt_avatar_url")
+        val SYNC_ENABLED = booleanPreferencesKey("sync_enabled")
+        val CUSTOM_DOWNLOAD_PATH = stringPreferencesKey("custom_download_path")
     }
 
     suspend fun <T> save(key: Preferences.Key<T>, value: T) {
@@ -100,8 +101,6 @@ open class DatastoreRepository(private val context: Context) {
         )
     }
 
-
-
     val cookies = context.youtubeDataStore.data.map {
         Cookies(it[PreferenceKeys.COOKIES] ?: "")
     }
@@ -122,6 +121,14 @@ open class DatastoreRepository(private val context: Context) {
         it[PreferenceKeys.YT_AVATAR_URL] ?: ""
     }
 
+    val syncEnabled = context.youtubeDataStore.data.map {
+        it[PreferenceKeys.SYNC_ENABLED] ?: true
+    }
+
+    val customDownloadPath = context.youtubeDataStore.data.map {
+        it[PreferenceKeys.CUSTOM_DOWNLOAD_PATH] ?: ""
+    }
+
     suspend fun saveYtProfile(name: String, handle: String, avatarUrl: String) {
         context.youtubeDataStore.edit {
             it[PreferenceKeys.YT_USERNAME] = name
@@ -139,6 +146,18 @@ open class DatastoreRepository(private val context: Context) {
     suspend fun saveDataSyncId(newId: String) {
         context.youtubeDataStore.edit {
             it[PreferenceKeys.DATA_SYNC_ID] = newId
+        }
+    }
+
+    suspend fun saveSyncEnabled(enabled: Boolean) {
+        context.youtubeDataStore.edit {
+            it[PreferenceKeys.SYNC_ENABLED] = enabled
+        }
+    }
+
+    suspend fun saveCustomDownloadPath(path: String) {
+        context.youtubeDataStore.edit {
+            it[PreferenceKeys.CUSTOM_DOWNLOAD_PATH] = path
         }
     }
 

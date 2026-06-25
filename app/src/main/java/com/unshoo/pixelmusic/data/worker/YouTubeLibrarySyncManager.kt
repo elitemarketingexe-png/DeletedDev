@@ -1,7 +1,6 @@
 package com.unshoo.pixelmusic.data.worker
 
 import android.content.Context
-import android.util.Log
 import com.unshoo.pixelmusic.data.database.ArtistEntity
 import com.unshoo.pixelmusic.data.database.FavoritesDao
 import com.unshoo.pixelmusic.data.database.FavoritesEntity
@@ -9,6 +8,7 @@ import com.unshoo.pixelmusic.data.database.MusicDao
 import com.unshoo.pixelmusic.data.remote.youtube.toNativeSong
 import com.unshoo.pixelmusic.data.repository.MusicRepository
 import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
+import com.unshoo.pixelmusic.data.stats.PlaybackStatsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -16,7 +16,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import timber.log.Timber
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
 import unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem
 import unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem
@@ -24,12 +23,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.absoluteValue
 
-/**
- * Syncs YouTube library data (subscribed artists, liked songs, user albums) into the local
- * Room database so the Library paging flows can display them in the UI.
- *
- * Call [syncNow] once per app session; it is a no-op if the user is not logged in to YouTube.
- */
 @Singleton
 class YouTubeLibrarySyncManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -37,10 +30,10 @@ class YouTubeLibrarySyncManager @Inject constructor(
     private val favoritesDao: FavoritesDao,
     private val musicRepository: MusicRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
+    private val playbackStatsRepository: PlaybackStatsRepository,
 ) {
 
     companion object {
-        private const val TAG = "YTLibSync"
         private const val LIKED_SONGS_PLAYLIST = "LM"
         private const val BROWSE_SUBSCRIPTIONS = "FEmusic_library_corpus_artists"
         private const val MIN_SYNC_INTERVAL_MS = 10 * 60 * 1000L
@@ -49,14 +42,9 @@ class YouTubeLibrarySyncManager @Inject constructor(
     private val syncMutex = Mutex()
     @Volatile private var lastSuccessfulSyncAtMs: Long = 0L
 
-    /**
-     * Performs a full YouTube library sync (subscribed artists + liked songs).
-     * Runs on IO dispatcher; safe to call from any coroutine.
-     */
     suspend fun syncNow(force: Boolean = false) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         if (!force && now - lastSuccessfulSyncAtMs < MIN_SYNC_INTERVAL_MS) {
-            Timber.tag(TAG).d("Skipping account sync; recently synced")
             return@withContext
         }
 
@@ -67,52 +55,39 @@ class YouTubeLibrarySyncManager @Inject constructor(
             }
             try {
                 syncSubscribedArtists()
-            } catch (e: Exception) {
-                Timber.tag(TAG).w(e, "Failed to sync subscribed artists")
+            } catch (_: Exception) {
             }
             try {
                 syncLikedSongs()
-            } catch (e: Exception) {
-                Timber.tag(TAG).w(e, "Failed to sync liked songs")
+            } catch (_: Exception) {
+            }
+            try {
+                syncListeningHistory()
+            } catch (_: Exception) {
             }
             lastSuccessfulSyncAtMs = System.currentTimeMillis()
         }
     }
 
-    // ---------------------------------------------------------------------------
-    // Subscribed artists
-    // ---------------------------------------------------------------------------
-
     private suspend fun syncSubscribedArtists() {
-        Timber.tag(TAG).d("Syncing subscribed artists from YouTube…")
         val allArtistItems = mutableListOf<ArtistItem>()
 
-        // Fetch first page
-        val firstPage = YouTube.library(BROWSE_SUBSCRIPTIONS).getOrNull()
-        if (firstPage == null) {
-            Timber.tag(TAG).d("No subscriptions page returned (user may not be logged in)")
-            return
-        }
-
+        val firstPage = YouTube.library(BROWSE_SUBSCRIPTIONS).getOrNull() ?: return
         allArtistItems += firstPage.items.filterIsInstance<ArtistItem>()
 
-        // Fetch continuation pages (YouTube returns them in batches)
+        var pages = 0
         var continuation = firstPage.continuation
-        while (continuation != null) {
+        while (continuation != null && pages < 5) {
             yield()
             val next = YouTube.libraryContinuation(continuation).getOrNull() ?: break
             allArtistItems += next.items.filterIsInstance<ArtistItem>()
             continuation = next.continuation
-            // Small cooperative pause keeps online sync from monopolizing CPU/network on midrange devices.
-            delay(40L)
+            pages++
+            delay(30L)
         }
 
-        if (allArtistItems.isEmpty()) {
-            Timber.tag(TAG).d("No subscribed artists found")
-            return
-        }
+        if (allArtistItems.isEmpty()) return
 
-        // Convert to ArtistEntity and insert (IGNORE conflict = keep existing track_count)
         val entities = allArtistItems.mapNotNull { item ->
             val id = ytArtistId(item.title)
             ArtistEntity(
@@ -120,7 +95,7 @@ class YouTubeLibrarySyncManager @Inject constructor(
                 name = item.title,
                 trackCount = 0,
                 imageUrl = item.thumbnail,
-                channelId = item.id // browse id like UC…
+                channelId = item.id
             )
         }
 
@@ -132,45 +107,27 @@ class YouTubeLibrarySyncManager @Inject constructor(
             }
         }
         userPreferencesRepository.setSubscribedArtistIds(subscribedIds)
-        Timber.tag(TAG).d("Synced ${entities.size} subscribed artists to DB")
     }
 
-    // ---------------------------------------------------------------------------
-    // Liked songs
-    // ---------------------------------------------------------------------------
-
     suspend fun syncLikedSongs() = withContext(Dispatchers.IO) {
-        Timber.tag(TAG).d("Syncing liked songs from YouTube playlist LM…")
         val allSongItems = mutableListOf<SongItem>()
 
-        val firstPage = YouTube.playlist(LIKED_SONGS_PLAYLIST).getOrNull()
-        if (firstPage == null) {
-            Timber.tag(TAG).d("Could not load liked songs playlist (not logged in?)")
-            return@withContext
-        }
-
+        val firstPage = YouTube.playlist(LIKED_SONGS_PLAYLIST).getOrNull() ?: return@withContext
         allSongItems += firstPage.songs
 
-        // Fetch all continuation pages (each has ~100 songs)
+        var pages = 0
         var continuation = firstPage.songsContinuation
-        while (continuation != null) {
+        while (continuation != null && pages < 5) {
             yield()
             val next = YouTube.playlistContinuation(continuation).getOrNull() ?: break
             allSongItems += next.songs
             continuation = next.continuation
-            // Avoid bursts of network parsing + Room invalidations while user is browsing.
-            delay(40L)
+            pages++
+            delay(30L)
         }
 
-        if (allSongItems.isEmpty()) {
-            Timber.tag(TAG).d("No liked songs found")
-            return@withContext
-        }
+        if (allSongItems.isEmpty()) return@withContext
 
-        Timber.tag(TAG).d("Found ${allSongItems.size} liked songs, syncing to DB…")
-
-        // For each liked song: insert the song skeleton into the songs table,
-        // then mark it as favourite in the favorites table.
         val songs = allSongItems.map { it.toNativeSong() }
         musicRepository.insertYoutubeSongs(songs)
 
@@ -190,13 +147,39 @@ class YouTubeLibrarySyncManager @Inject constructor(
                 favoritesDao.insertAll(chunk)
                 yield()
             }
-            Timber.tag(TAG).d("Marked ${favoriteEntities.size} songs as liked in DB")
         }
     }
 
-    // ---------------------------------------------------------------------------
-    // Stable ID helpers (must match MusicRepositoryImpl)
-    // ---------------------------------------------------------------------------
+    private suspend fun syncListeningHistory() {
+        val historyPage = YouTube.musicHistory().getOrNull() ?: return
+        val allSongs = mutableListOf<SongItem>()
+        historyPage.sections?.forEach { section ->
+            allSongs += section.songs
+        }
+        if (allSongs.isEmpty()) return
+
+        val nativeSongs = allSongs.map { it.toNativeSong() }
+        musicRepository.insertYoutubeSongs(nativeSongs)
+
+        val now = System.currentTimeMillis()
+        val events = nativeSongs.take(100).mapIndexedNotNull { index, song ->
+            val songIdStr = song.youtubeId ?: return@mapIndexedNotNull null
+            val unifiedId = ytSongId(songIdStr).toString()
+            PlaybackStatsRepository.PlaybackEvent(
+                songId = unifiedId,
+                timestamp = now - (index * 60_000L),
+                durationMs = song.duration.coerceAtLeast(0L),
+                startTimestamp = (now - (index * 60_000L) - song.duration).coerceAtLeast(0L),
+                endTimestamp = now - (index * 60_000L),
+                title = song.title,
+                artist = song.artist,
+                thumbnail = song.albumArtUriString,
+                genre = song.genre,
+                album = song.album
+            )
+        }
+        playbackStatsRepository.recordPlaybackBatch(events)
+    }
 
     private fun ytSongId(youtubeId: String): Long =
         -(15_000_000_000_000L + youtubeId.hashCode().toLong().absoluteValue)

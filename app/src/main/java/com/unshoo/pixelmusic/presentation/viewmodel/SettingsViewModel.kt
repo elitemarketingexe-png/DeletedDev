@@ -1050,6 +1050,12 @@ class SettingsViewModel @Inject constructor(
         fileExplorerStateHolder.openExplorerRoot()
     }
 
+    fun setCustomDownloadPath(path: String) {
+        viewModelScope.launch {
+            datastoreRepository.saveCustomDownloadPath(path)
+        }
+    }
+
     fun navigateUp() {
         fileExplorerStateHolder.navigateUp()
     }

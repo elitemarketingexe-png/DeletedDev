@@ -12,7 +12,6 @@ import com.unshoo.pixelmusic.data.model.youtube.PlaylistSongCrossRef
 import com.unshoo.pixelmusic.data.model.youtube.Song
 import kotlinx.coroutines.flow.Flow
 
-/** Lightweight projection for playlist list screens; avoids loading 5k-20k songs per playlist. */
 data class PlaylistSongCountRow(
     val playlistId: String,
     @ColumnInfo(name = "songCount") val songCount: Int
@@ -92,17 +91,11 @@ interface LocalPlaylistDataSource {
         }
     }
 
-    /**
-     * Insert playlist and only NEW songs (not already in DB).
-     * Preserves existing songs' download state and metadata.
-     * Updates the playlist info's sync tracking fields.
-     */
     @Transaction
     suspend fun insertPlaylistWithSongsPreserving(
         playlist: Playlist,
         songDataSource: LocalSongDataSource,
     ) {
-        // Update playlist info with sync tracking
         val updatedInfo = playlist.info.copy(
             lastSyncSongCount = playlist.songs.size,
             lastSyncTimestamp = System.currentTimeMillis()
@@ -119,10 +112,7 @@ interface LocalPlaylistDataSource {
             }
         }
 
-        // Clear existing cross references to reflect the updated composition
         deleteCrossRefsByPlaylistId(playlist.info.id)
-        // Always update cross refs to reflect current playlist composition.
-        // Chunk to support 5k-20k+ song playlists without large statement pressure.
         playlist.songs
             .asSequence()
             .mapIndexed { index, song -> PlaylistSongCrossRef(playlist.info.id, song.youtubeId, index) }

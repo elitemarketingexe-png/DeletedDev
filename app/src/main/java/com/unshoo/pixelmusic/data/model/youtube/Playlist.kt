@@ -15,12 +15,12 @@ import kotlinx.serialization.Serializable
 data class Playlist(
     @Embedded val info: PlaylistInfo,
     @Relation(
-        parentColumn = "id",              // Playlist.id
-        entityColumn = "youtubeId",       // Song.youtubeId
+        parentColumn = "id",
+        entityColumn = "youtubeId",
         associateBy = Junction(
             value = PlaylistSongCrossRef::class,
-            parentColumn = "playlistId",  // column in junction pointing to Playlist
-            entityColumn = "songId"       // column in junction pointing to Song
+            parentColumn = "playlistId",
+            entityColumn = "songId"
         )
     )
     val unsortedSongs: List<Song> = listOf(),
@@ -32,9 +32,10 @@ data class Playlist(
     val crossRefs: List<PlaylistSongCrossRef> = listOf()
 ) {
     val songs: List<Song>
-        get() = unsortedSongs.sortedBy { song ->
-            crossRefs.find { it.songId == song.youtubeId }?.position ?: 0
+        get() = crossRefs.sortedBy { it.position }.mapNotNull { ref ->
+            unsortedSongs.find { it.youtubeId == ref.songId }
         }
+
     val mediaItems: List<MediaItem>
         get() = songs.map { song ->
             song.mediaItem
@@ -52,9 +53,7 @@ data class PlaylistInfo(
     val title: String = "",
     val coverHref: String = "",
     val coverPath: String? = null,
-    /** Number of songs at last successful sync. Used for delta detection. */
     val lastSyncSongCount: Int = 0,
-    /** Epoch millis of last successful sync. */
     val lastSyncTimestamp: Long = 0L,
 ) {
     val isDownloadedPlaylist: Boolean
@@ -62,7 +61,7 @@ data class PlaylistInfo(
 }
 
 @Entity(
-    primaryKeys = ["playlistId", "songId"],
+    primaryKeys = ["playlistId", "position"],
     indices = [Index("songId")]
 )
 data class PlaylistSongCrossRef(
