@@ -109,6 +109,12 @@ fun LibraryFavoritesTab(
             .distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = null)
 
+    val isPlaybackPlaying by remember(playerViewModel) {
+        playerViewModel.stablePlayerState
+            .map { it.isPlaying }
+            .distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = false)
+
     val currentSongListIndex = remember(favoriteSongs.itemCount, currentSongId) {
         if (currentSongId == null) -1
         else {
@@ -247,7 +253,8 @@ fun LibraryFavoritesTab(
                             if (song != null) {
                                 LibraryPlaybackAwareSongItem(
                                     song = song,
-                                    playerViewModel = playerViewModel,
+                                    currentSongId = currentSongId,
+                                    isPlaying = isPlaybackPlaying,
                                     onMoreOptionsClick = { onMoreOptionsClick(song) },
                                     isSelected = selectedSongIds.contains(song.id),
                                     selectionIndex = if (isSelectionMode) getSelectionIndex(song.id) else null,

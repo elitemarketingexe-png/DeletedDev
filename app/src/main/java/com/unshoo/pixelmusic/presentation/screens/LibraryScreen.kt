@@ -47,6 +47,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -69,6 +70,7 @@ import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material.icons.rounded.ViewModule
 import com.unshoo.pixelmusic.presentation.components.ToggleSegmentButton
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -1542,7 +1544,11 @@ fun LibraryScreen(
                                     tabCount = tabTitles.size,
                                     compactMode = isCompactNavigation
                                 )
-                                when (tabTitles.getOrNull(tabIndex)?.toLibraryTabIdOrNull()) {
+                                LazyPage(
+                                    page = page,
+                                    pagerState = pagerState
+                                ) {
+                                    when (tabTitles.getOrNull(tabIndex)?.toLibraryTabIdOrNull()) {
                                     LibraryTabId.SONGS -> {
                                         LibrarySongsTab(
                                             songs = allSongsLazyPagingItems,
@@ -1716,6 +1722,7 @@ fun LibraryScreen(
                                     null -> Unit
                                 }
                             }
+                        }
 
                             // Floating selection count pill overlay
                             val selectionCount = when {
@@ -4611,5 +4618,38 @@ private fun ImportPlaylistFileDialog(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun LazyPage(
+    page: Int,
+    pagerState: PagerState,
+    content: @Composable () -> Unit
+) {
+    var hasBeenLoaded by remember { mutableStateOf(false) }
+
+    val isCurrent = pagerState.currentPage == page
+    val isScrollInProgress = pagerState.isScrollInProgress
+
+    LaunchedEffect(isCurrent, isScrollInProgress) {
+        if (isCurrent && !isScrollInProgress) {
+            hasBeenLoaded = true
+        }
+    }
+
+    if (hasBeenLoaded) {
+        content()
+    } else {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 3.dp,
+                modifier = Modifier.size(36.dp)
+            )
+        }
     }
 }
