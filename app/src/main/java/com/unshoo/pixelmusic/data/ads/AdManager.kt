@@ -129,7 +129,7 @@ object AdManager {
 
             val popupStatus = prefs.getString(KEY_POPUP_STATUS, "none")
             val elapsedTime = System.currentTimeMillis() - lastPopupTime
-            val daysRequired = if (popupStatus == "watched") 5 else 3
+            val daysRequired = if (popupStatus == "watched") 3 else 2
             val timeRequiredMs = daysRequired * 24L * 60L * 60L * 1000L
             
             return elapsedTime >= timeRequiredMs
