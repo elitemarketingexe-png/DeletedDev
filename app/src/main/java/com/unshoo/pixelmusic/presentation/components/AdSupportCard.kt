@@ -3,7 +3,6 @@ package com.unshoo.pixelmusic.presentation.components
 import android.app.Activity
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -12,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -34,12 +35,13 @@ fun AdSupportCard(
     val context = LocalContext.current
     val activity = context as? Activity
     
+    // Curated warm support colors (peach & brown theme)
     val backgroundColor = Color(0xFFFCEFE5)
     val circleBackgroundColor = Color(0xFFECCEB9)
     val textColor = Color(0xFF703300)
     val iconColor = Color(0xFF703300)
 
-    Surface(
+    Card(
         modifier = modifier.clickable {
             if (activity != null) {
                 if (AdManager.isAdLoaded()) {
@@ -57,15 +59,14 @@ fun AdSupportCard(
                 }
             }
         },
-        shape = AbsoluteSmoothCornerShape(20.dp, 60),
-        color = backgroundColor,
-        tonalElevation = 0.dp
+        shape = AbsoluteSmoothCornerShape(24.dp, 60),
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Star Icon with circle background
             Surface(
@@ -86,27 +87,25 @@ fun AdSupportCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
-
             // Text content
             Column(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = "Support PixelMusic",
+                    text = "Support PixelMusic ❤️",
                     color = textColor,
-                    fontSize = 17.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Watch a rewarded ad to support dev",
-                    color = textColor.copy(alpha = 0.7f),
+                    text = "Help us keep the app free! Tap here to watch a quick video ad.",
+                    color = textColor.copy(alpha = 0.8f),
                     fontSize = 13.sp,
+                    lineHeight = 16.sp,
                     fontWeight = FontWeight.Normal
                 )
             }
-
-            Spacer(modifier = Modifier.width(8.dp))
 
             // Play icon
             Icon(
@@ -134,11 +133,10 @@ fun SupportPopupDialog(
                 .padding(16.dp)
         ) {
             Column(
-                modifier = Modifier
-                    .padding(24.dp),
+                modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Header Icon
+                // Header Icon (Star Container)
                 Surface(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primaryContainer,
@@ -161,7 +159,7 @@ fun SupportPopupDialog(
 
                 // Title
                 Text(
-                    text = "Support Development",
+                    text = "Support PixelMusic ❤️",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -171,7 +169,7 @@ fun SupportPopupDialog(
 
                 // Message
                 Text(
-                    text = "We hope you are enjoying PixelMusic! To keep the app free and support its active development, please consider watching a short rewarded ad.",
+                    text = "We hope you are enjoying your music! To keep the app 100% free, developer-supported, and ad-free during playback, would you mind watching a short video ad to support our work? It really helps keep the project alive!",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -192,7 +190,7 @@ fun SupportPopupDialog(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
                     ) {
                         Text(
-                            text = "Remind me later",
+                            text = "Dismiss",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
