@@ -108,6 +108,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            manifestPlaceholders["adMobAppId"] = "ca-app-pub-3940256099942544~3347511713" // Standard Google Test App ID
         }
 
         release {
@@ -120,12 +121,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            manifestPlaceholders["adMobAppId"] = "ca-app-pub-623520458880294~7929621161" // Production App ID
         }
 
         create("benchmark") {
             initWith(getByName("release"))
             matchingFallbacks += listOf("release")
             isDebuggable = false
+            manifestPlaceholders["adMobAppId"] = "ca-app-pub-623520458880294~7929621161" // Production App ID
         }
     }
 
