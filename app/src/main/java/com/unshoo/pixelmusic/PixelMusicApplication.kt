@@ -90,8 +90,12 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         BotGuardTokenGenerator.initialize(this)
 
         // Initialize AdMob and increment app open count
-        com.unshoo.pixelmusic.data.ads.AdManager.initialize(this)
-        com.unshoo.pixelmusic.data.ads.AdManager.incrementAppOpenCount(this)
+        try {
+            com.unshoo.pixelmusic.data.ads.AdManager.initialize(this)
+            com.unshoo.pixelmusic.data.ads.AdManager.incrementAppOpenCount(this)
+        } catch (e: Throwable) {
+            Timber.e(e, "AdMob initialization failed")
+        }
 
         // Initialize Last.fm client
         com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(

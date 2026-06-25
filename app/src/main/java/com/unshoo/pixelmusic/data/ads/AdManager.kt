@@ -24,8 +24,12 @@ object AdManager {
     private var isLoading = false
 
     fun initialize(context: Context) {
-        MobileAds.initialize(context) {}
-        loadRewardedAd(context)
+        try {
+            MobileAds.initialize(context.applicationContext) {}
+            loadRewardedAd(context.applicationContext)
+        } catch (e: Throwable) {
+            Log.e(TAG, "AdMob initialization failed", e)
+        }
     }
 
     private fun getAdUnitId(): String {
@@ -33,22 +37,27 @@ object AdManager {
     }
 
     fun loadRewardedAd(context: Context) {
-        if (rewardedAd != null || isLoading) return
-        isLoading = true
-        val adRequest = AdRequest.Builder().build()
-        RewardedAd.load(context.applicationContext, getAdUnitId(), adRequest, object : RewardedAdLoadCallback() {
-            override fun onAdFailedToLoad(adError: LoadAdError) {
-                Log.d(TAG, "Ad failed to load: ${adError.message}")
-                rewardedAd = null
-                isLoading = false
-            }
+        try {
+            if (rewardedAd != null || isLoading) return
+            isLoading = true
+            val adRequest = AdRequest.Builder().build()
+            RewardedAd.load(context.applicationContext, getAdUnitId(), adRequest, object : RewardedAdLoadCallback() {
+                override fun onAdFailedToLoad(adError: LoadAdError) {
+                    Log.d(TAG, "Ad failed to load: ${adError.message}")
+                    rewardedAd = null
+                    isLoading = false
+                }
 
-            override fun onAdLoaded(ad: RewardedAd) {
-                Log.d(TAG, "Ad was loaded.")
-                rewardedAd = ad
-                isLoading = false
-            }
-        })
+                override fun onAdLoaded(ad: RewardedAd) {
+                    Log.d(TAG, "Ad was loaded.")
+                    rewardedAd = ad
+                    isLoading = false
+                }
+            })
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to load rewarded ad", e)
+            isLoading = false
+        }
     }
 
     fun isAdLoaded(): Boolean {
@@ -56,66 +65,92 @@ object AdManager {
     }
 
     fun showRewardedAd(activity: Activity, onAdCompleted: (Boolean) -> Unit) {
-        val ad = rewardedAd
-        if (ad != null) {
-            var userEarnedReward = false
-            ad.show(activity) { rewardItem ->
-                userEarnedReward = true
-                Log.d(TAG, "User earned reward: ${rewardItem.amount} ${rewardItem.type}")
-            }
-            ad.fullScreenContentCallback = object : com.google.android.gms.ads.FullScreenContentCallback() {
-                override fun onAdDismissedFullScreenContent() {
-                    Log.d(TAG, "Ad dismissed fullscreen content.")
-                    rewardedAd = null
-                    // Load the next ad
-                    loadRewardedAd(activity.applicationContext)
-                    onAdCompleted(userEarnedReward)
+        try {
+            val ad = rewardedAd
+            if (ad != null) {
+                var userEarnedReward = false
+                ad.show(activity) { rewardItem ->
+                    userEarnedReward = true
+                    Log.d(TAG, "User earned reward: ${rewardItem.amount} ${rewardItem.type}")
                 }
+                ad.fullScreenContentCallback = object : com.google.android.gms.ads.FullScreenContentCallback() {
+                    override fun onAdDismissedFullScreenContent() {
+                        Log.d(TAG, "Ad dismissed fullscreen content.")
+                        rewardedAd = null
+                        // Load the next ad
+                        loadRewardedAd(activity.applicationContext)
+                        activity.runOnUiThread {
+                            onAdCompleted(userEarnedReward)
+                        }
+                    }
 
-                override fun onAdFailedToShowFullScreenContent(adError: com.google.android.gms.ads.AdError) {
-                    Log.d(TAG, "Ad failed to show: ${adError.message}")
-                    rewardedAd = null
-                    loadRewardedAd(activity.applicationContext)
-                    onAdCompleted(false)
+                    override fun onAdFailedToShowFullScreenContent(adError: com.google.android.gms.ads.AdError) {
+                        Log.d(TAG, "Ad failed to show: ${adError.message}")
+                        rewardedAd = null
+                        loadRewardedAd(activity.applicationContext)
+                        activity.runOnUiThread {
+                            onAdCompleted(false)
+                        }
+                    }
                 }
+            } else {
+                Log.d(TAG, "Ad was not ready yet.")
+                loadRewardedAd(activity.applicationContext)
+                onAdCompleted(false)
             }
-        } else {
-            Log.d(TAG, "Ad was not ready yet.")
-            loadRewardedAd(activity.applicationContext)
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to show rewarded ad", e)
             onAdCompleted(false)
         }
     }
 
     fun incrementAppOpenCount(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val currentCount = prefs.getInt(KEY_APP_OPEN_COUNT, 0)
-        prefs.edit().putInt(KEY_APP_OPEN_COUNT, currentCount + 1).apply()
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val currentCount = prefs.getInt(KEY_APP_OPEN_COUNT, 0)
+            prefs.edit().putInt(KEY_APP_OPEN_COUNT, currentCount + 1).apply()
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to increment app open count", e)
+        }
     }
 
     fun shouldShowSupportPopup(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val openCount = prefs.getInt(KEY_APP_OPEN_COUNT, 0)
-        if (openCount < 5) return false
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val openCount = prefs.getInt(KEY_APP_OPEN_COUNT, 0)
+            if (openCount < 5) return false
 
-        val lastPopupTime = prefs.getLong(KEY_LAST_POPUP_TIME, 0L)
-        if (lastPopupTime == 0L) return true
+            val lastPopupTime = prefs.getLong(KEY_LAST_POPUP_TIME, 0L)
+            if (lastPopupTime == 0L) return true
 
-        val popupStatus = prefs.getString(KEY_POPUP_STATUS, "none")
-        val elapsedTime = System.currentTimeMillis() - lastPopupTime
-        val daysRequired = if (popupStatus == "watched") 5 else 3
-        val timeRequiredMs = daysRequired * 24L * 60L * 60L * 1000L
-        
-        return elapsedTime >= timeRequiredMs
+            val popupStatus = prefs.getString(KEY_POPUP_STATUS, "none")
+            val elapsedTime = System.currentTimeMillis() - lastPopupTime
+            val daysRequired = if (popupStatus == "watched") 5 else 3
+            val timeRequiredMs = daysRequired * 24L * 60L * 60L * 1000L
+            
+            return elapsedTime >= timeRequiredMs
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to check if support popup should be shown", e)
+            return false
+        }
     }
 
     fun recordPopupShown(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putLong(KEY_LAST_POPUP_TIME, System.currentTimeMillis()).apply()
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putLong(KEY_LAST_POPUP_TIME, System.currentTimeMillis()).apply()
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to record popup shown", e)
+        }
     }
 
     fun recordPopupResponse(context: Context, watched: Boolean) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val status = if (watched) "watched" else "dismissed"
-        prefs.edit().putString(KEY_POPUP_STATUS, status).apply()
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val status = if (watched) "watched" else "dismissed"
+            prefs.edit().putString(KEY_POPUP_STATUS, status).apply()
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to record popup response", e)
+        }
     }
 }

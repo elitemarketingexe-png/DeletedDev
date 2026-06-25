@@ -291,8 +291,12 @@ class MainActivity : ComponentActivity() {
             // Check if we should show the support popup
             LaunchedEffect(showSetupScreen) {
                 if (showSetupScreen == false) {
-                    if (com.unshoo.pixelmusic.data.ads.AdManager.shouldShowSupportPopup(this@MainActivity)) {
-                        showSupportPopupDialog = true
+                    try {
+                        if (com.unshoo.pixelmusic.data.ads.AdManager.shouldShowSupportPopup(this@MainActivity)) {
+                            showSupportPopupDialog = true
+                        }
+                    } catch (e: Throwable) {
+                        Log.e("MainActivity", "Failed to check support popup eligibility", e)
                     }
                 }
             }
@@ -363,26 +367,39 @@ class MainActivity : ComponentActivity() {
                         com.unshoo.pixelmusic.presentation.components.SupportPopupDialog(
                             onDismiss = {
                                 showSupportPopupDialog = false
-                                com.unshoo.pixelmusic.data.ads.AdManager.recordPopupShown(this@MainActivity)
-                                com.unshoo.pixelmusic.data.ads.AdManager.recordPopupResponse(this@MainActivity, watched = false)
+                                try {
+                                    com.unshoo.pixelmusic.data.ads.AdManager.recordPopupShown(this@MainActivity)
+                                    com.unshoo.pixelmusic.data.ads.AdManager.recordPopupResponse(this@MainActivity, watched = false)
+                                } catch (e: Throwable) {
+                                    Log.e("MainActivity", "Failed to record popup dismissal", e)
+                                }
                             },
                             onWatchAdClick = {
                                 showSupportPopupDialog = false
-                                com.unshoo.pixelmusic.data.ads.AdManager.recordPopupShown(this@MainActivity)
-                                if (com.unshoo.pixelmusic.data.ads.AdManager.isAdLoaded()) {
-                                    Toast.makeText(this@MainActivity, "Opening support ad...", Toast.LENGTH_SHORT).show()
-                                    com.unshoo.pixelmusic.data.ads.AdManager.showRewardedAd(this@MainActivity) { success ->
-                                        com.unshoo.pixelmusic.data.ads.AdManager.recordPopupResponse(this@MainActivity, watched = success)
-                                        if (success) {
-                                            Toast.makeText(this@MainActivity, "Thank you for supporting PixelMusic!", Toast.LENGTH_LONG).show()
-                                        } else {
-                                            Toast.makeText(this@MainActivity, "Ad closed early.", Toast.LENGTH_SHORT).show()
+                                try {
+                                    com.unshoo.pixelmusic.data.ads.AdManager.recordPopupShown(this@MainActivity)
+                                    if (com.unshoo.pixelmusic.data.ads.AdManager.isAdLoaded()) {
+                                        Toast.makeText(this@MainActivity, "Opening support ad...", Toast.LENGTH_SHORT).show()
+                                        com.unshoo.pixelmusic.data.ads.AdManager.showRewardedAd(this@MainActivity) { success ->
+                                            try {
+                                                com.unshoo.pixelmusic.data.ads.AdManager.recordPopupResponse(this@MainActivity, watched = success)
+                                                if (success) {
+                                                    Toast.makeText(this@MainActivity, "Thank you for supporting PixelMusic!", Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    Toast.makeText(this@MainActivity, "Ad closed early.", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } catch (e: Throwable) {
+                                                Log.e("MainActivity", "Failed to record ad success", e)
+                                            }
                                         }
+                                    } else {
+                                        Toast.makeText(this@MainActivity, "Ad is not ready yet. Please try again in a few seconds.", Toast.LENGTH_SHORT).show()
+                                        com.unshoo.pixelmusic.data.ads.AdManager.recordPopupResponse(this@MainActivity, watched = false)
+                                        com.unshoo.pixelmusic.data.ads.AdManager.loadRewardedAd(applicationContext)
                                     }
-                                } else {
-                                    Toast.makeText(this@MainActivity, "Ad is not ready yet. Please try again in a few seconds.", Toast.LENGTH_SHORT).show()
-                                    com.unshoo.pixelmusic.data.ads.AdManager.recordPopupResponse(this@MainActivity, watched = false)
-                                    com.unshoo.pixelmusic.data.ads.AdManager.loadRewardedAd(applicationContext)
+                                } catch (e: Throwable) {
+                                    Log.e("MainActivity", "Failed to show support ad on click", e)
+                                    Toast.makeText(this@MainActivity, "Could not load ad. Thank you for trying to support us!", Toast.LENGTH_LONG).show()
                                 }
                             }
                         )

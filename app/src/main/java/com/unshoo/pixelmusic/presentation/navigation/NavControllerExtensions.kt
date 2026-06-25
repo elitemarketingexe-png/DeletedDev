@@ -18,18 +18,22 @@ private fun NavController.isReadyForNavigation(): Boolean {
 fun NavController.navigateSafely(route: String): Boolean {
     if (!isReadyForNavigation()) return false
     val activity = context as? Activity
-    if (activity != null && (route.contains("settings_category/ai") || route.contains("smart_mix"))) {
-        if (AdManager.isAdLoaded()) {
-            Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
-            AdManager.showRewardedAd(activity) { _ ->
-                navigate(route) {
-                    launchSingleTop = true
+    try {
+        if (activity != null && (route.contains("settings_category/ai") || route.contains("smart_mix"))) {
+            if (AdManager.isAdLoaded()) {
+                Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
+                AdManager.showRewardedAd(activity) { _ ->
+                    navigate(route) {
+                        launchSingleTop = true
+                    }
                 }
+                return true
+            } else {
+                AdManager.loadRewardedAd(activity.applicationContext)
             }
-            return true
-        } else {
-            AdManager.loadRewardedAd(activity.applicationContext)
         }
+    } catch (e: Throwable) {
+        android.util.Log.e("NavController", "Ad navigation interception failed, fallback to normal", e)
     }
     navigate(route) {
         launchSingleTop = true
@@ -43,19 +47,23 @@ fun NavController.navigateSafely(
 ): Boolean {
     if (!isReadyForNavigation()) return false
     val activity = context as? Activity
-    if (activity != null && (route.contains("settings_category/ai") || route.contains("smart_mix"))) {
-        if (AdManager.isAdLoaded()) {
-            Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
-            AdManager.showRewardedAd(activity) { _ ->
-                navigate(route) {
-                    launchSingleTop = true
-                    builder()
+    try {
+        if (activity != null && (route.contains("settings_category/ai") || route.contains("smart_mix"))) {
+            if (AdManager.isAdLoaded()) {
+                Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
+                AdManager.showRewardedAd(activity) { _ ->
+                    navigate(route) {
+                        launchSingleTop = true
+                        builder()
+                    }
                 }
+                return true
+            } else {
+                AdManager.loadRewardedAd(activity.applicationContext)
             }
-            return true
-        } else {
-            AdManager.loadRewardedAd(activity.applicationContext)
         }
+    } catch (e: Throwable) {
+        android.util.Log.e("NavController", "Ad navigation interception failed, fallback to normal", e)
     }
     navigate(route) {
         launchSingleTop = true
@@ -83,22 +91,26 @@ fun NavController.navigateSafelyReplacing(
 fun NavController.navigateToTopLevelSafely(route: String): Boolean {
     val startDestinationId = runCatching { graph.startDestinationId }.getOrNull() ?: return false
     val activity = context as? Activity
-    if (activity != null && (route.contains("settings_category/ai") || route.contains("smart_mix"))) {
-        if (AdManager.isAdLoaded()) {
-            Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
-            AdManager.showRewardedAd(activity) { _ ->
-                navigate(route) {
-                    popUpTo(startDestinationId) {
-                        saveState = true
+    try {
+        if (activity != null && (route.contains("settings_category/ai") || route.contains("smart_mix"))) {
+            if (AdManager.isAdLoaded()) {
+                Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
+                AdManager.showRewardedAd(activity) { _ ->
+                    navigate(route) {
+                        popUpTo(startDestinationId) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
                     }
-                    launchSingleTop = true
-                    restoreState = true
                 }
+                return true
+            } else {
+                AdManager.loadRewardedAd(activity.applicationContext)
             }
-            return true
-        } else {
-            AdManager.loadRewardedAd(activity.applicationContext)
         }
+    } catch (e: Throwable) {
+        android.util.Log.e("NavController", "Ad navigation interception failed, fallback to normal", e)
     }
     navigate(route) {
         popUpTo(startDestinationId) {
