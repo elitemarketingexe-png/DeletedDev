@@ -169,7 +169,7 @@ fun SupportPopupDialog(
 
                 // Message
                 Text(
-                    text = "We hope you are enjoying your music! To keep the app 100% free, developer-supported, and ad-free during playback, would you mind watching a short video ad to support our work? It really helps keep the project alive!",
+                    text = "We love building PixelMusic for you! However, the project cannot survive without user support. If users do not support the development, updates will stop and the app will die. Please watch a quick ad to keep it alive.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
