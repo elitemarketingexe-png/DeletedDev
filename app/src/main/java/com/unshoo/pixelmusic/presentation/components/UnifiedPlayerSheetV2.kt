@@ -215,6 +215,10 @@ fun UnifiedPlayerSheetV2(
     val scope = rememberCoroutineScope()
 
     val offsetAnimatable = remember { Animatable(0f) }
+    // Dismiss micro-animation properties — all driven by MiniPlayerDismissGestureHandler
+    val dismissAlpha = remember { Animatable(1f) }
+    val dismissRotation = remember { Animatable(0f) }
+    val dismissScale = remember { Animatable(1f) }
     val screenWidthPx = remember(configuration, density) {
         with(density) { configuration.screenWidthDp.dp.toPx() }
     }
@@ -402,6 +406,9 @@ fun UnifiedPlayerSheetV2(
         density = density,
         hapticFeedback = hapticFeedback,
         offsetAnimatable = offsetAnimatable,
+        dismissAlpha = dismissAlpha,
+        dismissRotation = dismissRotation,
+        dismissScale = dismissScale,
         screenWidthPx = screenWidthPx,
         onDismissPlaylistAndShowUndo = { playerViewModel.dismissPlaylistAndShowUndo() },
         onDismissStarted = { playerViewModel.setMiniPlayerDismissing(true) }
@@ -589,9 +596,12 @@ fun UnifiedPlayerSheetV2(
                             )
                             .graphicsLayer {
                                 translationX = offsetAnimatable.value
-                                scaleX = miniAppearScale
-                                scaleY = visualOvershootScaleY.value * miniAppearScale
-                                alpha = miniReadyAlpha
+                                // Immersive dismiss: tilt, fade, and scale-down as card is swiped
+                                rotationZ = dismissRotation.value
+                                alpha = miniReadyAlpha * dismissAlpha.value
+                                scaleX = dismissScale.value * miniAppearScale
+                                scaleY = visualOvershootScaleY.value * dismissScale.value * miniAppearScale
+                                // Pivot at bottom-center: card tilts as if held at its base
                                 transformOrigin = TransformOrigin(0.5f, 1f)
                             }
                             // Always apply Modifier.shadow with the dynamic elevation

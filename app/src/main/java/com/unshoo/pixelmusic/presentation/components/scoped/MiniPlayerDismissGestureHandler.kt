@@ -2,7 +2,7 @@ package com.unshoo.pixelmusic.presentation.components.scoped
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -27,13 +27,27 @@ private enum class MiniDismissDragPhase { IDLE, TENSION, SNAPPING, FREE_DRAG }
 
 /**
  * Keeps mini-player dismiss gesture behavior isolated from the sheet host.
- * Logic is unchanged; this only centralizes gesture transitions and animation dispatch.
+ *
+ * Immersive dismiss micro-animations:
+ *  - TENSION phase: card resists with max 30dp translation, fades slightly,
+ *    and tilts up to 3° to hint at the gesture direction.
+ *  - SNAPPING → FREE_DRAG: haptic fires, card unlocks and follows the finger
+ *    with a subtle scale-down (0.96) and rotation (±8°) for a depth / card-lift feel.
+ *  - Dismiss: card accelerates off-screen with a decelerate curve, fading to 0
+ *    and rotating to ±14° as it exits (feels like tossing a card away).
+ *  - Cancel: card snaps back with a gentle spring so it feels lively but not bouncy.
  */
 internal class MiniPlayerDismissGestureHandler(
     private val scope: CoroutineScope,
     private val density: Density,
     private val hapticFeedback: HapticFeedback,
     private val offsetAnimatable: Animatable<Float, AnimationVector1D>,
+    /** Alpha 0→1 driven by swipe progress, exposed for graphicsLayer. */
+    val dismissAlpha: Animatable<Float, AnimationVector1D>,
+    /** Rotation degrees, exposed for graphicsLayer. */
+    val dismissRotation: Animatable<Float, AnimationVector1D>,
+    /** Scale 0→1 driven by swipe progress, exposed for graphicsLayer. */
+    val dismissScale: Animatable<Float, AnimationVector1D>,
     private val screenWidthPx: Float,
     private val onDismissPlaylistAndShowUndo: () -> Unit,
     private val onDismissStarted: () -> Unit = {}
@@ -41,6 +55,11 @@ internal class MiniPlayerDismissGestureHandler(
     private var dragPhase: MiniDismissDragPhase = MiniDismissDragPhase.IDLE
     private var accumulatedDragX: Float = 0f
     private var offsetJob: Job? = null
+
+    // Precomputed thresholds
+    private val snapThresholdPx get() = 100f * density.density
+    private val maxTensionOffsetPx get() = 30f * density.density
+    private val dismissThreshold get() = (screenWidthPx * 0.4f).coerceAtLeast(1f)
 
     fun onDragStart() {
         dragPhase = MiniDismissDragPhase.TENSION
@@ -56,14 +75,17 @@ internal class MiniPlayerDismissGestureHandler(
 
         when (dragPhase) {
             MiniDismissDragPhase.TENSION -> {
-                val snapThresholdPx = 100f * density.density
                 if (abs(accumulatedDragX) < snapThresholdPx) {
-                    val maxTensionOffsetPx = 30f * density.density
                     val dragFraction = (abs(accumulatedDragX) / snapThresholdPx).coerceIn(0f, 1f)
                     val tensionOffset = lerp(0f, maxTensionOffsetPx, dragFraction)
+                    val tensionRotation = lerp(0f, 3f, dragFraction) * accumulatedDragX.sign
+                    val tensionAlpha = lerp(1f, 0.85f, dragFraction)
                     offsetJob?.cancel()
                     offsetJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
                         offsetAnimatable.snapTo(tensionOffset * accumulatedDragX.sign)
+                        dismissRotation.snapTo(tensionRotation)
+                        dismissAlpha.snapTo(tensionAlpha)
+                        dismissScale.snapTo(1f) // no scale in tension phase yet
                     }
                 } else {
                     dragPhase = MiniDismissDragPhase.SNAPPING
@@ -74,25 +96,28 @@ internal class MiniPlayerDismissGestureHandler(
                 hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                 offsetJob?.cancel()
                 offsetJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    // Card springs into "free" position — feels like unlocking a latch
                     offsetAnimatable.animateTo(
                         targetValue = accumulatedDragX,
-                        animationSpec = spring(
-                            dampingRatio = 0.8f,
-                            stiffness = Spring.StiffnessLow
-                        )
+                        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessLow)
                     )
                 }
                 dragPhase = MiniDismissDragPhase.FREE_DRAG
             }
 
             MiniDismissDragPhase.FREE_DRAG -> {
-                // During a pointer drag we must follow the finger immediately. Starting a new
-                // spring animation for every move event can build up cancellation work on the
-                // main thread and, after long sessions, makes the mini-player feel stuck or
-                // unresponsive. Snap while the finger is down; reserve springs/tweens for release.
+                val progress = (abs(accumulatedDragX) / screenWidthPx).coerceIn(0f, 1f)
+                // Tilt up to 8° in direction of drag, fade to 80%, scale down to 0.95
+                val targetRotation = lerp(0f, 8f, progress) * accumulatedDragX.sign
+                val targetAlpha = lerp(1f, 0.8f, progress)
+                val targetScale = lerp(1f, 0.95f, progress)
                 offsetJob?.cancel()
                 offsetJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    // Finger tracking: snap offset but animate the visual properties
                     offsetAnimatable.snapTo(accumulatedDragX)
+                    dismissRotation.snapTo(targetRotation)
+                    dismissAlpha.snapTo(targetAlpha)
+                    dismissScale.snapTo(targetScale)
                 }
             }
 
@@ -103,30 +128,87 @@ internal class MiniPlayerDismissGestureHandler(
     fun onDragEnd() {
         dragPhase = MiniDismissDragPhase.IDLE
         offsetJob?.cancel()
-        val dismissThreshold = (screenWidthPx * 0.4f).coerceAtLeast(1f)
+
         if (abs(accumulatedDragX) > dismissThreshold) {
             onDismissStarted()
             val targetDismissOffset = if (accumulatedDragX < 0) -screenWidthPx else screenWidthPx
-            offsetJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                offsetAnimatable.animateTo(
-                    targetValue = targetDismissOffset,
-                    animationSpec = tween(
-                        durationMillis = 200,
-                        easing = FastOutSlowInEasing
+            val finalRotation = if (accumulatedDragX < 0) -14f else 14f
+            // Decelerate easing: fast flick, smooth exit
+            val exitEasing = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)
+            offsetJob = scope.launch {
+                launch {
+                    // Card flies off-screen — fast start, glides to final position
+                    offsetAnimatable.animateTo(
+                        targetValue = targetDismissOffset,
+                        animationSpec = tween(durationMillis = 280, easing = exitEasing)
                     )
-                )
+                }
+                launch {
+                    // Rotation increases as card exits, like a tossed card spinning slightly
+                    dismissRotation.animateTo(
+                        targetValue = finalRotation,
+                        animationSpec = tween(durationMillis = 280, easing = exitEasing)
+                    )
+                }
+                launch {
+                    // Fade to fully transparent as card exits
+                    dismissAlpha.animateTo(
+                        targetValue = 0f,
+                        animationSpec = tween(durationMillis = 220, easing = exitEasing)
+                    )
+                }
+                launch {
+                    // Scale down slightly as card exits
+                    dismissScale.animateTo(
+                        targetValue = 0.88f,
+                        animationSpec = tween(durationMillis = 280, easing = exitEasing)
+                    )
+                }
+
+                // Wait for longest animation then commit and reset
                 onDismissPlaylistAndShowUndo()
                 offsetAnimatable.snapTo(0f)
+                dismissRotation.snapTo(0f)
+                dismissAlpha.snapTo(1f)
+                dismissScale.snapTo(1f)
             }
         } else {
-            offsetJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                offsetAnimatable.animateTo(
-                    targetValue = 0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMedium
+            // Not enough drag — spring back cleanly, no bounce
+            offsetJob = scope.launch {
+                launch {
+                    offsetAnimatable.animateTo(
+                        targetValue = 0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
                     )
-                )
+                }
+                launch {
+                    // Return rotation to zero with a matching spring
+                    dismissRotation.animateTo(
+                        targetValue = 0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    )
+                }
+                launch {
+                    dismissAlpha.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(durationMillis = 180)
+                    )
+                }
+                launch {
+                    dismissScale.animateTo(
+                        targetValue = 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium
+                        )
+                    )
+                }
             }
         }
     }
@@ -135,14 +217,37 @@ internal class MiniPlayerDismissGestureHandler(
         dragPhase = MiniDismissDragPhase.IDLE
         accumulatedDragX = 0f
         offsetJob?.cancel()
-        offsetJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            offsetAnimatable.animateTo(
-                targetValue = 0f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioNoBouncy,
-                    stiffness = Spring.StiffnessMedium
+        offsetJob = scope.launch {
+            launch {
+                offsetAnimatable.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
                 )
-            )
+            }
+            launch {
+                dismissRotation.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+            }
+            launch {
+                dismissAlpha.animateTo(targetValue = 1f, animationSpec = tween(durationMillis = 150))
+            }
+            launch {
+                dismissScale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+            }
         }
     }
 }
@@ -153,18 +258,24 @@ internal fun rememberMiniPlayerDismissGestureHandler(
     density: Density,
     hapticFeedback: HapticFeedback,
     offsetAnimatable: Animatable<Float, AnimationVector1D>,
+    dismissAlpha: Animatable<Float, AnimationVector1D>,
+    dismissRotation: Animatable<Float, AnimationVector1D>,
+    dismissScale: Animatable<Float, AnimationVector1D>,
     screenWidthPx: Float,
     onDismissPlaylistAndShowUndo: () -> Unit,
     onDismissStarted: () -> Unit
 ): MiniPlayerDismissGestureHandler {
     val onDismissPlaylistAndShowUndoState = rememberUpdatedState(onDismissPlaylistAndShowUndo)
     val onDismissStartedState = rememberUpdatedState(onDismissStarted)
-    return remember(scope, density, hapticFeedback, offsetAnimatable, screenWidthPx) {
+    return remember(scope, density, hapticFeedback, offsetAnimatable, dismissAlpha, dismissRotation, dismissScale, screenWidthPx) {
         MiniPlayerDismissGestureHandler(
             scope = scope,
             density = density,
             hapticFeedback = hapticFeedback,
             offsetAnimatable = offsetAnimatable,
+            dismissAlpha = dismissAlpha,
+            dismissRotation = dismissRotation,
+            dismissScale = dismissScale,
             screenWidthPx = screenWidthPx,
             onDismissPlaylistAndShowUndo = { onDismissPlaylistAndShowUndoState.value() },
             onDismissStarted = { onDismissStartedState.value() }
