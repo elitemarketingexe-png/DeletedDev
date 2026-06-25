@@ -222,7 +222,7 @@ fun ExploreScreen(
                                     .padding(horizontal = 16.dp, vertical = 8.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                val categories = listOf("All", "Recap", "Smart Mix", "For You", "New Releases", "Charts")
+                                val categories = listOf("All", "Smart Mix", "For You", "New Releases", "Charts", "Recap")
                                 categories.forEach { category ->
                                     FilterChip(
                                         selected = uiState.selectedFilter == category,
@@ -241,43 +241,7 @@ fun ExploreScreen(
                             }
                         }
 
-                        if (uiState.selectedFilter == "All" || uiState.selectedFilter == "Recap") {
-                            item(key = "recap_banner") {
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp),
-                                    shape = AbsoluteSmoothCornerShape(24.dp, 60),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(20.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Explore,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                            modifier = Modifier.size(36.dp)
-                                        )
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "Your Music Recap",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                                            )
-                                            Text(
-                                                text = "Relive your top songs, artists, and listening stats of the season",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+
                         if (uiState.selectedFilter == "All" || uiState.selectedFilter == "Smart Mix") {
                             item(key = "smart_mix_category") {
                                 Card(
@@ -453,9 +417,6 @@ fun ExploreScreen(
                         }
 
                         if (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") {
-                            item(key = "welcome_banner_greeting") {
-                                WelcomeGreetingBanner(userName = "Connected User")
-                            }
                             homeSectionsFiltered.forEachIndexed { index, section ->
                                 val isBento = section.title.contains("mix", ignoreCase = true) && section.items.size >= 5
                                 val isSpeed = section.title.contains("speed dial", ignoreCase = true) || section.title.contains("quick picks", ignoreCase = true)
