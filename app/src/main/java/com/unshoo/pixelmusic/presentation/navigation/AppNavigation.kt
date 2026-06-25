@@ -10,6 +10,8 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.PaddingValues
@@ -657,15 +659,29 @@ private enum class MainRootDirection {
     BACKWARD
 }
 
-private const val BOTTOM_NAV_TRANSITION_DURATION = 200
+private const val BOTTOM_NAV_TRANSITION_DURATION = 380
 
-private val BottomNavEasing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+// Material 3 Emphasized Decelerate / Accelerate easing curves for premium look
+private val BottomNavEnterEasing = CubicBezierEasing(0.2f, 0.85f, 0.7f, 1f)
+private val BottomNavExitEasing = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
 
-private val MAIN_ROOT_TRANSITION_SPEC =
-    tween<IntOffset>(durationMillis = BOTTOM_NAV_TRANSITION_DURATION, easing = BottomNavEasing)
+private val MAIN_ROOT_ENTER_SPEC =
+    tween<IntOffset>(durationMillis = BOTTOM_NAV_TRANSITION_DURATION, easing = BottomNavEnterEasing)
 
-private val MAIN_ROOT_FADE_SPEC =
-    tween<Float>(durationMillis = 150, easing = BottomNavEasing)
+private val MAIN_ROOT_EXIT_SPEC =
+    tween<IntOffset>(durationMillis = BOTTOM_NAV_TRANSITION_DURATION, easing = BottomNavExitEasing)
+
+private val MAIN_ROOT_ENTER_SCALE_SPEC =
+    tween<Float>(durationMillis = BOTTOM_NAV_TRANSITION_DURATION, easing = BottomNavEnterEasing)
+
+private val MAIN_ROOT_EXIT_SCALE_SPEC =
+    tween<Float>(durationMillis = BOTTOM_NAV_TRANSITION_DURATION, easing = BottomNavExitEasing)
+
+private val MAIN_ROOT_ENTER_FADE_SPEC =
+    tween<Float>(durationMillis = 260, easing = BottomNavEnterEasing)
+
+private val MAIN_ROOT_EXIT_FADE_SPEC =
+    tween<Float>(durationMillis = 180, easing = BottomNavExitEasing)
 
 private fun mainRootDirection(
     fromRoute: String?,
@@ -684,15 +700,23 @@ private fun mainRootEnterTransition(
 ): EnterTransition = when (mainRootDirection(fromRoute, toRoute)) {
     MainRootDirection.FORWARD -> {
         slideInHorizontally(
-            animationSpec = MAIN_ROOT_TRANSITION_SPEC,
-            initialOffsetX = { (it * 0.15f).toInt() }
-        ) + fadeIn(animationSpec = MAIN_ROOT_FADE_SPEC)
+            animationSpec = MAIN_ROOT_ENTER_SPEC,
+            initialOffsetX = { (it * 0.12f).toInt() }
+        ) + fadeIn(animationSpec = MAIN_ROOT_ENTER_FADE_SPEC) +
+        scaleIn(
+            animationSpec = MAIN_ROOT_ENTER_SCALE_SPEC,
+            initialScale = 0.96f
+        )
     }
     MainRootDirection.BACKWARD -> {
         slideInHorizontally(
-            animationSpec = MAIN_ROOT_TRANSITION_SPEC,
-            initialOffsetX = { -(it * 0.15f).toInt() }
-        ) + fadeIn(animationSpec = MAIN_ROOT_FADE_SPEC)
+            animationSpec = MAIN_ROOT_ENTER_SPEC,
+            initialOffsetX = { -(it * 0.12f).toInt() }
+        ) + fadeIn(animationSpec = MAIN_ROOT_ENTER_FADE_SPEC) +
+        scaleIn(
+            animationSpec = MAIN_ROOT_ENTER_SCALE_SPEC,
+            initialScale = 0.96f
+        )
     }
     null -> fallback
 }
@@ -704,15 +728,23 @@ private fun mainRootExitTransition(
 ): ExitTransition = when (mainRootDirection(fromRoute, toRoute)) {
     MainRootDirection.FORWARD -> {
         slideOutHorizontally(
-            animationSpec = MAIN_ROOT_TRANSITION_SPEC,
-            targetOffsetX = { -(it * 0.15f).toInt() }
-        ) + fadeOut(animationSpec = MAIN_ROOT_FADE_SPEC)
+            animationSpec = MAIN_ROOT_EXIT_SPEC,
+            targetOffsetX = { -(it * 0.12f).toInt() }
+        ) + fadeOut(animationSpec = MAIN_ROOT_EXIT_FADE_SPEC) +
+        scaleOut(
+            animationSpec = MAIN_ROOT_EXIT_SCALE_SPEC,
+            targetScale = 0.96f
+        )
     }
     MainRootDirection.BACKWARD -> {
         slideOutHorizontally(
-            animationSpec = MAIN_ROOT_TRANSITION_SPEC,
-            targetOffsetX = { (it * 0.15f).toInt() }
-        ) + fadeOut(animationSpec = MAIN_ROOT_FADE_SPEC)
+            animationSpec = MAIN_ROOT_EXIT_SPEC,
+            targetOffsetX = { (it * 0.12f).toInt() }
+        ) + fadeOut(animationSpec = MAIN_ROOT_EXIT_FADE_SPEC) +
+        scaleOut(
+            animationSpec = MAIN_ROOT_EXIT_SCALE_SPEC,
+            targetScale = 0.96f
+        )
     }
     null -> fallback
 }

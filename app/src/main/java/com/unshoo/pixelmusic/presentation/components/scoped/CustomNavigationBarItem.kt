@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -82,13 +83,33 @@ fun RowScope.CustomNavigationBarItem(
     )
 
     val iconScale by animateFloatAsState(
-        targetValue = if (selected) 1.1f else 1f,
+        targetValue = if (selected) 1.12f else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
         ),
         label = "iconScale"
     )
+
+    val iconOffsetY by animateFloatAsState(
+        targetValue = if (selected) -3f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "iconOffsetY"
+    )
+
+    val labelScale by animateFloatAsState(
+        targetValue = if (selected) 1.05f else 0.95f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "labelScale"
+    )
+
+    val density = LocalDensity.current.density
 
     // Determinar si mostrar la etiqueta
     val showLabel = label != null && (alwaysShowLabel || selected)
@@ -163,6 +184,7 @@ fun RowScope.CustomNavigationBarItem(
                     .graphicsLayer {
                         scaleX = iconScale
                         scaleY = iconScale
+                        translationY = iconOffsetY * density
                     }
 
             ) {
@@ -189,13 +211,18 @@ fun RowScope.CustomNavigationBarItem(
         ) {
             Spacer(modifier = Modifier.height(4.dp))
             Box(
-                modifier = Modifier.padding(top = 4.dp)
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .graphicsLayer {
+                        scaleX = labelScale
+                        scaleY = labelScale
+                    }
             ) {
                 ProvideTextStyle(
                     value = MaterialTheme.typography.labelMedium.copy(
                         color = textColor,
                         fontSize = 13.sp,
-                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+                        fontWeight = FontWeight.Medium
                     )
                 ) {
                     label?.invoke()
