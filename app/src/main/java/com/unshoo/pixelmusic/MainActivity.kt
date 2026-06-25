@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.Trace
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -285,6 +286,17 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            var showSupportPopupDialog by remember { mutableStateOf(false) }
+
+            // Check if we should show the support popup
+            LaunchedEffect(showSetupScreen) {
+                if (showSetupScreen == false) {
+                    if (com.unshoo.pixelmusic.data.ads.AdManager.shouldShowSupportPopup(this@MainActivity)) {
+                        showSupportPopupDialog = true
+                    }
+                }
+            }
+
             PixelMusicTheme(
                 darkTheme = useDarkTheme,
                 dynamicColor = dynamicColorEnabled,
@@ -343,6 +355,35 @@ class MainActivity : ComponentActivity() {
                                 CrashHandler.clearCrashLog()
                                 crashLogData = null
                                 showCrashReportDialog = false
+                            }
+                        )
+                    }
+
+                    if (showSupportPopupDialog) {
+                        com.unshoo.pixelmusic.presentation.components.SupportPopupDialog(
+                            onDismiss = {
+                                showSupportPopupDialog = false
+                                com.unshoo.pixelmusic.data.ads.AdManager.recordPopupShown(this@MainActivity)
+                                com.unshoo.pixelmusic.data.ads.AdManager.recordPopupResponse(this@MainActivity, watched = false)
+                            },
+                            onWatchAdClick = {
+                                showSupportPopupDialog = false
+                                com.unshoo.pixelmusic.data.ads.AdManager.recordPopupShown(this@MainActivity)
+                                if (com.unshoo.pixelmusic.data.ads.AdManager.isAdLoaded()) {
+                                    Toast.makeText(this@MainActivity, "Opening support ad...", Toast.LENGTH_SHORT).show()
+                                    com.unshoo.pixelmusic.data.ads.AdManager.showRewardedAd(this@MainActivity) { success ->
+                                        com.unshoo.pixelmusic.data.ads.AdManager.recordPopupResponse(this@MainActivity, watched = success)
+                                        if (success) {
+                                            Toast.makeText(this@MainActivity, "Thank you for supporting PixelMusic!", Toast.LENGTH_LONG).show()
+                                        } else {
+                                            Toast.makeText(this@MainActivity, "Ad closed early.", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                } else {
+                                    Toast.makeText(this@MainActivity, "Ad is not ready yet. Please try again in a few seconds.", Toast.LENGTH_SHORT).show()
+                                    com.unshoo.pixelmusic.data.ads.AdManager.recordPopupResponse(this@MainActivity, watched = false)
+                                    com.unshoo.pixelmusic.data.ads.AdManager.loadRewardedAd(applicationContext)
+                                }
                             }
                         )
                     }

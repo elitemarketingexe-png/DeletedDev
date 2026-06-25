@@ -89,6 +89,10 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         MediaItemBuilder.initialize(this)
         BotGuardTokenGenerator.initialize(this)
 
+        // Initialize AdMob and increment app open count
+        com.unshoo.pixelmusic.data.ads.AdManager.initialize(this)
+        com.unshoo.pixelmusic.data.ads.AdManager.incrementAppOpenCount(this)
+
         // Initialize Last.fm client
         com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(
             apiKey = BuildConfig.LASTFM_API_KEY,

@@ -1,5 +1,7 @@
 package com.unshoo.pixelmusic.presentation.screens
 
+import com.unshoo.pixelmusic.presentation.components.AdSupportCard
+
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -239,6 +241,15 @@ fun AboutScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .padding(top = 8.dp),
+                )
+            }
+
+            item(key = "support_card") {
+                Spacer(modifier = Modifier.height(16.dp))
+                AdSupportCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                 )
             }
 

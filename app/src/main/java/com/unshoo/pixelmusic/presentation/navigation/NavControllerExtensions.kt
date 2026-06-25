@@ -1,8 +1,11 @@
 package com.unshoo.pixelmusic.presentation.navigation
 
+import android.app.Activity
+import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavOptionsBuilder
+import com.unshoo.pixelmusic.data.ads.AdManager
 
 private fun NavController.isReadyForNavigation(): Boolean {
     return runCatching {
@@ -14,6 +17,20 @@ private fun NavController.isReadyForNavigation(): Boolean {
 
 fun NavController.navigateSafely(route: String): Boolean {
     if (!isReadyForNavigation()) return false
+    val activity = context as? Activity
+    if (activity != null && (route.contains("settings_category/ai") || route.contains("smart_mix"))) {
+        if (AdManager.isAdLoaded()) {
+            Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
+            AdManager.showRewardedAd(activity) { _ ->
+                navigate(route) {
+                    launchSingleTop = true
+                }
+            }
+            return true
+        } else {
+            AdManager.loadRewardedAd(activity.applicationContext)
+        }
+    }
     navigate(route) {
         launchSingleTop = true
     }
@@ -25,6 +42,21 @@ fun NavController.navigateSafely(
     builder: NavOptionsBuilder.() -> Unit
 ): Boolean {
     if (!isReadyForNavigation()) return false
+    val activity = context as? Activity
+    if (activity != null && (route.contains("settings_category/ai") || route.contains("smart_mix"))) {
+        if (AdManager.isAdLoaded()) {
+            Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
+            AdManager.showRewardedAd(activity) { _ ->
+                navigate(route) {
+                    launchSingleTop = true
+                    builder()
+                }
+            }
+            return true
+        } else {
+            AdManager.loadRewardedAd(activity.applicationContext)
+        }
+    }
     navigate(route) {
         launchSingleTop = true
         builder()
@@ -50,6 +82,24 @@ fun NavController.navigateSafelyReplacing(
 
 fun NavController.navigateToTopLevelSafely(route: String): Boolean {
     val startDestinationId = runCatching { graph.startDestinationId }.getOrNull() ?: return false
+    val activity = context as? Activity
+    if (activity != null && (route.contains("settings_category/ai") || route.contains("smart_mix"))) {
+        if (AdManager.isAdLoaded()) {
+            Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
+            AdManager.showRewardedAd(activity) { _ ->
+                navigate(route) {
+                    popUpTo(startDestinationId) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+            return true
+        } else {
+            AdManager.loadRewardedAd(activity.applicationContext)
+        }
+    }
     navigate(route) {
         popUpTo(startDestinationId) {
             saveState = true

@@ -4,6 +4,8 @@
 )
 package com.unshoo.pixelmusic.presentation.screens
 
+import com.unshoo.pixelmusic.presentation.components.AdSupportCard
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -348,6 +350,16 @@ fun ExploreScreen(
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        if (uiState.selectedFilter == "All") {
+                            item(key = "explore_ad_support_card") {
+                                AdSupportCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
+                                )
                             }
                         }
 
