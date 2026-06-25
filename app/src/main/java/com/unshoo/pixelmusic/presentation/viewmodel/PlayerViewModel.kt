@@ -4096,7 +4096,6 @@ class PlayerViewModel @Inject constructor(
                             }
                             loadLyricsForCurrentSong()
 
-                            // Component 27: Pre-cache recently played YouTube songs in background
                             val youtubeId = currentSongValue.youtubeId
                             if (youtubeId != null && currentSongValue.path.isBlank()) {
                                 viewModelScope.launch(Dispatchers.IO) {
@@ -4107,25 +4106,21 @@ class PlayerViewModel @Inject constructor(
                                             artist = currentSongValue.artist,
                                             thumbnailHref = currentSongValue.albumArtUriString ?: ""
                                         )
-                                        // Pre-resolve and cache the stream URL in LRU cache
                                         val url = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.getSongPlayerUrl(context, ytSong)
                                         com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.put("${youtubeId}_high", url)
 
-                                        // If on WiFi, download audio file for permanent cache
-                                        if (connectivityStateHolder.isMeteredNetwork.value == false) {
+                                        val cachingEnabled = userPreferencesRepository.cacheMostPlayedSongsOfflineFlow.first() || userPreferencesRepository.cacheLikedSongsOfflineFlow.first()
+                                        if (cachingEnabled && connectivityStateHolder.isMeteredNetwork.value == false) {
                                             val audioPath = com.unshoo.pixelmusic.data.remote.youtube.DownloadHelper.downloadAudio(context, ytSong)
                                             if (audioPath != null) {
-                                                // Update local YouTube DB
                                                 val ytDb = com.unshoo.pixelmusic.data.database.youtube.AppDatabase.getInstance(context)
                                                 ytDb.songRepository().updateAudioPath(youtubeId, audioPath)
 
-                                                // Update unified DB
                                                 val mainId = -(15_000_000_000_000L + youtubeId.hashCode().toLong().absoluteValue)
                                                 musicRepository.updateSongFilePath(mainId, audioPath)
                                             }
                                         }
-                                    } catch (e: Exception) {
-                                        Timber.e(e, "Failed to pre-cache recently played song $youtubeId")
+                                    } catch (_: Exception) {
                                     }
                                 }
                             }

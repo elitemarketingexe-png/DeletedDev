@@ -80,19 +80,11 @@ class TelegramCoilFetcher(
         val messageId = uri.pathSegments.firstOrNull()?.toLongOrNull()
 
         if (chatId == null || messageId == null) {
-            Timber.e("TelegramCoilFetcher: Invalid URI format: $uri")
             return null
         }
 
-        // Check for quality parameter
-        val quality = uri.getQueryParameter("quality")
-        val isThumbnailRequest = quality == "thumb"
-
-        // Priority 1: Try embedded art from FULLY DOWNLOADED audio files only
-        // This avoids IO contention during streaming while still getting high-quality art for buffered files
         val embeddedArtPath = tryExtractEmbeddedArtIfSafe(chatId, messageId)
         if (embeddedArtPath != null) {
-            Timber.v("TelegramCoilFetcher: Using embedded art for $uri")
             return SourceResult(
                 source = coil.decode.ImageSource(
                     file = embeddedArtPath.toPath(),
@@ -103,32 +95,12 @@ class TelegramCoilFetcher(
             )
         }
         
-        // Fetch message to get thumbnail info and minithumbnail
         val message = telegramRepository.getMessage(chatId, messageId) ?: return null
-
-        // Priority 2: Minithumbnail Fallback (Low Res - embedded in message)
-        // For thumbnail requests, we check this early to avoid network calls if possible
-        val minithumbnailData = extractMinithumbnail(message.content)
-        if (minithumbnailData != null && isThumbnailRequest) {
-             Timber.v("TelegramCoilFetcher: Using minithumbnail for fast preview $uri")
-             val bitmap = BitmapFactory.decodeByteArray(minithumbnailData, 0, minithumbnailData.size)
-             if (bitmap != null) {
-                 return DrawableResult(
-                     drawable = BitmapDrawable(context.resources, bitmap),
-                     isSampled = true, // It's a low-res sample
-                     dataSource = DataSource.MEMORY
-                 )
-             }
-        }
-        
-        // Priority 3: TDLib Thumbnail Download (High Res / Cached)
-        // Check if we have the file cached/downloaded already.
-        // If it's a thumbnail request, we ONLY use it if it's already on disk.
         val fileId = extractFileIdFromContent(message.content)
+
         if (fileId != null) {
             val file = telegramRepository.getFile(fileId)
             if (file?.local?.isDownloadingCompleted == true && !file.local.path.isNullOrEmpty()) {
-                Timber.v("TelegramCoilFetcher: Using cached thumbnail file for $uri")
                 return SourceResult(
                     source = coil.decode.ImageSource(
                         file = file.local.path.toPath(),
@@ -140,28 +112,14 @@ class TelegramCoilFetcher(
             }
         }
 
-        // If it's a thumbnail request (placeholder) and we don't have:
-        // 1. Embedded art
-        // 2. Minithumbnail (byte array)
-        // 3. Cached thumbnail file
-        // Then we give up. We don't want to block or download network data for a placeholder.
-        if (isThumbnailRequest) {
-            return null
-        }
-        
         var downloadPath: String? = null
         val isRecentlyFailed = telegramCacheManager?.isArtFailed(chatId, messageId) == true
 
-        // Priority 4: Download if not cached (High Res)
-        // Skip if recently failed to avoid network hammer
         if (!isRecentlyFailed && fileId != null) {
-             Timber.v("TelegramCoilFetcher: Attempting download fileId: $fileId for $uri")
-             downloadPath = downloadWithRetry(fileId, chatId, messageId)
+            downloadPath = downloadWithRetry(fileId, chatId, messageId)
         }
-        // Removed verbose "skipping" log - the cache hit is self-explanatory
 
         if (downloadPath != null) {
-            Timber.v("TelegramCoilFetcher: Downloaded thumbnail for $uri")
             return SourceResult(
                 source = coil.decode.ImageSource(
                     file = downloadPath.toPath(),
@@ -172,23 +130,18 @@ class TelegramCoilFetcher(
             )
         }
         
-        // Priority 4: Minithumbnail Fallback (Last resort for high-res request)
+        val minithumbnailData = extractMinithumbnail(message.content)
         if (minithumbnailData != null) {
-             Timber.v("TelegramCoilFetcher: Using minithumbnail for $uri")
-             val bitmap = BitmapFactory.decodeByteArray(minithumbnailData, 0, minithumbnailData.size)
-             if (bitmap != null) {
-                 return DrawableResult(
-                     drawable = BitmapDrawable(context.resources, bitmap),
-                     isSampled = true, // It's a low-res sample
-                     dataSource = DataSource.MEMORY
-                 )
-             }
+            val bitmap = BitmapFactory.decodeByteArray(minithumbnailData, 0, minithumbnailData.size)
+            if (bitmap != null) {
+                return DrawableResult(
+                    drawable = BitmapDrawable(context.resources, bitmap),
+                    isSampled = true,
+                    dataSource = DataSource.MEMORY
+                )
+            }
         }
         
-        // Only log "no art found" once per URI per minute to avoid spam
-        if (shouldLogFailure("no_art_$uri")) {
-            Timber.w("TelegramCoilFetcher: No art available for $uri")
-        }
         return null
     }
 

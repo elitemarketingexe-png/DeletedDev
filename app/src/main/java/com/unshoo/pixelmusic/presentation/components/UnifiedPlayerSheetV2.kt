@@ -313,7 +313,6 @@ fun UnifiedPlayerSheetV2(
         val targetExpanded = showPlayerContentArea && currentSheetContentState == PlayerSheetState.EXPANDED
         previousSheetState = currentSheetContentState
         animatePlayerSheet(targetExpanded = targetExpanded)
-
         if (showPlayerContentArea) {
             scope.launch {
                 visualOvershootScaleY.snapTo(1f)

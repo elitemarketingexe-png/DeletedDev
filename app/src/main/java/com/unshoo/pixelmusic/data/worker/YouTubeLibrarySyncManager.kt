@@ -12,9 +12,9 @@ import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
 import com.unshoo.pixelmusic.data.stats.PlaybackStatsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
@@ -98,21 +98,15 @@ class YouTubeLibrarySyncManager @Inject constructor(
         val entities = allArtistItems.mapNotNull { item ->
             val id = ytArtistId(item.title)
             ArtistEntity(
-                id = id,
+                id = ytArtistId(item.title),
                 name = item.title,
                 trackCount = 0,
                 imageUrl = item.thumbnail,
                 channelId = item.id
             )
         }
-
         musicDao.insertArtistsIgnoreConflicts(entities)
-        val subscribedIds = buildSet {
-            entities.forEach { entity ->
-                entity.channelId?.takeIf { it.isNotBlank() }?.let(::add)
-                add(entity.id.toString())
-            }
-        }
+        val subscribedIds = entities.mapNotNull { it.channelId }.toSet() + entities.map { it.id.toString() }
         userPreferencesRepository.setSubscribedArtistIds(subscribedIds)
     }
 
@@ -176,14 +170,12 @@ class YouTubeLibrarySyncManager @Inject constructor(
         val baseTimestamp = System.currentTimeMillis()
         val favoriteEntities = songs.mapIndexedNotNull { index, song ->
             val songIdStr = song.youtubeId ?: return@mapIndexedNotNull null
-            val numericId = ytSongId(songIdStr)
             FavoritesEntity(
-                songId = numericId,
+                songId = ytSongId(songIdStr),
                 isFavorite = true,
                 timestamp = baseTimestamp - index
             )
         }
-
         if (favoriteEntities.isNotEmpty()) {
             favoriteEntities.chunked(500).forEach { chunk ->
                 favoritesDao.insertAll(chunk)

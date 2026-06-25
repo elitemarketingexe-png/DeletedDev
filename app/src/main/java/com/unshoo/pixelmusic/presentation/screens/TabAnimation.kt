@@ -26,7 +26,6 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 @Composable
 fun TabAnimation(
@@ -65,7 +64,6 @@ fun TabAnimation(
         if (!hasAnimatedSelectionChange) {
             hasAnimatedSelectionChange = true
             scale.snapTo(1f)
-            offsetX.snapTo(0f)
             return@LaunchedEffect
         }
 
@@ -80,7 +78,7 @@ fun TabAnimation(
 
         if (!isSelected) {
             val distance = index - selectedIndex
-            if (abs(distance) == 1) {
+            if (kotlin.math.abs(distance) == 1) {
                 val direction = if (distance > 0) 1 else -1
                 val offsetValue = 14f * direction
                 launch {
