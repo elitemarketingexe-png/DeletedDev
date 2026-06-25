@@ -85,7 +85,7 @@ fun RowScope.CustomNavigationBarItem(
     val iconScale by animateFloatAsState(
         targetValue = if (selected) 1.12f else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
+            dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMedium
         ),
         label = "iconScale"
@@ -94,8 +94,8 @@ fun RowScope.CustomNavigationBarItem(
     val iconOffsetY by animateFloatAsState(
         targetValue = if (selected) -3f else 0f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
         ),
         label = "iconOffsetY"
     )
@@ -147,22 +147,21 @@ fun RowScope.CustomNavigationBarItem(
             modifier = Modifier
                 .size(indicatorWidth, indicatorHeight)
         ) {
-            // Indicador de fondo (pill shape para Material 3 Expressive)
             androidx.compose.animation.AnimatedVisibility(
                 visible = selected,
-                enter = fadeIn(animationSpec = tween(100)) + // Un fade in más rápido
+                enter = fadeIn(animationSpec = tween(150)) +
                         scaleIn(
-                            animationSpec = spring( // Usamos spring para el scaleIn
-                                dampingRatio = Spring.DampingRatioMediumBouncy, // Proporciona un rebote moderado
-                                stiffness = Spring.StiffnessLow // Puedes ajustar la rigidez
-                                // initialScale para que empiece un poco más pequeño si quieres más impacto
-                                // initialScale = 0.8f // (Opcional)
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMedium
                             ),
-                            // También puedes ajustar initialScale dentro de scaleIn si es necesario
-                            // initialScale = 0.8f // Este es el valor por defecto de scaleIn si no se especifica dentro de spring
+                            initialScale = 0.8f
                         ),
-                exit = fadeOut(animationSpec = tween(100)) +
-                        scaleOut(animationSpec = tween(100, easing = EaseInQuart)) // Mantenemos el exit como estaba o lo ajustamos según se necesite
+                exit = fadeOut(animationSpec = tween(150)) +
+                        scaleOut(
+                            animationSpec = tween(150, easing = EaseInQuart),
+                            targetScale = 0.8f
+                        )
             ) {
                 Box(
                     modifier = Modifier
@@ -180,7 +179,6 @@ fun RowScope.CustomNavigationBarItem(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .size(iconWidth, iconHeight)
-                    .clip(iconShape)
                     .graphicsLayer {
                         scaleX = iconScale
                         scaleY = iconScale
