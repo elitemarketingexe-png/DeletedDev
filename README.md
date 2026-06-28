@@ -10,22 +10,10 @@
 </p>
 
 <p align="center">
-# Pixel Music 🎵
-
-<p align="center">
-  <img src="assets/LauncherIcon.png" alt="Pixel Music App Icon" width="128"/>
-</p>
-
-<p align="center">
-  <strong>The Ultimate Hybrid Local, Streaming, and Cloud Music Powerhouse for Android</strong><br>
-  An elegant, feature-rich audio system built using Jetpack Compose, Material Design 3, and Media3 ExoPlayer.
-</p>
-
-<p align="center">
-  <img src="assets/screenshot1.jpg" alt="Pixel Music Library View" width="150" style="border-radius:26px; margin: 4px;"/>
-  <img src="assets/screenshot2.jpg" alt="Pixel Music Player Sheet" width="150" style="border-radius:26px; margin: 4px;"/>
-  <img src="assets/screenshot3.jpg" alt="Pixel Music Equalizer" width="150" style="border-radius:26px; margin: 4px;"/>
-  <img src="assets/screenshot4.jpg" alt="Pixel Music Sync Lyrics" width="150" style="border-radius:26px; margin: 4px;"/>
+  <img src="assets/screenshot1.jpg" alt="Pixel Music Library View" width="150"/>
+  <img src="assets/screenshot2.jpg" alt="Pixel Music Player Sheet" width="150"/>
+  <img src="assets/screenshot3.jpg" alt="Pixel Music Equalizer" width="150"/>
+  <img src="assets/screenshot4.jpg" alt="Pixel Music Sync Lyrics" width="150"/>
 </p>
 
 <p align="center">
@@ -52,16 +40,15 @@
 
 ## 📖 Introduction & Philosophy
 
-**Pixel Music** is not just another music player. It is a unified, privacy-first audio powerhouse engineered for audiophiles, cloud hoarders, and streaming enthusiasts alike. By bridging local offline library indexing, unofficial YouTube Music streaming, Telegram channel integration, Google Drive personal cloud libraries (WIP), and next-generation Generative AI capabilities, Pixel Music creates a flawless hybrid music ecosystem under a single, gorgeous user experience.
+**Pixel Music** is a source-available, third-party hybrid Android music client designed to bring local playback, user-authorized streaming sources, Telegram audio access, personal cloud libraries, and AI-assisted playlist creation into one polished experience.
 
-**Pixel Music** is the ultimate hybrid local and yt music client built for Android. It represents a gorgeous, source-available Spotify and YT Premium alternative. This application brings all of your music sources under a single, beautiful roof.
+Pixel Music supports local offline library indexing, high-resolution local file playback, synchronized lyrics, advanced audio controls, and optional third-party integrations. You can scan and play local files such as FLAC, ALAC, WAV, and MP3. You can also connect supported personal accounts or sources where authorized.
 
-Pixel Music is an independent third-party Android music client that supports local playback and user-accessed streaming sources. You can scan and play high-resolution local files like FLAC, ALAC, WAV, and MP3. Additionally, you can connect your Telegram account to stream audio directly from channels, chats, and saved files. YouTube Music-related functionality is unofficial and intended only for personal use with content the user is authorized to access.
+YouTube Music-related functionality is unofficial and intended only for personal use with content the user is authorized to access, subject to applicable laws and platform terms.
 
-Beautifully styled with a state-of-the-art UI/UX, the interface adapts dynamically to the colors of your album artwork. The app is loaded with advanced features. You can follow along with synchronized LRC lyrics (complete with manual timing offset adjustments). You can customize your sound with a professional 10-band equalizer. You can also connect to other systems using built-in Chromecast, full Android Auto driving support, and a Wear OS watch companion.
-Backporting and enhancing features on top of the MIT-licensed foundation, the system delivers unmatched performance.
+Beautifully styled with a state-of-the-art UI/UX, the interface adapts dynamically to the colors of your album artwork. The app includes synchronized LRC lyrics with manual timing offset adjustment, a professional 10-band equalizer, Chromecast support, Android Auto support, and a Wear OS companion experience.
 
-The app even includes custom generative AI playlist creation. You can simply describe a mood or style, and the built-in Gemini assistant will instantly curate the perfect queue for you. Pixel Music contains MIT-licensed portions derived from PixelPlayer, while modifications from May 27, 2026 onward are proprietary.
+Pixel Music contains MIT-licensed portions derived from PixelPlayer, while modifications, additions, integrations, branding, artwork, documentation, configuration, and other original work by ianshulyadav from May 27, 2026 onward are proprietary.
 
 ---
 
@@ -78,7 +65,7 @@ Pixel Music incorporates the best concepts of open-source streaming clients and 
 | **Lyrics Pipeline** | LRCLIB (Sync) | LRCLIB + Romanization | LRCLIB + Translation | **LRCLIB + Dynamic Offset Sync + Offline caching + manual search** |
 | **AI & Smart Mixes** | None | None | None | **Generative AI & Last.fm Smart Mix** (8 generation modes, retention pruning) |
 | **Connectivity** | Background Play | Cast, Sleep Timer | Scrobble, Cast | **Android Auto, Chromecast, Wear OS, Last.fm & ListenBrainz** |
-| **Legal/License Safety** | GPL-3.0 | GPL-3.0 | GPL-3.0 | **Proprietary (Modifications from May 27, 2026 onward)** |
+| **Project Licensing Model** | Check upstream | Check upstream | Check upstream | **Mixed: MIT-derived portions + proprietary modifications from May 27, 2026 onward** |
 
 ---
 
@@ -158,8 +145,9 @@ Pixel Music's high-fidelity interface is inspired by and built upon portions of 
 > Credit and gratitude to **[PixelPlayer](https://github.com/theovilardo/PixelPlayer)**, crafted by **Theo Vilardo**, for its original Android UI/UX foundation.
 
 Key UI/UX visual paradigms adopted from PixelPlayer include:
+
 * **Dynamic Material You Theming:** High-precision HSL color extraction from album artwork that smoothly updates the player, bottom sheets, sliders, and navigation bar to match the mood of the current track.
-* **Fluid Micro-Animations:** Seamless screen Transitions, predictive back-swipe handling, physics-based scroll bars, and springy gesture-driven mini-players.
+* **Fluid Micro-Animations:** Seamless screen transitions, predictive back-swipe handling, physics-based scroll bars, and springy gesture-driven mini-players.
 * **Premium Expressive Sliders:** Custom smooth-corner sliders and elegant volume control sheets that respond naturally to user touch.
 * **State-of-the-Art Widgets:** Material 3 Glance home-screen widgets providing deep in-context customization and interactive controls directly from your launcher.
 
@@ -175,7 +163,7 @@ Key UI/UX visual paradigms adopted from PixelPlayer include:
 * **Seamless Audio Transitions:** Fully configurable crossfade (0s - 15s) and gapless playback engines to remove irritating pauses between tracks.
 
 ### 🌐 2. Ultimate Hybrid Streaming Capabilities
-* **Unofficial YouTube Music Client:** Search the entire YouTube Music catalog, stream audio in high quality, and access curated mixes without advertisements.
+* **Unofficial YouTube Music Integration:** Provides user-authorized search and playback functionality through unofficial integrations. This feature is intended for personal use only and must be used in compliance with applicable laws and platform terms.
 * **Secure Account Synchronization:** Securely sign into your YouTube Music account via a premium WebView container to sync your liked tracks, custom playlists, and subscribed artists.
 * **Telegram Audio Pipeline:** Connect your Telegram account to directly stream and catalog music uploaded to your channels, chats, and saved messages.
 * **Google Drive Integration (WIP):** Stream high-resolution personal audio libraries directly from cloud folders without taking up local storage.
@@ -220,19 +208,19 @@ Pixel Music is built using cutting-edge Android development technologies:
 | Dependency / Layer | Description & Role |
 |:---|:---|
 | **Core Language** | 100% Kotlin with JVM 21 target |
-| **UI Framework** | Jetpack Compose (Declarative UI) with Compose BOM |
-| **Design Guideline** | Material Design 3 (M3 Expressive UI components) |
-| **Media Player** | Jetpack Media3 (ExoPlayer + Session + UI + Transformer) |
-| **Audio Processing** | ExoPlayer FFmpeg & MIDI extensions, EBU R128 normalization |
-| **Database** | Room SQLite with incremental Kotlin Symbol Processing (KSP) |
-| **Dependency Injection** | Dagger Hilt (Android and WorkManager modules) |
-| **Network Core** | Ktor Client (Content Negotiation + Brotli encoding) & OkHttp |
-| **API Parsing** | Retrofit + Gson + Kotlinx Serialization |
-| **Image Loading** | Coil (Compose Image loading with database-backed LRU caching) |
-| **Async Operations** | Kotlin Coroutines & Flow (StateFlow / SharedFlow architecture) |
-| **Background Tasks** | WorkManager (scheduled backups, network refreshes, sync workers) |
-| **Metadata Tagging** | TagLib / JAudioTagger fallback integration |
-| **Widgets Framework** | Androidx Glance (Material 3 AppWidgets) |
+-| **UI Framework** | Jetpack Compose (Declarative UI) with Compose BOM |
+-| **Design Guideline** | Material Design 3 (M3 Expressive UI components) |
+-| **Media Player** | Jetpack Media3 (ExoPlayer + Session + UI + Transformer) |
+-| **Audio Processing** | ExoPlayer FFmpeg & MIDI extensions, EBU R128 normalization |
+-| **Database** | Room SQLite with incremental Kotlin Symbol Processing (KSP) |
+-| **Dependency Injection** | Dagger Hilt (Android and WorkManager modules) |
+-| **Network Core** | Ktor Client (Content Negotiation + Brotli encoding) & OkHttp |
+-| **API Parsing** | Retrofit + Gson + Kotlinx Serialization |
+-| **Image Loading** | Coil (Compose Image loading with database-backed LRU caching) |
+-| **Async Operations** | Kotlin Coroutines & Flow (StateFlow / SharedFlow architecture) |
+-| **Background Tasks** | WorkManager (scheduled backups, network refreshes, sync workers) |
+-| **Metadata Tagging** | TagLib / JAudioTagger fallback integration |
+-| **Widgets Framework** | Androidx Glance (Material 3 AppWidgets) |
 
 ---
 
@@ -248,7 +236,7 @@ Pixel Music is built using cutting-edge Android development technologies:
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/ianshulyadav/PixelMusic.git
-   cd PixelMusic/PixelPlayer
+   cd PixelMusic
    ```
 2. **Open the project in Android Studio:**
    * Android Studio will sync Gradle dependencies automatically.
@@ -262,12 +250,13 @@ Pixel Music is built using cutting-edge Android development technologies:
 
 ## ⚖️ Disclaimer & Legal Notice
 
-Pixel Music is an independent, community-driven third-party audio player and client. It is **not** associated with Google LLC, YouTube Music, Deezer, Telegram, or any of their parent companies. 
+Pixel Music is an independent, community-driven third-party audio player and client. It is **not** associated with Google LLC, YouTube Music, Deezer, Telegram, Snapchat, Last.fm, ListenBrainz, or any of their parent companies.
 
-* **No Media Hosting:** Pixel Music does not host, upload, or store copyrighted music files. It operates strictly as an interface to scan local device storage or stream media directly from public, public-facing, or user-authenticated APIs (such as YouTube Music's InnerTube API and Telegram's channels).
-* **Fair Use & API Usage:** This software is created solely for personal research, educational, and fair-use purposes. The user is entirely responsible for ensuring their usage aligns with their local copyright laws and YouTube/Telegram Terms of Service.
-* **No Ad-Blocking Guarantee:** While Pixel Music focuses on providing a clean listening environment, it does not guarantee permanent bypasses or modifications to commercial third-party platform conditions.
-* **No Commercialization:** Pixel Music is source-available for personal, non-commercial use. Proprietary modifications, branding, artwork, and project-specific additions may not be redistributed, sold, or commercially published without permission. Selling, redistributing, or commercially publishing Pixel Music proprietary modifications, branding, or compiled builds is prohibited without written permission from the project owner.
+* **No Media Hosting:** Pixel Music does not host, upload, or store copyrighted music files. It operates as an interface for local device media and user-authorized sources.
+* **User Responsibility:** Users are responsible for ensuring that their usage complies with applicable laws, copyright rules, and platform terms.
+* **Unofficial Integrations:** YouTube Music, Telegram, Deezer, Snapchat, Google Drive, Last.fm, ListenBrainz, and other integrations are unofficial unless explicitly stated otherwise.
+* **No Circumvention Guarantee:** Pixel Music does not guarantee bypasses, circumvention, or modification of third-party platform restrictions.
+* **No Commercialization of Proprietary Portions:** Pixel Music is source-available for personal, non-commercial use. Proprietary modifications, branding, artwork, and project-specific additions may not be redistributed, sold, sublicensed, or commercially published without written permission from the project owner.
 
 ---
 
@@ -278,5 +267,7 @@ Pixel Music uses a mixed licensing model.
 Portions of this project are based on **[PixelPlayer](https://github.com/theovilardo/PixelPlayer)**, originally made available under the MIT License. The original MIT copyright and permission notices are retained in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 Modifications, additions, integrations, branding, artwork, documentation, configuration, and other original work by **ianshulyadav** from **May 27, 2026 onward** are proprietary and governed by the [`LICENSE`](LICENSE) file.
+
+Additional provenance information is available in [`PROVENANCE.md`](PROVENANCE.md).
 
 Nothing in Pixel Music's proprietary license removes, limits, or overrides rights granted by the MIT License for the original MIT-licensed PixelPlayer portions.

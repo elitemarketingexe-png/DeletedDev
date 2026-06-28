@@ -15,6 +15,9 @@ while that code/version was available under the MIT License. PixelPlayer code
 released only under a later proprietary license should not be imported without
 written permission from the applicable rights holder.
 
+The MIT License text below is retained as it appeared in the upstream
+MIT-licensed source snapshot used for this project.
+
 -------------------------------------------------------------------------------
 
 MIT License

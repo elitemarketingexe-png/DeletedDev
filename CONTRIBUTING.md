@@ -11,6 +11,11 @@ other contribution to Pixel Music, you confirm that:
 4. you understand that Pixel Music modifications from May 27, 2026 onward are
    proprietary unless otherwise stated.
 
+By submitting a contribution, you grant ianshulyadav a perpetual, worldwide,
+royalty-free, irrevocable license to use, reproduce, modify, adapt, publish,
+distribute, sublicense, and incorporate your contribution into Pixel Music under
+the project's current or future licensing model.
+
 Do not submit code copied from GPL, AGPL, commercial, or later proprietary
 versions of upstream projects unless you have explicit permission and clearly
 disclose the source and license.
