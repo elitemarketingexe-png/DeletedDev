@@ -1,0 +1,3 @@
+fix: Update "Clear all" icon to "Close" in QueueBottomSheet
+
+The icon for the "Quitar de la playlist" (Remove from playlist) button in `QueueBottomSheet.kt` has been changed from `rounded_clear_all_24` to `rounded_close_24`. This provides a more semantically correct icon for the action.

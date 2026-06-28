@@ -1,0 +1,21 @@
+/*
+ * ArchiveTune (2026)
+ * © Chartreux Westia — github.com/ianshulyadav
+ * GPL-3.0 License | Contributors: see git history
+ * Do not remove or alter this notice. - Per GPL-3.0 Section 4 & Section 5
+ */
+
+
+
+
+
+package unshoo.ianshulyadav.pixelmusic.innertube.models.body
+
+import unshoo.ianshulyadav.pixelmusic.innertube.models.Context
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class GetTranscriptBody(
+    val context: Context,
+    val params: String,
+)
