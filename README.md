@@ -19,13 +19,12 @@
 <p align="center">
   <a href="https://android.com"><img src="https://img.shields.io/badge/Android-11%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android 11+"></a>
   <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin 100%"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge" alt="Proprietary License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License"></a>
   <a href="https://t.me/PixelMusicApp"><img src="https://img.shields.io/badge/Telegram-Join%20Channel-229ED9?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Channel"></a>
   <a href="https://github.com/ianshulyadav/PixelMusic"><img src="https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge" alt="PRs Welcome"></a>
 </p>
 
-> [!NOTE]
-> **Independent Fork & Attribution Notice:** This repository is an independent, community-driven fork of the excellent open-source project **[PixelPlayer](https://github.com/theovilardo/PixelPlayer)** created by **[Theo Vilardo](https://github.com/theovilardo)**. It is modified and distributed under the terms of the [Proprietary License](LICENSE). We extend our sincere gratitude to Theo Vilardo and all original contributors for their outstanding foundation work.
+> [Slim] **Attribution Notice:** This repository is maintained by **[ianshulyadav](https://github.com/ianshulyadav)**. It is modified and distributed under the terms of the [MIT License](LICENSE).
 
 ---
 
@@ -39,7 +38,7 @@ You can scan and play high-resolution local files like FLAC, ALAC, WAV, and MP3.
 
 Beautifully styled on the state-of-the-art **PixelPlayer** UI/UX, the interface adapts dynamically to the colors of your album artwork. The app is loaded with advanced features. You can follow along with synchronized LRC lyrics (complete with manual timing offset adjustments). You can customize your sound with a professional 10-band equalizer. You can also connect to other systems using built-in Chromecast, full Android Auto driving support, and a Wear OS watch companion.
 
-The app even includes custom generative AI playlist creation. You can simply describe a mood or style, and the built-in Gemini assistant will instantly curate the perfect queue for you. Released under the Proprietary License, Pixel Music provides a highly premium, privacy-focused, and completely unrestricted audio experience.
+The app even includes custom generative AI playlist creation. You can simply describe a mood or style, and the built-in Gemini assistant will instantly curate the perfect queue for you. Released under the MIT License, Pixel Music provides a highly premium, privacy-focused, and completely unrestricted audio experience.
 
 ---
 
@@ -56,7 +55,7 @@ Pixel Music incorporates the best concepts of open-source streaming clients and 
 | **Lyrics Pipeline** | LRCLIB (Sync) | LRCLIB + Romanization | LRCLIB + Translation | **LRCLIB + Dynamic Offset Sync + Offline caching + manual search** |
 | **AI & Smart Mixes** | None | None | None | **Generative AI & Last.fm Smart Mix** (8 generation modes, retention pruning) |
 | **Connectivity** | Background Play | Cast, Sleep Timer | Scrobble, Cast | **Android Auto, Chromecast, Wear OS, Last.fm & ListenBrainz** |
-| **Legal/License Safety** | GPL-3.0 | GPL-3.0 | GPL-3.0 | **Proprietary (Personal, non-commercial use only)** |
+| **Legal/License Safety** | GPL-3.0 | GPL-3.0 | GPL-3.0 | **MIT License** |
 
 ---
 
@@ -251,18 +250,7 @@ Pixel Music is an independent, community-driven third-party audio player and cli
 
 ## 📄 License
 
-This project is licensed under a **Proprietary License**. 
-
-```text
-Copyright (c) 2026 Theo Vilardo
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to study, review, and use the Software for personal, non-commercial purposes only, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-Commercial use, including but not limited to the sale, redistribution, or publishing of the Software (or any derivative work) on the Google Play Store or any other commercial platform, is strictly prohibited.
-
-The right to sell, sublicense, and distribute the Software for profit is reserved exclusively by the author, Theo Vilardo.
-```
+This project is licensed under the **MIT License**.
 
 To review the full license stipulations, please check the [LICENSE](LICENSE) file.
+
