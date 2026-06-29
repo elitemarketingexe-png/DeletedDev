@@ -256,6 +256,15 @@ fun AboutScreen(
                 )
             }
 
+            item(key = "upstream_credit_card") {
+                Spacer(modifier = Modifier.height(16.dp))
+                UpstreamCreditCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                )
+            }
+
             item(key = "support_card") {
                 Spacer(modifier = Modifier.height(16.dp))
                 AdSupportCard(
@@ -422,6 +431,102 @@ private fun AboutHeroCard(
 }
 
 @Composable
+private fun UpstreamCreditCard(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    Surface(
+        modifier = modifier.clickable {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/theovilardo/PixelPlayer"))
+            try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
+        },
+        shape = AbsoluteSmoothCornerShape(24.dp, 60),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, Color(0xFF58A6FF).copy(alpha = 0.25f)),
+        tonalElevation = 2.dp,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFF58A6FF).copy(alpha = 0.12f),
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            painter = painterResource(R.drawable.github),
+                            contentDescription = null,
+                            tint = Color(0xFF58A6FF),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Column {
+                    Text(
+                        text = "Based on PixelPlayer",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF58A6FF),
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "theovilardo/PixelPlayer",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
+            }
+
+            Text(
+                text = "PixelMusic is an independent, unofficial open-source fork of PixelPlayer. " +
+                    "It is not affiliated with or endorsed by the upstream project.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 18.sp,
+            )
+
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "Original Authors",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                    Text(
+                        text = "• Theo Vilardo",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "• Duhan Yağmur Delikkulak",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SocialLinksColumn() {
     val context = LocalContext.current
     Column(
@@ -543,6 +648,66 @@ private fun SocialLinksColumn() {
                     imageVector = Icons.Rounded.ChevronRight,
                     contentDescription = null,
                     tint = Color.White.copy(alpha = 0.8f),
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
+
+        // Upstream PixelPlayer button
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/theovilardo/PixelPlayer"))
+                    try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
+                },
+            shape = RoundedCornerShape(20.dp),
+            color = Color(0xFF1B2A3B),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.08f),
+                    modifier = Modifier.size(44.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Icon(
+                            painter = painterResource(R.drawable.github),
+                            contentDescription = null,
+                            tint = Color(0xFF58A6FF),
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Upstream: PixelPlayer",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF58A6FF),
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "theovilardo/PixelPlayer",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = Color(0xFF58A6FF).copy(alpha = 0.8f),
                     modifier = Modifier.size(24.dp),
                 )
             }
