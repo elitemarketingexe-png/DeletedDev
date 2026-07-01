@@ -115,7 +115,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.graphics.graphicsLayer
@@ -127,6 +126,18 @@ import unshoo.ianshulyadav.pixelmusic.innertube.models.PlaylistItem
 import unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YTItem
 import unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.platform.LocalContext
+import androidx.palette.graphics.Palette
+import android.graphics.drawable.BitmapDrawable
+import coil.ImageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.compositeOver
 
 @UnstableApi
 @Composable
@@ -254,18 +265,6 @@ fun ExploreScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
-                        // 1. Welcome Greeting Header (without search bar)
-                        item(key = "explore_welcome_header") {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 4.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                WelcomeGreetingBanner(userName = null)
-                            }
-                        }
-
                         // 2. Category Filter Chips (All, Smart Mix, For You, New Releases, Charts, Recap)
                         item(key = "explore_category_filters") {
                             Column(
@@ -276,42 +275,22 @@ fun ExploreScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .horizontalScroll(rememberScrollState())
-                                        .padding(horizontal = 20.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    val categories = listOf(
-                                        "All" to Icons.Rounded.Explore,
-                                        "Smart Mix" to Icons.Rounded.AutoAwesome,
-                                        "For You" to Icons.Rounded.Favorite,
-                                        "New Releases" to Icons.Rounded.Album,
-                                        "Charts" to Icons.Rounded.TrendingUp,
-                                        "Recap" to Icons.Rounded.History
-                                    )
-                                    categories.forEach { (category, icon) ->
-                                        val isSelected = uiState.selectedFilter == category
+                                    val categories = listOf("All", "Smart Mix", "For You", "New Releases", "Charts", "Recap")
+                                    categories.forEach { category ->
                                         FilterChip(
-                                            selected = isSelected,
+                                            selected = uiState.selectedFilter == category,
                                             onClick = { exploreViewModel.setSelectedFilter(category) },
-                                            label = { 
-                                                Text(
-                                                    text = category,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                                ) 
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    imageVector = icon,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            },
+                                            label = { Text(category) },
                                             colors = FilterChipDefaults.filterChipColors(
                                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                                 labelColor = MaterialTheme.colorScheme.onSurface
                                             ),
-                                            shape = RoundedCornerShape(18.dp),
+                                            shape = RoundedCornerShape(16.dp),
                                             border = null
                                         )
                                     }
@@ -323,7 +302,7 @@ fun ExploreScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .horizontalScroll(rememberScrollState())
-                                            .padding(horizontal = 20.dp),
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         uiState.moodChips.forEach { chip ->
@@ -334,14 +313,14 @@ fun ExploreScreen(
                                                     val newChip = if (isSelected) null else chip
                                                     exploreViewModel.selectMoodChip(newChip)
                                                 },
-                                                label = { Text(chip.title, fontWeight = FontWeight.SemiBold) },
+                                                label = { Text(chip.title) },
                                                 colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                                    selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
                                                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                                                     labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                                                 ),
-                                                shape = RoundedCornerShape(14.dp),
+                                                shape = RoundedCornerShape(12.dp),
                                                 border = null
                                             )
                                         }
@@ -523,7 +502,7 @@ fun ExploreScreen(
                                               
                                 if (isBento && section.items.size >= 5) {
                                     item(key = "bento_${section.title}_$index") {
-                                        BentoGridSection(section, navController, playerViewModel)
+                                        LibrarySwipeableCarousel(section, navController, playerViewModel)
                                     }
                                 } else if (isSpeed && section.items.isNotEmpty()) {
                                     item(key = "speed_${section.title}_$index") {
@@ -1134,127 +1113,245 @@ fun SimilarArtistCardItem(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun WelcomeGreetingBanner(userName: String?) {
-    val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
-    val (greeting, sub) = when (hour) {
-        in 5..11 -> "Good morning" to "Start your day with high-fidelity sound"
-        in 12..16 -> "Good afternoon" to "Boost your afternoon productivity and rhythm"
-        else -> "Good evening" to "Unwind and immerse in spatial audio"
-    }
-    val name = userName?.takeIf { it.isNotBlank() } ?: "Music Lover"
+private fun LibrarySwipeableCarousel(
+    section: HomePage.Section,
+    navController: NavController,
+    playerViewModel: PlayerViewModel
+) {
+    val items = section.items.take(8)
+    if (items.isEmpty()) return
+    val pagerState = rememberPagerState(pageCount = { items.size })
+    val scope = rememberCoroutineScope()
 
-    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-        Text(
-            text = "$greeting, $name ✨",
-            style = MaterialTheme.typography.headlineMedium,
-            fontFamily = GoogleSansRounded,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Text(
-            text = sub,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SectionHeader(title = section.title)
+
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+            pageSpacing = 12.dp,
+            beyondViewportPageCount = 1
+        ) { page ->
+            val item = items[page]
+            LibraryCarouselCard(
+                item = item,
+                onClick = {
+                    when (item) {
+                        is SongItem -> playerViewModel.showAndPlaySong(
+                            item.toNativeSong(),
+                            items.filterIsInstance<SongItem>().map { it.toNativeSong() },
+                            section.title
+                        )
+                        is AlbumItem -> navController.navigateSafely(Screen.AlbumDetail.createRoute(item.browseId))
+                        is ArtistItem -> navController.navigateSafely(Screen.ArtistDetail.createRoute(item.id))
+                        is PlaylistItem -> navController.navigateSafely(Screen.PlaylistDetail.createRoute(item.id))
+                    }
+                }
+            )
+        }
+
+        // Dot page indicator
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            repeat(items.size) { page ->
+                val isSelected = pagerState.currentPage == page
+                val animatedWidth by androidx.compose.animation.core.animateDpAsState(
+                    targetValue = if (isSelected) 22.dp else 6.dp,
+                    animationSpec = spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow),
+                    label = "indicator_width_$page"
+                )
+                val dotColor by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outlineVariant,
+                    animationSpec = tween(180),
+                    label = "indicator_color_$page"
+                )
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 3.dp)
+                        .height(6.dp)
+                        .width(animatedWidth)
+                        .clip(CircleShape)
+                        .background(dotColor)
+                        .clickable { scope.launch { pagerState.animateScrollToPage(page) } }
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun BentoGridSection(
-    section: unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Section,
-    navController: NavController,
-    playerViewModel: PlayerViewModel
+private fun LibraryCarouselCard(
+    item: YTItem,
+    onClick: () -> Unit
 ) {
-    val items = section.items
-    if (items.size < 5) return
-    Column(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        SectionHeader(title = section.title)
-        Row(modifier = Modifier.height(310.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            CollageTile(
-                item = items[0],
-                modifier = Modifier.weight(1.35f).fillMaxHeight(),
-                shape = AbsoluteSmoothCornerShape(
-                    cornerRadiusTL = 52.dp,
-                    smoothnessAsPercentTR = 60,
-                    cornerRadiusTR = 16.dp,
-                    smoothnessAsPercentTL = 60,
-                    cornerRadiusBL = 16.dp,
-                    smoothnessAsPercentBR = 60,
-                    cornerRadiusBR = 52.dp,
-                    smoothnessAsPercentBL = 60
-                ),
-                badgeLabel = "FEATURED MIX",
-                isHero = true,
-                navController = navController,
-                playerViewModel = playerViewModel,
-                queueName = section.title
-            )
-            Column(modifier = Modifier.weight(0.75f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                CollageTile(
-                    item = items[1],
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    shape = AbsoluteSmoothCornerShape(32.dp, 60),
-                    badgeLabel = null,
-                    isHero = false,
-                    navController = navController,
-                    playerViewModel = playerViewModel,
-                    queueName = section.title
-                )
-                CollageTile(
-                    item = items[2],
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    shape = AbsoluteSmoothCornerShape(
-                        cornerRadiusTL = 14.dp,
-                        smoothnessAsPercentTR = 60,
-                        cornerRadiusTR = 40.dp,
-                        smoothnessAsPercentTL = 60,
-                        cornerRadiusBL = 40.dp,
-                        smoothnessAsPercentBR = 60,
-                        cornerRadiusBR = 14.dp,
-                        smoothnessAsPercentBL = 60
-                    ),
-                    badgeLabel = null,
-                    isHero = false,
-                    navController = navController,
-                    playerViewModel = playerViewModel,
-                    queueName = section.title
-                )
+    val title = when (item) {
+        is SongItem -> item.title
+        is AlbumItem -> item.title
+        is ArtistItem -> item.title
+        is PlaylistItem -> item.title
+        else -> ""
+    }
+    val subtitle = when (item) {
+        is SongItem -> item.artists.joinToString { it.name }
+        is AlbumItem -> item.artists?.joinToString { it.name } ?: ""
+        is ArtistItem -> "Artist"
+        is PlaylistItem -> item.songCountText ?: ""
+        else -> ""
+    }
+    val thumbnail: String? = when (item) {
+        is SongItem -> item.thumbnail
+        is AlbumItem -> item.thumbnail
+        is ArtistItem -> item.thumbnail
+        is PlaylistItem -> item.thumbnail
+        else -> null
+    }
+    val badgeLabel = when (item) {
+        is PlaylistItem -> if (item.shuffleEndpoint != null) "MIX" else null
+        is AlbumItem -> "ALBUM"
+        else -> null
+    }
+
+    // Dynamic color: extract Palette dominant color from album art thumbnail.
+    // Blended at low alpha so it tints the M3 surface without overpowering it.
+    val context = LocalContext.current
+    val colorScheme = MaterialTheme.colorScheme
+    var tintColor by remember(thumbnail) { mutableStateOf(colorScheme.primaryContainer.copy(alpha = 0.18f)) }
+    LaunchedEffect(thumbnail) {
+        if (!thumbnail.isNullOrBlank()) {
+            runCatching {
+                val loader = ImageLoader(context)
+                val req = ImageRequest.Builder(context)
+                    .data(thumbnail).allowHardware(false).size(96).build()
+                val result = loader.execute(req)
+                if (result is SuccessResult) {
+                    val bmp = (result.drawable as? BitmapDrawable)?.bitmap
+                    if (bmp != null) {
+                        Palette.from(bmp).generate { palette ->
+                            val swatch = palette?.dominantSwatch
+                                ?: palette?.vibrantSwatch
+                                ?: palette?.mutedSwatch
+                            if (swatch != null) {
+                                tintColor = Color(swatch.rgb).copy(alpha = 0.24f)
+                            }
+                        }
+                    }
+                }
             }
         }
-        Row(modifier = Modifier.height(154.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            CollageTile(
-                item = items[3],
-                modifier = Modifier.weight(1f).fillMaxHeight(),
-                shape = AbsoluteSmoothCornerShape(
-                    cornerRadiusTL = 36.dp,
-                    smoothnessAsPercentTR = 60,
-                    cornerRadiusTR = 14.dp,
-                    smoothnessAsPercentTL = 60,
-                    cornerRadiusBL = 14.dp,
-                    smoothnessAsPercentBR = 60,
-                    cornerRadiusBR = 36.dp,
-                    smoothnessAsPercentBL = 60
-                ),
-                badgeLabel = null,
-                isHero = false,
-                navController = navController,
-                playerViewModel = playerViewModel,
-                queueName = section.title
-            )
-            CollageTile(
-                item = items[4],
-                modifier = Modifier.weight(1.2f).fillMaxHeight(),
-                shape = AbsoluteSmoothCornerShape(44.dp, 60),
-                badgeLabel = "HIT MIX",
-                isHero = false,
-                navController = navController,
-                playerViewModel = playerViewModel,
-                queueName = section.title
-            )
+    }
+
+    val animatedTint by animateColorAsState(
+        targetValue = tintColor,
+        animationSpec = tween(450),
+        label = "card_tint_${title}"
+    )
+    val cardShape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(196.dp)
+            .clickable(onClick = onClick),
+        shape = cardShape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = colorScheme.surfaceContainer
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(animatedTint)
+        ) {
+            // Thumbnail — right side, fading into the card
+            if (!thumbnail.isNullOrBlank()) {
+                SmartImage(
+                    model = thumbnail,
+                    contentDescription = title,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(190.dp)
+                        .align(Alignment.CenterEnd),
+                    contentScale = ContentScale.Crop
+                )
+                // Horizontal scrim so text is readable
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                colorStops = arrayOf(
+                                    0.0f to colorScheme.surfaceContainer,
+                                    0.38f to colorScheme.surfaceContainer.copy(alpha = 0.92f),
+                                    0.58f to colorScheme.surfaceContainer.copy(alpha = 0.55f),
+                                    1.0f to Color.Transparent
+                                )
+                            )
+                        )
+                )
+                // Tint scrim over all
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(animatedTint.copy(alpha = animatedTint.alpha * 0.5f))
+                )
+            }
+
+            // Text content — left side
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.68f)
+                    .padding(horizontal = 20.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                if (badgeLabel != null) {
+                    Surface(
+                        shape = AbsoluteSmoothCornerShape(10.dp, 60),
+                        color = colorScheme.primaryContainer.copy(alpha = 0.88f)
+                    ) {
+                        Text(
+                            text = badgeLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.8.sp,
+                            color = colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (subtitle.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(5.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }
