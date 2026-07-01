@@ -60,6 +60,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -129,6 +133,13 @@ fun ExploreScreen(
     val pullRefreshState = rememberPullToRefreshState()
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    val listState = rememberLazyListState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val scrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
+    val isScrolled = remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > scrollThresholdPx }
+    }
+
     val surfaceColor = MaterialTheme.colorScheme.surface
     val primaryColor = MaterialTheme.colorScheme.primary
     val backgroundBrush = remember(surfaceColor, primaryColor) {
@@ -151,7 +162,8 @@ fun ExploreScreen(
                 },
                 onCreateClick = {
                     navController.navigateSafely(Screen.SmartMix.route)
-                }
+                },
+                isScrolled = isScrolled.value
             )
         }
     ) { innerPadding ->
@@ -210,6 +222,7 @@ fun ExploreScreen(
                     val homeSectionsFiltered = uiState.homePageSections
                     val bottomPadding = if (currentSongId != null) MiniPlayerHeight else 0.dp
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             top = innerPadding.calculateTopPadding(),
@@ -724,12 +737,24 @@ fun RecentMixCardItem(
 @Composable
 fun ExploreTopBar(
     onSettingsClick: () -> Unit,
-    onCreateClick: () -> Unit
+    onCreateClick: () -> Unit,
+    isScrolled: Boolean = false,
 ) {
+    val containerColor = if (isScrolled) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+    }
+    val animatedContainerColor by animateColorAsState(
+        targetValue = containerColor,
+        animationSpec = tween(durationMillis = 250),
+        label = "explore_topbar_color"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+            .background(animatedContainerColor)
             .statusBarsPadding()
             .padding(start = 24.dp, top = 12.dp, end = 20.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
