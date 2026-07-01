@@ -52,6 +52,13 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.animation.core.spring
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.TrendingUp
+import java.util.Calendar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -86,6 +93,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
 import com.unshoo.pixelmusic.presentation.components.QuickPicksSection
 import com.unshoo.pixelmusic.presentation.viewmodel.QuickPicksViewModel
+import com.unshoo.pixelmusic.data.ads.AdManager
+import com.unshoo.pixelmusic.presentation.components.AdSupportCard
 import com.unshoo.pixelmusic.R
 import com.unshoo.pixelmusic.data.model.Song
 import com.unshoo.pixelmusic.data.remote.youtube.toNativeSong
@@ -146,14 +155,17 @@ fun ExploreScreen(
 
     val surfaceColor = MaterialTheme.colorScheme.surface
     val primaryColor = MaterialTheme.colorScheme.primary
-    val backgroundBrush = remember(surfaceColor, primaryColor) {
+    val tertiaryColor = MaterialTheme.colorScheme.tertiary
+    
+    val backgroundBrush = remember(surfaceColor, primaryColor, tertiaryColor) {
         Brush.verticalGradient(
             colors = listOf(
-                primaryColor.copy(alpha = 0.15f),
-                surfaceColor.copy(alpha = 0.6f),
+                primaryColor.copy(alpha = 0.18f),
+                tertiaryColor.copy(alpha = 0.08f),
+                surfaceColor.copy(alpha = 0.85f),
                 surfaceColor
             ),
-            endY = 1000f
+            endY = 1400f
         )
     }
 
@@ -242,44 +254,76 @@ fun ExploreScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
-                        item(key = "explore_filters") {
+                        // 1. Welcome Greeting Header (without search bar)
+                        item(key = "explore_welcome_header") {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                WelcomeGreetingBanner(userName = null)
+                            }
+                        }
+
+                        // 2. Category Filter Chips (All, Smart Mix, For You, New Releases, Charts, Recap)
+                        item(key = "explore_category_filters") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .horizontalScroll(rememberScrollState())
-                                        .padding(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        .padding(horizontal = 20.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    val categories = listOf("All", "Smart Mix", "For You", "New Releases", "Charts", "Recap")
-                                    categories.forEach { category ->
+                                    val categories = listOf(
+                                        "All" to Icons.Rounded.Explore,
+                                        "Smart Mix" to Icons.Rounded.AutoAwesome,
+                                        "For You" to Icons.Rounded.Favorite,
+                                        "New Releases" to Icons.Rounded.Album,
+                                        "Charts" to Icons.Rounded.TrendingUp,
+                                        "Recap" to Icons.Rounded.History
+                                    )
+                                    categories.forEach { (category, icon) ->
+                                        val isSelected = uiState.selectedFilter == category
                                         FilterChip(
-                                            selected = uiState.selectedFilter == category,
+                                            selected = isSelected,
                                             onClick = { exploreViewModel.setSelectedFilter(category) },
-                                            label = { Text(category) },
+                                            label = { 
+                                                Text(
+                                                    text = category,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                                ) 
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = icon,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            },
                                             colors = FilterChipDefaults.filterChipColors(
                                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                                                 labelColor = MaterialTheme.colorScheme.onSurface
                                             ),
-                                            shape = RoundedCornerShape(16.dp),
+                                            shape = RoundedCornerShape(18.dp),
                                             border = null
                                         )
                                     }
                                 }
 
-                                if (uiState.selectedFilter == "All" && uiState.moodChips.isNotEmpty()) {
+                                // Mood / Genre Chips (When All or For You is active)
+                                if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") && uiState.moodChips.isNotEmpty()) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .horizontalScroll(rememberScrollState())
-                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            .padding(horizontal = 20.dp),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         uiState.moodChips.forEach { chip ->
@@ -290,14 +334,14 @@ fun ExploreScreen(
                                                     val newChip = if (isSelected) null else chip
                                                     exploreViewModel.selectMoodChip(newChip)
                                                 },
-                                                label = { Text(chip.title) },
+                                                label = { Text(chip.title, fontWeight = FontWeight.SemiBold) },
                                                 colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                    selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                                    selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer,
                                                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                                                     labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                                                 ),
-                                                shape = RoundedCornerShape(12.dp),
+                                                shape = RoundedCornerShape(14.dp),
                                                 border = null
                                             )
                                         }
@@ -306,48 +350,20 @@ fun ExploreScreen(
                             }
                         }
 
-
+                        // 3. AI Smart Mix Studio Card (Hero CTA)
                         val showSmartMixCard = when (uiState.selectedFilter) {
                             "Smart Mix" -> true
-                            "All" -> com.unshoo.pixelmusic.data.ads.AdManager.hasRecentlySupported(context)
+                            "All" -> AdManager.hasRecentlySupported(context)
                             else -> false
                         }
                         if (showSmartMixCard) {
-                            item(key = "smart_mix_category") {
-                                Card(
+                            item(key = "smart_mix_studio_card") {
+                                SmartMixStudioHeroCard(
+                                    onClick = { navController.navigateSafely(Screen.SmartMix.route) },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 16.dp)
-                                        .clickable { navController.navigateSafely(Screen.SmartMix.route) },
-                                    shape = AbsoluteSmoothCornerShape(24.dp, 60),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(20.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.AutoAwesome,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                                            modifier = Modifier.size(36.dp)
-                                        )
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "Smart Mix Studio",
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onTertiaryContainer
-                                            )
-                                            Text(
-                                                text = "Generate AI adaptive playlists matching your mood and tempo",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
-                                            )
-                                        }
-                                    }
-                                }
+                                        .padding(horizontal = 20.dp)
+                                )
                             }
                         }
 
@@ -499,12 +515,21 @@ fun ExploreScreen(
 
                         if (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") {
                             homeSectionsFiltered.forEachIndexed { index, section ->
-                                val isSpeed = section.title.contains("speed dial", ignoreCase = true) || section.title.contains("quick picks", ignoreCase = true)
-                                if (isSpeed && section.items.isNotEmpty()) {
+                                val isSpeed = section.title.contains("speed dial", ignoreCase = true) || 
+                                              section.title.contains("quick picks", ignoreCase = true)
+                                val isBento = section.title.contains("featured", ignoreCase = true) || 
+                                              section.title.contains("mixed for you", ignoreCase = true) ||
+                                              (index % 4 == 0 && section.items.size >= 5)
+                                              
+                                if (isBento && section.items.size >= 5) {
+                                    item(key = "bento_${section.title}_$index") {
+                                        BentoGridSection(section, navController, playerViewModel)
+                                    }
+                                } else if (isSpeed && section.items.isNotEmpty()) {
                                     item(key = "speed_${section.title}_$index") {
                                         SpeedDialSection(section, navController, playerViewModel)
                                     }
-                                } else if (section.thumbnail != null && section.items.filterIsInstance<SongItem>().isNotEmpty()) {
+                                } else if (!section.thumbnail.isNullOrBlank() && section.items.filterIsInstance<SongItem>().isNotEmpty()) {
                                     item(key = "card_shelf_${section.title}_$index") {
                                         MusicCardShelf(section, playerViewModel, navController)
                                     }
@@ -1111,20 +1136,28 @@ fun SimilarArtistCardItem(
 
 @Composable
 private fun WelcomeGreetingBanner(userName: String?) {
-    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-    val greeting = when (hour) {
-        in 5..11 -> "Good morning"
-        in 12..16 -> "Good afternoon"
-        else -> "Good evening"
+    val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
+    val (greeting, sub) = when (hour) {
+        in 5..11 -> "Good morning" to "Start your day with high-fidelity sound"
+        in 12..16 -> "Good afternoon" to "Boost your afternoon productivity and rhythm"
+        else -> "Good evening" to "Unwind and immerse in spatial audio"
     }
     val name = userName?.takeIf { it.isNotBlank() } ?: "Music Lover"
-    Text(
-        text = "$greeting, $name",
-        style = MaterialTheme.typography.headlineMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-    )
+
+    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+        Text(
+            text = "$greeting, $name ✨",
+            style = MaterialTheme.typography.headlineMedium,
+            fontFamily = GoogleSansRounded,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = sub,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 @Composable
@@ -1510,6 +1543,100 @@ fun MusicCardShelf(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Radio")
                     }
+                }
+            }
+        }
+    }
+}@Composable
+fun SmartMixStudioHeroCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
+    val colors = MaterialTheme.colorScheme
+    
+    val gradientBrush = remember(colors) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                colors.tertiaryContainer,
+                colors.primaryContainer,
+                colors.secondaryContainer
+            )
+        )
+    }
+
+    Card(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .border(1.5.dp, colors.tertiary.copy(alpha = 0.4f), shape),
+        shape = shape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(gradientBrush)
+                .padding(22.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(CircleShape)
+                        .background(colors.surface.copy(alpha = 0.9f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = null,
+                        tint = colors.tertiary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "SMART MIX STUDIO",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = colors.primary,
+                            letterSpacing = 1.sp
+                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = colors.tertiary,
+                            modifier = Modifier.padding(start = 4.dp)
+                        ) {
+                            Text(
+                                text = "AI 2.0",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = colors.onTertiary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Generate Adaptive Playlists",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontFamily = GoogleSansRounded,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.onSurface
+                    )
+                    Text(
+                        text = "Blend your local library with YouTube Music online streams seamlessly.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurface.copy(alpha = 0.8f)
+                    )
                 }
             }
         }
