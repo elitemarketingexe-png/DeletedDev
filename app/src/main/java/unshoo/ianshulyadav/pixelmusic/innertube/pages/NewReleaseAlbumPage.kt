@@ -23,6 +23,23 @@ object NewReleaseAlbumPage {
         val subtitleRuns = renderer.subtitle?.runs ?: return null
         val subtitleGroups = subtitleRuns.splitBySeparator()
 
+        val firstGroupText = subtitleGroups.firstOrNull()?.joinToString(separator = "") { it.text }?.trim()?.lowercase()
+        val hasTypePrefix = firstGroupText == "album" || firstGroupText == "single" || firstGroupText == "ep" || 
+                firstGroupText == "albums" || firstGroupText == "singles" || firstGroupText == "eps"
+
+        val artistGroup = if (hasTypePrefix) {
+            subtitleGroups.getOrNull(1)
+        } else {
+            subtitleGroups.firstOrNull()
+        }
+
+        val parsedArtists = artistGroup?.oddElements()?.map {
+            Artist(
+                name = it.text,
+                id = it.navigationEndpoint?.browseEndpoint?.browseId,
+            )
+        } ?: return null
+
         return AlbumItem(
             browseId = renderer.navigationEndpoint.browseEndpoint?.browseId ?: return null,
             playlistId =
@@ -37,20 +54,18 @@ object NewReleaseAlbumPage {
                 renderer.title.runs
                     ?.firstOrNull()
                     ?.text ?: return null,
-            artists =
-                subtitleGroups.getOrNull(1)?.oddElements()?.map {
-                    Artist(
-                        name = it.text,
-                        id = it.navigationEndpoint?.browseEndpoint?.browseId,
-                    )
-                } ?: return null,
+            artists = parsedArtists,
             year =
                 subtitleRuns
                     .lastOrNull()
                     ?.text
                     ?.toIntOrNull(),
             releaseType = AlbumReleaseType.fromLabel(
-                subtitleGroups.firstOrNull()?.joinToString(separator = "") { it.text }
+                if (hasTypePrefix) {
+                    subtitleGroups.firstOrNull()?.joinToString(separator = "") { it.text }
+                } else {
+                    null
+                }
             ),
             thumbnail = renderer.thumbnailRenderer.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
             explicit =

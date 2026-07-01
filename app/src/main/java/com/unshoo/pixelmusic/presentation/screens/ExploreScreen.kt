@@ -259,8 +259,14 @@ fun ExploreScreen(
                     }
                     val cardShelfSections = remember(homeSectionsFiltered) {
                         homeSectionsFiltered.filter { section ->
-                            !section.thumbnail.isNullOrBlank() && section.items.filterIsInstance<SongItem>().isNotEmpty()
-                        }.take(5)
+                            val title = section.title.lowercase()
+                            val isSug = title.contains("mix") || title.contains("listen again") || 
+                                        title.contains("favorites") || title.contains("suggest") || 
+                                        title.contains("recommend") || title.contains("radio") || 
+                                        title.contains("similar") || title.contains("played")
+                            val hasSongs = section.items.filterIsInstance<SongItem>().isNotEmpty()
+                            isSug && hasSongs
+                        }
                     }
                     val bottomPadding = if (currentSongId != null) MiniPlayerHeight else 0.dp
                     LazyColumn(
@@ -499,6 +505,36 @@ fun ExploreScreen(
                             }
                         }
 
+                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") &&
+                            uiState.libraryPlaylists.isNotEmpty()
+                        ) {
+                            item(key = "your_library_header") {
+                                SectionHeader(
+                                    title = "Your Library",
+                                    onActionClick = {
+                                        navController.navigateSafely(Screen.Library.route)
+                                    },
+                                    actionLabel = "See All"
+                                )
+                            }
+                            item(key = "your_library_carousel") {
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    items(uiState.libraryPlaylists) { playlist ->
+                                        LibraryPlaylistCard(
+                                            playlist = playlist,
+                                            playerViewModel = playerViewModel,
+                                            onClick = {
+                                                navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id))
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         if (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") {
                             var carouselRendered = false
 
@@ -517,10 +553,10 @@ fun ExploreScreen(
                                     item(key = "speed_${section.title}_$index") {
                                         SpeedDialSection(section, navController, playerViewModel)
                                     }
-                                } else if (!section.thumbnail.isNullOrBlank() && section.items.filterIsInstance<SongItem>().isNotEmpty()) {
+                                } else if (cardShelfSections.contains(section)) {
                                     if (!carouselRendered && cardShelfSections.isNotEmpty()) {
-                                        item(key = "music_card_shelf_carousel") {
-                                            MusicCardShelfCarousel(cardShelfSections, playerViewModel, navController)
+                                        item(key = "mixed_for_you_section") {
+                                            MixedForYouSection(cardShelfSections, playerViewModel, navController)
                                         }
                                         carouselRendered = true
                                     }
@@ -742,6 +778,158 @@ fun AnimatedSparklesIconButton(
                 modifier = Modifier.size(20.dp),
                 tint = colors.onPrimary
             )
+        }
+    }
+}
+
+@Composable
+fun LibraryPlaylistCard(
+    playlist: Playlist,
+    playerViewModel: PlayerViewModel,
+    onClick: () -> Unit
+) {
+    val shape = remember { AbsoluteSmoothCornerShape(24.dp, 80) }
+    val previewSongIds = remember(playlist.songIds) {
+        playlist.songIds.take(4)
+    }
+    var playlistSongs by remember(previewSongIds) {
+        mutableStateOf<List<Song>?>(if (previewSongIds.isEmpty()) emptyList() else null)
+    }
+    LaunchedEffect(previewSongIds) {
+        if (previewSongIds.isNotEmpty()) {
+            playlistSongs = playerViewModel.getSongs(previewSongIds)
+        }
+    }
+
+    val dominantColor = playlist.coverColorArgb?.let { Color(it) } ?: MaterialTheme.colorScheme.secondaryContainer
+    val cardBgColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val blendedBgColor = remember(dominantColor, cardBgColor) {
+        dominantColor.copy(alpha = 0.14f).compositeOver(cardBgColor)
+    }
+    
+    Card(
+        modifier = Modifier
+            .width(220.dp)
+            .height(130.dp)
+            .clip(shape)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = blendedBgColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                dominantColor.copy(alpha = 0.22f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(106.dp)
+                        .clip(AbsoluteSmoothCornerShape(16.dp, 80))
+                ) {
+                    PlaylistCover(
+                        playlist = playlist,
+                        playlistSongs = playlistSongs ?: emptyList(),
+                        modifier = Modifier.fillMaxSize(),
+                        size = 106.dp
+                    )
+                    
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(4.dp)
+                            .size(28.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = CircleShape
+                            )
+                            .clickable {
+                                playlistSongs?.let { songs ->
+                                    if (songs.isNotEmpty()) {
+                                        playerViewModel.playSongs(songs, songs.first(), playlist.name)
+                                    }
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.PlayArrow,
+                            contentDescription = "Play",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxHeight(),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = playlist.name,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-0.2).sp
+                            ),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        val countText = if (playlist.displaySongCount != null) {
+                            "${playlist.displaySongCount} songs"
+                        } else {
+                            "${playlist.songIds.size} songs"
+                        }
+                        Text(
+                            text = countText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                        )
+                    }
+
+                    val sourceLabel = if (playlist.source == "YOUTUBE") "YouTube" else "Library"
+                    val badgeBg = if (playlist.source == "YOUTUBE") {
+                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
+                    } else {
+                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                    }
+                    val badgeText = if (playlist.source == "YOUTUBE") {
+                        MaterialTheme.colorScheme.onTertiaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .background(badgeBg, shape = RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = sourceLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = badgeText
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1237,7 +1425,7 @@ private fun LibraryCarouselCard(
     // Blended at low alpha so it tints the M3 surface without overpowering it.
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
-    var tintColor by remember(thumbnail) { mutableStateOf(colorScheme.primaryContainer.copy(alpha = 0.18f)) }
+    var tintColor by remember(thumbnail) { mutableStateOf(colorScheme.surfaceContainer) }
     LaunchedEffect(thumbnail) {
         if (!thumbnail.isNullOrBlank()) {
             runCatching {
@@ -1253,7 +1441,8 @@ private fun LibraryCarouselCard(
                                 ?: palette?.vibrantSwatch
                                 ?: palette?.mutedSwatch
                             if (swatch != null) {
-                                tintColor = Color(swatch.rgb).copy(alpha = 0.24f)
+                                tintColor = Color(swatch.rgb).copy(alpha = 0.36f)
+                                    .compositeOver(colorScheme.surfaceContainer)
                             }
                         }
                     }
@@ -1262,10 +1451,10 @@ private fun LibraryCarouselCard(
         }
     }
 
-    val animatedTint by animateColorAsState(
+    val animatedBgColor by animateColorAsState(
         targetValue = tintColor,
         animationSpec = tween(450),
-        label = "card_tint_${title}"
+        label = "card_bg_${title}"
     )
     val cardShape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
 
@@ -1277,13 +1466,11 @@ private fun LibraryCarouselCard(
         shape = cardShape,
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = CardDefaults.cardColors(
-            containerColor = colorScheme.surfaceContainer
+            containerColor = animatedBgColor
         )
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(animatedTint)
+            modifier = Modifier.fillMaxSize()
         ) {
             // Thumbnail — right side, fading into the card
             if (!thumbnail.isNullOrBlank()) {
@@ -1303,19 +1490,13 @@ private fun LibraryCarouselCard(
                         .background(
                             Brush.horizontalGradient(
                                 colorStops = arrayOf(
-                                    0.0f to colorScheme.surfaceContainer,
-                                    0.38f to colorScheme.surfaceContainer.copy(alpha = 0.92f),
-                                    0.58f to colorScheme.surfaceContainer.copy(alpha = 0.55f),
+                                    0.0f to animatedBgColor,
+                                    0.45f to animatedBgColor,
+                                    0.65f to animatedBgColor.copy(alpha = 0.88f),
                                     1.0f to Color.Transparent
                                 )
                             )
                         )
-                )
-                // Tint scrim over all
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(animatedTint.copy(alpha = animatedTint.alpha * 0.5f))
                 )
             }
 
@@ -1486,9 +1667,8 @@ private fun SpeedDialSection(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MusicCardShelfCarousel(
+fun MixedForYouSection(
     sections: List<HomePage.Section>,
     playerViewModel: PlayerViewModel,
     navController: NavController
@@ -1504,251 +1684,233 @@ fun MusicCardShelfCarousel(
         SectionHeader(
             title = "Mixed For You",
             actionLabel = "See All",
-            onActionClick = {}
+            onActionClick = {
+                navController.navigateSafely(Screen.PlaylistDetail.createRoute("mixed_for_you_all"))
+            }
         )
 
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxWidth(),
+        LazyRow(
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-            pageSpacing = 12.dp,
-            beyondViewportPageCount = 1
-        ) { page ->
-            val section = sections[page]
-            
-            val context = LocalContext.current
-            val colors = MaterialTheme.colorScheme
-            var tintColor by remember(section.thumbnail) { mutableStateOf(colors.surfaceContainerHigh) }
-            
-            LaunchedEffect(section.thumbnail) {
-                if (!section.thumbnail.isNullOrBlank()) {
-                    runCatching {
-                        val loader = ImageLoader(context)
-                        val req = ImageRequest.Builder(context)
-                            .data(section.thumbnail)
-                            .allowHardware(false)
-                            .size(96)
-                            .build()
-                        val result = loader.execute(req)
-                        if (result is SuccessResult) {
-                            val bmp = (result.drawable as? BitmapDrawable)?.bitmap
-                            if (bmp != null) {
-                                Palette.from(bmp).generate { palette ->
-                                    val swatch = palette?.dominantSwatch
-                                        ?: palette?.vibrantSwatch
-                                        ?: palette?.mutedSwatch
-                                    if (swatch != null) {
-                                        tintColor = Color(swatch.rgb).copy(alpha = 0.12f)
-                                            .compositeOver(colors.surfaceContainerHigh)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(sections) { section ->
+                MixedForYouCard(
+                    section = section,
+                    playerViewModel = playerViewModel,
+                    navController = navController
+                )
             }
+        }
+    }
+}
 
-            val animatedBackground by animateColorAsState(
-                targetValue = tintColor,
-                animationSpec = tween(400),
-                label = "mix_card_bg_${section.title}"
-            )
-
-            val shape = remember { AbsoluteSmoothCornerShape(24.dp, 60) }
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
-                        val scale = 0.96f + (1f - 0.96f) * (1f - pageOffset.coerceIn(0f, 1f))
-                        scaleX = scale
-                        scaleY = scale
-                        alpha = 0.8f + (1f - 0.8f) * (1f - pageOffset.coerceIn(0f, 1f))
-                    },
-                shape = shape,
-                colors = CardDefaults.cardColors(
-                    containerColor = animatedBackground
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = section.title,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = colors.onSurface
-                            )
-                            if (!section.label.isNullOrBlank()) {
-                                Text(
-                                    text = section.label,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colors.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (!section.thumbnail.isNullOrBlank()) {
-                            SmartImage(
-                                model = section.thumbnail,
-                                contentDescription = section.title,
-                                modifier = Modifier
-                                    .size(100.dp)
-                                    .clip(RoundedCornerShape(16.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                        }
-
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            val songs = section.items.filterIsInstance<SongItem>().take(3)
-                            val nativeSongs = remember(songs) { songs.map { it.toNativeSong() } }
-                            songs.forEachIndexed { index, songItem ->
-                                val nativeSong = nativeSongs[index]
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            playerViewModel.showAndPlaySong(
-                                                song = nativeSong,
-                                                contextSongs = nativeSongs,
-                                                queueName = section.title
-                                            )
-                                        }
-                                        .padding(vertical = 4.dp, horizontal = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${index + 1}",
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = colors.onSurfaceVariant
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = songItem.title,
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = colors.onSurface
-                                        )
-                                        Text(
-                                            text = songItem.artists.joinToString { it.name },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = colors.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val songs = section.items.filterIsInstance<SongItem>()
-                        val nativeSongs = remember(songs) { songs.map { it.toNativeSong() } }
-                        if (nativeSongs.isNotEmpty()) {
-                            Button(
-                                onClick = {
-                                    playerViewModel.showAndPlaySong(
-                                        song = nativeSongs.first(),
-                                        contextSongs = nativeSongs,
-                                        queueName = section.title
-                                    )
-                                },
-                                shape = CircleShape,
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = colors.primary,
-                                    contentColor = colors.onPrimary
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.PlayArrow,
-                                    contentDescription = "Play"
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Play")
-                            }
-
-                            FilledTonalButton(
-                                onClick = {
-                                    playerViewModel.playSongs(
-                                        nativeSongs.shuffled(),
-                                        nativeSongs.random(),
-                                        section.title
-                                    )
-                                },
-                                shape = CircleShape,
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = colors.secondaryContainer,
-                                    contentColor = colors.onSecondaryContainer
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Shuffle,
-                                    contentDescription = "Radio"
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Radio")
+@Composable
+fun MixedForYouCard(
+    section: HomePage.Section,
+    playerViewModel: PlayerViewModel,
+    navController: NavController
+) {
+    val context = LocalContext.current
+    val colors = MaterialTheme.colorScheme
+    var tintColor by remember(section.thumbnail) { mutableStateOf(colors.surfaceContainerHigh) }
+    
+    LaunchedEffect(section.thumbnail) {
+        if (!section.thumbnail.isNullOrBlank()) {
+            runCatching {
+                val loader = ImageLoader(context)
+                val req = ImageRequest.Builder(context)
+                    .data(section.thumbnail)
+                    .allowHardware(false)
+                    .size(96)
+                    .build()
+                val result = loader.execute(req)
+                if (result is SuccessResult) {
+                    val bmp = (result.drawable as? BitmapDrawable)?.bitmap
+                    if (bmp != null) {
+                        Palette.from(bmp).generate { palette ->
+                            val swatch = palette?.dominantSwatch
+                                ?: palette?.vibrantSwatch
+                                ?: palette?.mutedSwatch
+                            if (swatch != null) {
+                                tintColor = Color(swatch.rgb).copy(alpha = 0.12f)
+                                    .compositeOver(colors.surfaceContainerHigh)
                             }
                         }
                     }
                 }
             }
         }
+    }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+    val animatedBackground by animateColorAsState(
+        targetValue = tintColor,
+        animationSpec = tween(400),
+        label = "mix_card_bg_${section.title}"
+    )
+
+    val shape = remember { AbsoluteSmoothCornerShape(24.dp, 60) }
+
+    Card(
+        modifier = Modifier
+            .width(320.dp)
+            .height(260.dp),
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = animatedBackground
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            repeat(sections.size) { page ->
-                val isSelected = pagerState.currentPage == page
-                val animatedWidth by androidx.compose.animation.core.animateDpAsState(
-                    targetValue = if (isSelected) 22.dp else 6.dp,
-                    animationSpec = spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow),
-                    label = "mix_indicator_width_$page"
+            Column {
+                Text(
+                    text = section.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                val dotColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.outlineVariant,
-                    animationSpec = tween(180),
-                    label = "mix_indicator_color_$page"
-                )
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 3.dp)
-                        .height(6.dp)
-                        .width(animatedWidth)
-                        .clip(CircleShape)
-                        .background(dotColor)
-                        .clickable { scope.launch { pagerState.animateScrollToPage(page) } }
-                )
+                if (!section.label.isNullOrBlank()) {
+                    Text(
+                        text = section.label,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!section.thumbnail.isNullOrBlank()) {
+                    SmartImage(
+                        model = section.thumbnail,
+                        contentDescription = section.title,
+                        modifier = Modifier
+                            .size(90.dp)
+                            .clip(RoundedCornerShape(16.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val songs = section.items.filterIsInstance<SongItem>().take(3)
+                    val nativeSongs = remember(songs) { songs.map { it.toNativeSong() } }
+                    songs.forEachIndexed { index, songItem ->
+                        val nativeSong = nativeSongs[index]
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    playerViewModel.showAndPlaySong(
+                                        song = nativeSong,
+                                        contextSongs = nativeSongs,
+                                        queueName = section.title
+                                    )
+                                }
+                                .padding(vertical = 2.dp, horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${index + 1}",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = colors.onSurfaceVariant
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = songItem.title,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = colors.onSurface
+                                )
+                                Text(
+                                    text = songItem.artists.joinToString { it.name },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = colors.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val songs = section.items.filterIsInstance<SongItem>()
+                val nativeSongs = remember(songs) { songs.map { it.toNativeSong() } }
+                if (nativeSongs.isNotEmpty()) {
+                    Button(
+                        onClick = {
+                            playerViewModel.showAndPlaySong(
+                                song = nativeSongs.first(),
+                                contextSongs = nativeSongs,
+                                queueName = section.title
+                            )
+                        },
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary,
+                            contentColor = colors.onPrimary
+                        ),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.PlayArrow,
+                            contentDescription = "Play",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Play", style = MaterialTheme.typography.labelLarge)
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            playerViewModel.playSongs(
+                                nativeSongs.shuffled(),
+                                nativeSongs.random(),
+                                section.title
+                            )
+                        },
+                        shape = CircleShape,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = colors.secondaryContainer,
+                            contentColor = colors.onSecondaryContainer
+                        ),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Shuffle,
+                            contentDescription = "Radio",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Radio", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
             }
         }
     }

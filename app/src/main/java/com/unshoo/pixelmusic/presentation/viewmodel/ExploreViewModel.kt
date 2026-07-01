@@ -41,6 +41,7 @@ data class ExploreUiState(
     val error: String? = null,
     val selectedFilter: String = "All",
     val recentMixes: List<Playlist> = emptyList(),
+    val libraryPlaylists: List<Playlist> = emptyList(),
     val moodChips: List<unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Chip> = emptyList(),
     val explorePageSections: List<unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Section> = emptyList(),
     val activeMoodChip: unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Chip? = null
@@ -74,7 +75,9 @@ class ExploreViewModel @Inject constructor(
             playlistPreferencesRepository.userPlaylistsFlow.collect { playlists ->
                 val mixes = playlists.filter { it.source == "LASTFM_MIX" }
                     .sortedByDescending { it.lastModified }
-                _uiState.update { it.copy(recentMixes = mixes) }
+                val libPlaylists = playlists.filter { !it.isQueueGenerated && it.id != "_downloaded_" && it.source != "LASTFM_MIX" }
+                    .sortedByDescending { it.lastModified }
+                _uiState.update { it.copy(recentMixes = mixes, libraryPlaylists = libPlaylists) }
             }
         }
     }
@@ -226,11 +229,10 @@ class ExploreViewModel @Inject constructor(
                         newReleasesResult = r
                         if (!r.isNullOrEmpty()) {
                             _uiState.update { currentState ->
-                                val merged = (r + currentState.newReleaseAlbums).distinctBy { it.browseId }
                                 currentState.copy(
                                     isLoading = false,
                                     isRefreshing = false,
-                                    newReleaseAlbums = merged
+                                    newReleaseAlbums = r
                                 )
                             }
                         }
@@ -243,39 +245,10 @@ class ExploreViewModel @Inject constructor(
                         val exp = YouTube.explore().getOrNull()
                         explore = exp
                         if (exp != null) {
-                            // ── ArchiveTune pattern: sort newReleaseAlbums by artist play rank ──
-                            val artistRows = try { musicDao.getArtistsByPlayCount() } catch (e: Exception) { emptyList() }
-
-                            // Build indexed maps — index 0 = most played / most favourite
-                            val artistsMap: MutableMap<Int, String> = mutableMapOf()
-                            val favouriteArtistsMap: MutableMap<Int, String> = mutableMapOf()
-                            var favIndex = 0
-                            for ((index, row) in artistRows.withIndex()) {
-                                artistsMap[index] = row.channelId
-                                if (row.isFavourite == 1) {
-                                    favouriteArtistsMap[favIndex] = row.channelId
-                                    favIndex++
-                                }
-                            }
-
-                            val sortedReleases = exp.newReleaseAlbums
-                                .sortedBy { album ->
-                                    val artistIds = album.artists.orEmpty().mapNotNull { it.id }
-                                    artistIds.firstNotNullOfOrNull { artistId ->
-                                        if (artistId in favouriteArtistsMap.values) {
-                                            favouriteArtistsMap.entries.firstOrNull { it.value == artistId }?.key
-                                        } else {
-                                            artistsMap.entries.firstOrNull { it.value == artistId }?.key
-                                        }
-                                    } ?: Int.MAX_VALUE
-                                }
-
                             _uiState.update { currentState ->
-                                val merged = (sortedReleases + currentState.newReleaseAlbums).distinctBy { it.browseId }
                                 currentState.copy(
                                     isLoading = false,
                                     isRefreshing = false,
-                                    newReleaseAlbums = merged,
                                     moodChips = exp.chips.orEmpty().distinctBy { it.title },
                                     explorePageSections = exp.sections
                                 )
@@ -407,16 +380,7 @@ class ExploreViewModel @Inject constructor(
                         _uiState.update { currentState ->
                             val updatedSections = (home?.sections ?: currentState.homePageSections).toMutableList()
 
-                            if (personalPlaylists.isNotEmpty()) {
-                                updatedSections.removeAll { it.title.contains("trending", ignoreCase = true) }
-                                updatedSections.add(0, HomePage.Section(
-                                    title = "Your Playlists",
-                                    label = "From your YouTube Music Account",
-                                    thumbnail = null,
-                                    endpoint = null,
-                                    items = personalPlaylists
-                                ))
-                            } else if (communityPlaylists.isNotEmpty()) {
+                            if (personalPlaylists.isEmpty() && communityPlaylists.isNotEmpty()) {
                                 updatedSections.removeAll { it.title.contains("trending", ignoreCase = true) }
                                 updatedSections.add(HomePage.Section(
                                     title = "Community Playlists",
@@ -424,16 +388,6 @@ class ExploreViewModel @Inject constructor(
                                     thumbnail = null,
                                     endpoint = null,
                                     items = communityPlaylists
-                                ))
-                            }
-
-                            if (recentActivityItems.isNotEmpty()) {
-                                updatedSections.add(0, HomePage.Section(
-                                    title = "Recently Played (YouTube)",
-                                    label = "From your YouTube Music Account",
-                                    thumbnail = null,
-                                    endpoint = null,
-                                    items = recentActivityItems
                                 ))
                             }
 

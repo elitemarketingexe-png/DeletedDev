@@ -293,6 +293,60 @@ class PlaylistViewModel @Inject constructor(
                         }
                     }
                 } else {
+                    if (playlistId == "mixed_for_you_all") {
+                        val cacheFile = File(context.cacheDir, "explore_cache.json")
+                        val songsList = mutableListOf<Song>()
+                        var playlistName = "Mixed For You"
+                        var coverUri: String? = null
+                        
+                        if (cacheFile.exists()) {
+                            try {
+                                val json = cacheFile.readText()
+                                val gson = com.google.gson.GsonBuilder()
+                                    .registerTypeAdapter(unshoo.ianshulyadav.pixelmusic.innertube.models.YTItem::class.java, PlaylistYTItemTypeAdapter())
+                                    .create()
+                                val cache = gson.fromJson(json, ExploreCacheModel::class.java)
+                                val sections = cache.sections.filter { section ->
+                                    val title = section.title.lowercase()
+                                    val isSug = title.contains("mix") || title.contains("listen again") || 
+                                                title.contains("favorites") || title.contains("suggest") || 
+                                                title.contains("recommend") || title.contains("radio") || 
+                                                title.contains("similar") || title.contains("played")
+                                    val hasSongs = section.items.filterIsInstance<unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem>().isNotEmpty()
+                                    isSug && hasSongs
+                                }
+                                sections.forEach { section ->
+                                    val sectionSongs = section.items.filterIsInstance<unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem>().map { it.toNativeSong() }
+                                    songsList.addAll(sectionSongs)
+                                    if (coverUri == null) {
+                                        coverUri = section.thumbnail
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e("PlaylistVM", "Failed to parse explore cache for Mixed For You", e)
+                            }
+                        }
+
+                        val pseudoPlaylist = Playlist(
+                            id = playlistId,
+                            name = playlistName,
+                            songIds = songsList.map { it.id },
+                            coverImageUri = coverUri,
+                            source = "YOUTUBE"
+                        )
+
+                        _uiState.update {
+                            it.copy(
+                                currentPlaylistDetails = pseudoPlaylist,
+                                currentPlaylistSongs = songsList.distinctBy { it.id },
+                                playlistSongsOrderMode = PlaylistSongsOrderMode.Manual,
+                                isLoading = false,
+                                playlistNotFound = false
+                            )
+                        }
+                        return@launch
+                    }
+
                     val playlist = playlistPreferencesRepository.userPlaylistsFlow.first()
                         .find { it.id == playlistId }
 
@@ -2244,5 +2298,26 @@ class PlaylistViewModel @Inject constructor(
             }
         } catch (_: Exception) {}
         return seconds * 1000
+    }
+}
+
+private class PlaylistYTItemTypeAdapter : com.google.gson.JsonSerializer<unshoo.ianshulyadav.pixelmusic.innertube.models.YTItem>, com.google.gson.JsonDeserializer<unshoo.ianshulyadav.pixelmusic.innertube.models.YTItem> {
+    override fun serialize(src: unshoo.ianshulyadav.pixelmusic.innertube.models.YTItem, typeOfSrc: java.lang.reflect.Type, context: com.google.gson.JsonSerializationContext): com.google.gson.JsonElement {
+        val obj = context.serialize(src).asJsonObject
+        obj.addProperty("type", src::class.java.simpleName)
+        return obj
+    }
+
+    override fun deserialize(json: com.google.gson.JsonElement, typeOfT: java.lang.reflect.Type, context: com.google.gson.JsonDeserializationContext): unshoo.ianshulyadav.pixelmusic.innertube.models.YTItem {
+        val obj = json.asJsonObject
+        val type = obj.get("type").asString
+        val clazz = when (type) {
+            "SongItem" -> unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem::class.java
+            "AlbumItem" -> unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumItem::class.java
+            "PlaylistItem" -> unshoo.ianshulyadav.pixelmusic.innertube.models.PlaylistItem::class.java
+            "ArtistItem" -> unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem::class.java
+            else -> throw com.google.gson.JsonParseException("Unknown type: $type")
+        }
+        return context.deserialize(obj, clazz)
     }
 }

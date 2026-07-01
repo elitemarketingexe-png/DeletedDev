@@ -196,7 +196,8 @@ object YoutubeHelper {
                 val browseId = playlistRenderer["navigationEndpoint"]
                     ?.jsonObject?.get("browseEndpoint")
                     ?.jsonObject?.get("browseId")
-                    ?.jsonPrimitive?.contentOrNull ?: return@forEach
+                    ?.jsonPrimitive?.contentOrNull
+                    ?.removePrefix("VL") ?: return@forEach
 
                 val thumbnailUrl =
                     getBestThumbnailUrl(playlistRenderer["thumbnailRenderer"] ?: return@forEach)
