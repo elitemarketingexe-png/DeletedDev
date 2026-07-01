@@ -25,3 +25,27 @@ data class DeezerArtist(
     @SerializedName("nb_album") val albumCount: Int = 0,
     @SerializedName("nb_fan") val fanCount: Int = 0
 )
+
+/**
+ * Response from Deezer track search API.
+ */
+data class DeezerTrackSearchResponse(
+    @SerializedName("data") val data: List<DeezerTrack> = emptyList()
+)
+
+data class DeezerTrack(
+    @SerializedName("id") val id: Long,
+    @SerializedName("title") val title: String,
+    @SerializedName("album") val album: DeezerTrackAlbum? = null
+)
+
+data class DeezerTrackAlbum(
+    @SerializedName("id") val id: Long,
+    @SerializedName("title") val title: String,
+    @SerializedName("cover") val cover: String? = null,
+    @SerializedName("cover_small") val coverSmall: String? = null,
+    @SerializedName("cover_medium") val coverMedium: String? = null,
+    @SerializedName("cover_big") val coverBig: String? = null,
+    @SerializedName("cover_xl") val coverXl: String? = null
+)
+

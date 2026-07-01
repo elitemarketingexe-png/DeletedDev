@@ -338,9 +338,35 @@ class SongInfoBottomSheetViewModel @Inject constructor(
         }
         viewModelScope.launch {
             val result = YouTube.likeVideo(videoId, like)
+            if (result.isSuccess && like) {
+                // If liking the song, clear disliked status locally
+                musicRepository.setDislikedStatus(song.id, false)
+            }
             onResult(result.isSuccess)
         }
     }
+
+    fun dislikeOnYouTube(song: Song, dislike: Boolean, onResult: (Boolean) -> Unit) {
+        val videoId = song.youtubeId ?: if (song.contentUriString.startsWith("youtube://")) {
+            song.contentUriString.substringAfter("youtube://")
+        } else if (song.id.startsWith("youtube_")) {
+            song.id.substringAfter("youtube_")
+        } else {
+            onResult(false)
+            return
+        }
+        viewModelScope.launch {
+            val result = YouTube.dislikeVideo(videoId, dislike)
+            if (result.isSuccess) {
+                musicRepository.setDislikedStatus(song.id, dislike)
+                if (dislike) {
+                    musicRepository.setFavoriteStatus(song.id, false)
+                }
+            }
+            onResult(result.isSuccess)
+        }
+    }
+
 
     fun addToYouTubePlaylist(playlistId: String, song: Song, onResult: (String?) -> Unit) {
         val videoId = song.youtubeId ?: if (song.contentUriString.startsWith("youtube://")) {

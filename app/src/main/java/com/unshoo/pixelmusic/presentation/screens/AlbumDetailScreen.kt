@@ -106,6 +106,27 @@ import com.unshoo.pixelmusic.utils.shapes.RoundedStarShape
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import androidx.compose.ui.res.stringResource
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Queue
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
+import com.unshoo.pixelmusic.presentation.components.MultiSelectionBottomSheet
+import com.unshoo.pixelmusic.presentation.components.subcomps.SelectionActionRow
+import androidx.compose.foundation.layout.Row
 
 private const val UseSharedCollapsibleTopBarProbe = true
 
@@ -130,6 +151,20 @@ fun AlbumDetailScreen(
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
     var showPlaylistBottomSheet by remember { mutableStateOf(false) }
     var playlistSheetSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+
+    // Multi-selection state
+    val multiSelectionState = playerViewModel.multiSelectionStateHolder
+    val selectedSongs by multiSelectionState.selectedSongs.collectAsStateWithLifecycle()
+    val isSelectionMode by multiSelectionState.isSelectionMode.collectAsStateWithLifecycle()
+    val selectedSongIds by multiSelectionState.selectedSongIds.collectAsStateWithLifecycle()
+    var showMultiSelectionSheet by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+    val onSongLongPress: (Song) -> Unit = remember(multiSelectionState, haptic) {
+        { song ->
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            multiSelectionState.toggleSelection(song)
+        }
+    }
     val isDarkTheme = LocalPixelMusicDarkTheme.current
     val baseColorScheme = MaterialTheme.colorScheme
     val albumArtUri = uiState.album?.albumArtUriString?.takeIf { it.isNotBlank() }
@@ -152,14 +187,16 @@ fun AlbumDetailScreen(
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
 
     MaterialTheme(
         colorScheme = albumColorScheme,
         typography = MaterialTheme.typography,
         shapes = MaterialTheme.shapes
     ) {
-
-        val isMiniPlayerVisible = stablePlayerState.currentSong != null
+        Box(modifier = Modifier.fillMaxSize()) {
+            val isMiniPlayerVisible = stablePlayerState.currentSong != null
         val fabBottomPadding by animateDpAsState(
             targetValue = if (isMiniPlayerVisible) MiniPlayerHeight + 16.dp else 16.dp,
             label = "fabPadding"
@@ -331,16 +368,30 @@ fun AlbumDetailScreen(
                                 key = { song -> "album_song_${song.id}" },
                                 contentType = { "album_song" }
                             ) { song ->
+                                val isSelected = selectedSongIds.contains(song.id)
                                 EnhancedSongListItem(
                                     song = song,
                                     isCurrentSong = stablePlayerState.currentSong?.id == song.id,
                                     isPlaying = stablePlayerState.isPlaying,
                                     showAlbumArt = false,
                                     onMoreOptionsClick = {
-                                        playerViewModel.selectSongForInfo(song)
-                                        showSongInfoBottomSheet = true
+                                        if (isSelectionMode) {
+                                            multiSelectionState.toggleSelection(song)
+                                        } else {
+                                            playerViewModel.selectSongForInfo(song)
+                                            showSongInfoBottomSheet = true
+                                        }
                                     },
-                                    onClick = { playerViewModel.showAndPlaySong(song, songs) }
+                                    onClick = {
+                                        if (isSelectionMode) {
+                                            multiSelectionState.toggleSelection(song)
+                                        } else {
+                                            playerViewModel.showAndPlaySong(song, songs)
+                                        }
+                                    },
+                                    onLongPress = { onSongLongPress(song) },
+                                    isSelected = isSelected,
+                                    isSelectionMode = isSelectionMode
                                 )
                             }
                         }
@@ -358,19 +409,67 @@ fun AlbumDetailScreen(
                         )
                     }
 
-                    val context = androidx.compose.ui.platform.LocalContext.current
-                    val onDownloadAction = {
-                        songs.forEach { song ->
-                            val ytId = song.youtubeId ?: if (song.id.startsWith("youtube_")) song.id.removePrefix("youtube_") else null
-                            if (ytId != null) {
-                                val req = androidx.work.OneTimeWorkRequestBuilder<com.unshoo.pixelmusic.data.remote.youtube.SongDownloadWorker>()
-                                    .setInputData(androidx.work.workDataOf(com.unshoo.pixelmusic.data.remote.youtube.SongDownloadWorker.SONG_KEY to ytId))
-                                    .addTag("album_dl")
-                                    .build()
-                                androidx.work.WorkManager.getInstance(context).enqueueUniqueWork("dl_$ytId", androidx.work.ExistingWorkPolicy.KEEP, req)
-                            }
+
+                    val isAlbumLiked by viewModel.isAlbumLiked.collectAsStateWithLifecycle()
+                    var showActionsMenu by remember { mutableStateOf(false) }
+
+                    val albumDropdownMenu = @Composable {
+                        DropdownMenu(
+                            expanded = showActionsMenu,
+                            onDismissRequest = { showActionsMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Download album") },
+                                leadingIcon = { Icon(Icons.Rounded.Download, null) },
+                                onClick = {
+                                    showActionsMenu = false
+                                    songs.forEach { song ->
+                                        val ytId = song.youtubeId ?: if (song.id.startsWith("youtube_")) song.id.removePrefix("youtube_") else null
+                                        if (ytId != null) {
+                                            val req = androidx.work.OneTimeWorkRequestBuilder<com.unshoo.pixelmusic.data.remote.youtube.SongDownloadWorker>()
+                                                .setInputData(androidx.work.workDataOf(com.unshoo.pixelmusic.data.remote.youtube.SongDownloadWorker.SONG_KEY to ytId))
+                                                .addTag("album_dl")
+                                                .build()
+                                            androidx.work.WorkManager.getInstance(context).enqueueUniqueWork("dl_$ytId", androidx.work.ExistingWorkPolicy.KEEP, req)
+                                        }
+                                    }
+                                    android.widget.Toast.makeText(context, "Downloading album songs...", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Add songs to playlist") },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, null) },
+                                onClick = {
+                                    showActionsMenu = false
+                                    playlistSheetSongs = songs
+                                    showPlaylistBottomSheet = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (isAlbumLiked) "Unlike album" else "Like album") },
+                                leadingIcon = { Icon(if (isAlbumLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, null) },
+                                onClick = {
+                                    showActionsMenu = false
+                                    viewModel.toggleAlbumLikeStatus(album)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Add all to queue") },
+                                leadingIcon = { Icon(Icons.Rounded.Queue, null) },
+                                onClick = {
+                                    showActionsMenu = false
+                                    songs.forEach { playerViewModel.addSongToQueue(it) }
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Play next in queue") },
+                                leadingIcon = { Icon(Icons.Rounded.Queue, null) },
+                                onClick = {
+                                    showActionsMenu = false
+                                    songs.reversed().forEach { playerViewModel.addSongNextToQueue(it) }
+                                }
+                            )
                         }
-                        android.widget.Toast.makeText(context, "Downloading album songs...", android.widget.Toast.LENGTH_SHORT).show()
                     }
 
                     if (UseSharedCollapsibleTopBarProbe) {
@@ -391,7 +490,12 @@ fun AlbumDetailScreen(
                                     playerViewModel.playSongsShuffled(songs, album.title)
                                 }
                             },
-                            onDownloadClick = { onDownloadAction() }
+                            actions = {
+                                IconButton(onClick = { showActionsMenu = true }) {
+                                    Icon(Icons.Rounded.MoreVert, contentDescription = "Album options")
+                                }
+                                albumDropdownMenu()
+                            }
                         )
                     } else {
                         CollapsingAlbumTopBar(
@@ -411,7 +515,12 @@ fun AlbumDetailScreen(
                                     playerViewModel.playSongsShuffled(songs, album.title)
                                 }
                             },
-                            onDownloadClick = { onDownloadAction() }
+                            actions = {
+                                IconButton(onClick = { showActionsMenu = true }) {
+                                    Icon(Icons.Rounded.MoreVert, contentDescription = "Album options")
+                                }
+                                albumDropdownMenu()
+                            }
                         )
                     }
                 }
@@ -512,6 +621,91 @@ fun AlbumDetailScreen(
                 playerViewModel = playerViewModel
             )
         }
+
+        // Multi-selection bottom sheet
+        if (showMultiSelectionSheet && selectedSongs.isNotEmpty()) {
+            MultiSelectionBottomSheet(
+                selectedSongs = selectedSongs,
+                favoriteSongIds = favoriteIds,
+                onDismiss = { showMultiSelectionSheet = false },
+                onPlayAll = {
+                    if (selectedSongs.isNotEmpty()) {
+                        playerViewModel.showAndPlaySong(selectedSongs.first(), selectedSongs)
+                    }
+                    showMultiSelectionSheet = false
+                },
+                onAddToQueue = {
+                    selectedSongs.forEach { playerViewModel.addSongToQueue(it) }
+                    showMultiSelectionSheet = false
+                },
+                onPlayNext = {
+                    selectedSongs.reversed().forEach { playerViewModel.addSongNextToQueue(it) }
+                    showMultiSelectionSheet = false
+                },
+                onAddToPlaylist = {
+                    playlistSheetSongs = selectedSongs
+                    showMultiSelectionSheet = false
+                    showPlaylistBottomSheet = true
+                },
+                onToggleLikeAll = { _ ->
+                    selectedSongs.forEach { playerViewModel.toggleFavoriteSpecificSong(it) }
+                    showMultiSelectionSheet = false
+                },
+                onShareAll = {
+                    showMultiSelectionSheet = false
+                },
+                onDeleteAll = { _, onComplete ->
+                    if (activity != null && selectedSongs.isNotEmpty()) {
+                        var completed = 0
+                        selectedSongs.forEach { song ->
+                            playerViewModel.deleteFromDevice(activity, song) { success ->
+                                completed++
+                                if (completed == selectedSongs.size) {
+                                    showMultiSelectionSheet = false
+                                    onComplete(true)
+                                }
+                            }
+                        }
+                    }
+                },
+                onDownloadAll = {
+                    selectedSongs.forEach { song ->
+                        val ytId = song.youtubeId
+                            ?: if (song.id.startsWith("youtube_")) song.id.removePrefix("youtube_") else null
+                        if (ytId != null) {
+                            val req = androidx.work.OneTimeWorkRequestBuilder<com.unshoo.pixelmusic.data.remote.youtube.SongDownloadWorker>()
+                                .setInputData(androidx.work.workDataOf(com.unshoo.pixelmusic.data.remote.youtube.SongDownloadWorker.SONG_KEY to ytId))
+                                .addTag("multi_dl")
+                                .build()
+                            androidx.work.WorkManager.getInstance(context)
+                                .enqueueUniqueWork("dl_$ytId", androidx.work.ExistingWorkPolicy.KEEP, req)
+                        }
+                    }
+                    android.widget.Toast.makeText(context, "Downloading ${selectedSongs.size} songs…", android.widget.Toast.LENGTH_SHORT).show()
+                    showMultiSelectionSheet = false
+                }
+            )
+        }
+
+        // Selection action bar overlay
+        AnimatedVisibility(
+            visible = isSelectionMode,
+            enter = slideInVertically { -it } + fadeIn(),
+            exit = slideOutVertically { -it } + fadeOut(),
+            modifier = Modifier
+                .zIndex(10f)
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 68.dp, start = 8.dp, end = 8.dp)
+        ) {
+            SelectionActionRow(
+                selectedCount = selectedSongs.size,
+                onSelectAll = { multiSelectionState.selectAll(uiState.songs) },
+                onDeselect = { multiSelectionState.clearSelection() },
+                onOptionsClick = { showMultiSelectionSheet = true }
+            )
+        }
+        }
     }
 }
 
@@ -525,7 +719,7 @@ private fun SharedAlbumTopBarProbe(
     onHeaderArtworkState: ((AsyncImagePainter.State) -> Unit)? = null,
     onBackPressed: () -> Unit,
     onPlayClick: () -> Unit,
-    onDownloadClick: () -> Unit = {}
+    actions: @Composable RowScope.() -> Unit = {}
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val statusBarColor =
@@ -634,23 +828,13 @@ private fun SharedAlbumTopBarProbe(
             Icon(Icons.Rounded.Shuffle, contentDescription = stringResource(R.string.cd_shuffle_play_album))
         }
 
-        LargeExtendedFloatingActionButton(
-            onClick = onDownloadClick,
-            shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        Row(
             modifier = Modifier
-                .align(shuffleAlignment)
+                .align(Alignment.TopEnd)
                 .statusBarsPadding()
-                .padding(end = 88.dp)
-                .graphicsLayer {
-                    scaleX = expandedContentAlpha
-                    scaleY = expandedContentAlpha
-                    alpha = expandedContentAlpha
-                }
-        ) {
-            Icon(Icons.Rounded.Download, contentDescription = "Download Album")
-        }
+                .padding(end = 4.dp),
+            content = actions
+        )
     }
 }
 
@@ -665,7 +849,7 @@ private fun CollapsingAlbumTopBar(
     onHeaderArtworkState: ((AsyncImagePainter.State) -> Unit)? = null,
     onBackPressed: () -> Unit,
     onPlayClick: () -> Unit,
-    onDownloadClick: () -> Unit = {}
+    actions: @Composable RowScope.() -> Unit = {}
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val statusBarColor =
@@ -827,22 +1011,13 @@ private fun CollapsingAlbumTopBar(
                     Icon(Icons.Rounded.Shuffle, contentDescription = stringResource(R.string.cd_shuffle_play_album))
                 }
 
-                LargeExtendedFloatingActionButton(
-                    onClick = onDownloadClick,
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                Row(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 88.dp, bottom = 16.dp)
-                        .graphicsLayer {
-                            scaleX = fabScale
-                            scaleY = fabScale
-                            alpha = fabScale
-                        }
-                ) {
-                    Icon(Icons.Rounded.Download, contentDescription = "Download Album")
-                }
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(end = 4.dp),
+                    content = actions
+                )
             }
         }
     }

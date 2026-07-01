@@ -152,6 +152,8 @@ class YouTubeLibrarySyncManager @Inject constructor(
             )
         }
         musicDao.insertAlbumsIgnoreConflicts(entities)
+        val browseIds = allAlbumItems.map { it.browseId }.toSet()
+        userPreferencesRepository.setLikedAlbumIds(browseIds)
     }
 
     suspend fun syncLikedSongs() = withContext(Dispatchers.IO) {

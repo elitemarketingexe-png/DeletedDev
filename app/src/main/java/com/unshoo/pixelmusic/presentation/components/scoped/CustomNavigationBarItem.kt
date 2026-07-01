@@ -47,7 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// En un nuevo archivo o junto a PlayerInternalNavigationItemsRow.kt
+// Easing curves para animaciones más suaves y premium (Material 3 Emphasized)
+private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -69,52 +71,45 @@ fun RowScope.CustomNavigationBarItem(
     indicatorColor: Color = MaterialTheme.colorScheme.secondaryContainer,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() }
 ) {
-    // Colores animados - Solo se recomponen cuando 'selected' cambia
+    // Colores animados con transición fluida Emphasized
     val iconColor by animateColorAsState(
         targetValue = if (selected) selectedIconColor else unselectedIconColor,
-        animationSpec = tween(durationMillis = 200),
+        animationSpec = tween(durationMillis = 250, easing = EmphasizedDecelerate),
         label = "iconColor"
     )
 
     val textColor by animateColorAsState(
         targetValue = if (selected) selectedTextColor else unselectedTextColor,
-        animationSpec = tween(durationMillis = 200),
+        animationSpec = tween(durationMillis = 250, easing = EmphasizedDecelerate),
         label = "textColor"
     )
 
+    // Micro-interacción: escala responsiva y natural
     val iconScale by animateFloatAsState(
         targetValue = if (selected) 1.15f else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
+            dampingRatio = 0.7f,
+            stiffness = 350f
         ),
         label = "iconScale"
     )
 
-    val iconOffsetY by animateFloatAsState(
-        targetValue = if (selected) -4f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "iconOffsetY"
-    )
+    // Se mantiene centrado (sin desplazamiento vertical)
+    val iconOffsetY = 0f
 
     val labelScale by animateFloatAsState(
-        targetValue = if (selected) 1.05f else 0.95f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        targetValue = if (selected) 1.05f else 1f,
+        animationSpec = tween(durationMillis = 300, easing = EmphasizedDecelerate),
         label = "labelScale"
     )
 
     val indicatorProgress by animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
+        animationSpec = if (selected) {
+            tween(durationMillis = 350, easing = EmphasizedDecelerate)
+        } else {
+            tween(durationMillis = 200, easing = EmphasizedAccelerate)
+        },
         label = "indicatorProgress"
     )
 
@@ -123,10 +118,7 @@ fun RowScope.CustomNavigationBarItem(
 
     val labelProgress by animateFloatAsState(
         targetValue = if (showLabel) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = tween(durationMillis = 300, easing = EmphasizedDecelerate),
         label = "labelProgress"
     )
 
@@ -137,7 +129,6 @@ fun RowScope.CustomNavigationBarItem(
     val iconHeight = 24.dp
     val indicatorPadding = 4.dp
     val indicatorShape = RoundedCornerShape(16.dp)
-    val iconShape = RoundedCornerShape(12.dp)
 
     // Layout principal
     Column(
@@ -149,7 +140,7 @@ fun RowScope.CustomNavigationBarItem(
                 enabled = enabled,
                 role = Role.Tab,
                 interactionSource = interactionSource,
-                indication = null //ripple(bounded = true, radius = 24.dp) // Ripple contenido
+                indication = null
             )
             .semantics {
                  if (contentDescription != null) {
@@ -165,24 +156,22 @@ fun RowScope.CustomNavigationBarItem(
             modifier = Modifier
                 .size(indicatorWidth, indicatorHeight)
         ) {
-            if (indicatorProgress > 0.01f) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = indicatorPadding)
-                        .graphicsLayer {
-                            scaleX = indicatorProgress
-                            scaleY = indicatorProgress
-                            alpha = indicatorProgress
-                        }
-                        .background(
-                            color = indicatorColor,
-                            shape = indicatorShape
-                        )
-                )
-            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = indicatorPadding)
+                    .graphicsLayer {
+                        scaleX = indicatorProgress
+                        scaleY = indicatorProgress
+                        alpha = indicatorProgress
+                    }
+                    .background(
+                        color = indicatorColor,
+                        shape = indicatorShape
+                    )
+            )
 
-            // Área clicable del ícono (más pequeña que el container)
+            // Área clicable del ícono
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -210,7 +199,7 @@ fun RowScope.CustomNavigationBarItem(
         }
 
         // Etiqueta con animación
-        if (labelProgress > 0.01f) {
+        if (label != null) {
             Spacer(modifier = Modifier.height(4.dp))
             Box(
                 modifier = Modifier
@@ -228,13 +217,10 @@ fun RowScope.CustomNavigationBarItem(
                         fontWeight = FontWeight.Medium
                     )
                 ) {
-                    label?.invoke()
+                    label.invoke()
                 }
             }
         }
     }
 }
 
-// Easing curves para animaciones más suaves (Material 3 Expressive)
-private val EaseOutQuart = CubicBezierEasing(0.25f, 1f, 0.5f, 1f)
-private val EaseInQuart = CubicBezierEasing(0.5f, 0f, 0.75f, 0f)

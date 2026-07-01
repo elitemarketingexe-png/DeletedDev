@@ -43,9 +43,8 @@ fun TelegramSongEntity.resolveAlbumArtUri(): String? {
     val localFile = filePath.takeIf { it.isNotBlank() }?.let(::File)
     val hasLocalFile = localFile?.exists() == true
     val baseUri = albumArtUriString?.substringBefore('?')?.takeIf { it.isNotBlank() }
-        ?: if (hasLocalFile) "telegram_art://$chatId/$messageId" else null
+        ?: "telegram_art://$chatId/$messageId"
 
-    if (baseUri == null) return null
 
     val version = localFile?.lastModified()?.takeIf { hasLocalFile && it > 0L } ?: return baseUri
     return "$baseUri?v=$version"

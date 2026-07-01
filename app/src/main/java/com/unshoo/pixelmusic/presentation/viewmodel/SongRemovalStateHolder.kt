@@ -62,9 +62,26 @@ class SongRemovalStateHolder @Inject constructor(
 
     suspend fun removeSongFromLibrary(song: Song) {
         libraryStateHolder.removeSong(song.id)
-        // Some cloud/YouTube songs use non-numeric UI IDs. Do not crash removal if the
-        // backing DB row cannot be addressed by the visible id.
-        song.id.toLongOrNull()?.let { musicRepository.deleteById(it) }
+        if (song.isYouTube) {
+            musicRepository.setDislikedStatus(song.id, true)
+            musicRepository.setFavoriteStatus(song.id, false)
+            val youtubeId = song.youtubeId ?: if (song.id.startsWith("youtube_")) {
+                song.id.substringAfter("youtube_")
+            } else if (song.contentUriString.startsWith("youtube://")) {
+                song.contentUriString.substringAfter("youtube://")
+            } else null
+
+            if (youtubeId != null && unshoo.ianshulyadav.pixelmusic.innertube.YouTube.hasLoginCookie()) {
+                kotlin.runCatching {
+                    unshoo.ianshulyadav.pixelmusic.innertube.YouTube.dislikeVideo(youtubeId, true)
+                }
+            }
+        } else {
+            // Some cloud/YouTube songs use non-numeric UI IDs. Do not crash removal if the
+            // backing DB row cannot be addressed by the visible id.
+            song.id.toLongOrNull()?.let { musicRepository.deleteById(it) }
+        }
         playlistPreferencesRepository.removeSongFromAllPlaylists(song.id)
     }
 }
+

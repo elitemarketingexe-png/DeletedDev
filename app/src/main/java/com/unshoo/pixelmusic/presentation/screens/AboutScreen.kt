@@ -59,6 +59,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -118,6 +119,8 @@ import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import kotlinx.coroutines.launch
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
+import com.unshoo.pixelmusic.ui.theme.GoogleSansRounded
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import kotlin.math.roundToInt
 
 // AboutTopBar removed, replaced by CollapsibleCommonTopBar
@@ -256,18 +259,18 @@ fun AboutScreen(
                 )
             }
 
-            item(key = "upstream_credit_card") {
+            item(key = "support_card") {
                 Spacer(modifier = Modifier.height(16.dp))
-                UpstreamCreditCard(
+                AdSupportCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                 )
             }
 
-            item(key = "support_card") {
+            item(key = "upstream_credit_card") {
                 Spacer(modifier = Modifier.height(16.dp))
-                AdSupportCard(
+                UpstreamCreditCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
@@ -334,7 +337,7 @@ private fun AboutHeroCard(
     onVersionLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val heroShape = AbsoluteSmoothCornerShape(30.dp, 60)
+    val heroShape = AbsoluteSmoothCornerShape(24.dp, 60)
     val haptic = LocalHapticFeedback.current
 
     Surface(
@@ -349,7 +352,7 @@ private fun AboutHeroCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -357,21 +360,21 @@ private fun AboutHeroCard(
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = Color(0xFF1565C0), // Deep blue accent
-                        modifier = Modifier.size(64.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(52.dp),
                         tonalElevation = 2.dp,
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 painter = painterResource(R.drawable.pixelmusic_base_monochrome),
                                 contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(36.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(28.dp),
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(16.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -379,8 +382,9 @@ private fun AboutHeroCard(
                     ) {
                         Text(
                             text = stringResource(R.string.about_app_name),
-                            style = MaterialTheme.typography.headlineSmall,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
+                            fontFamily = GoogleSansRounded,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -394,12 +398,12 @@ private fun AboutHeroCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(Color(0xFF4F378B)) // Deep Purple
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onLongPress = {
@@ -411,18 +415,18 @@ private fun AboutHeroCard(
                 ) {
                     Text(
                         text = stringResource(R.string.about_version_format, versionName),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.Bold,
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 CommunitySignalsRow()
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 SocialLinksColumn()
             }
@@ -433,92 +437,225 @@ private fun AboutHeroCard(
 @Composable
 private fun UpstreamCreditCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val cardShape = AbsoluteSmoothCornerShape(20.dp, 60)
+    val buttonShape = AbsoluteSmoothCornerShape(12.dp, 60)
+
     Surface(
-        modifier = modifier.clickable {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/PixelPlayerHQ/PixelPlayerOSS"))
-            try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
-        },
-        shape = AbsoluteSmoothCornerShape(24.dp, 60),
+        modifier = modifier,
+        shape = cardShape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, Color(0xFF58A6FF).copy(alpha = 0.25f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
         tonalElevation = 2.dp,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
+                .padding(horizontal = 14.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = Color(0xFF58A6FF).copy(alpha = 0.12f),
-                    modifier = Modifier.size(40.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            painter = painterResource(R.drawable.github),
-                            contentDescription = null,
-                            tint = Color(0xFF58A6FF),
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                }
-                Column {
-                    Text(
-                        text = "Based on PixelPlayer",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF58A6FF),
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = "PixelPlayerHQ/PixelPlayerOSS",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
+                Text(
+                    text = "Acknowledgements",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Icon(
+                    imageVector = Icons.Rounded.FavoriteBorder,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                    modifier = Modifier.size(20.dp),
+                )
             }
 
             Text(
-                text = "PixelMusic is an independent, unofficial open-source fork of PixelPlayer. " +
-                    "It is not affiliated with or endorsed by the upstream project.",
-                style = MaterialTheme.typography.bodySmall,
+                text = "PixelMusic is an independent project inspired by the PixelPlayer project.\n\n" +
+                    "Special thanks to Theo Vilardo and f1sh for the amazing work on PixelPlayer OSS.",
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 18.sp,
             )
 
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Column(
+                Surface(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                        .clickable {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/theovilardo"))
+                            try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
+                        },
+                    shape = buttonShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
                 ) {
-                    Text(
-                        text = "Original Authors",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.github),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Theo Vilardo",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .clickable {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/lostf1sh"))
+                            try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
+                        },
+                    shape = buttonShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.github),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "f1sh",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .clickable {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/PixelPlayerHQ/PixelPlayerOSS"))
+                            try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
+                        },
+                    shape = buttonShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.github),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Repository",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+
+            // Colored indicator block 1: This App (PixelMusic)
+            Surface(
+                shape = AbsoluteSmoothCornerShape(12.dp, 60),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "This App (PixelMusic)",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = "Online Music Streaming App",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Stream your favorite songs, playlists and more from online sources.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 14.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Rounded.Public,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
                     )
-                    Text(
-                        text = "• Theo Vilardo",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "• Duhan Yağmur Delikkulak",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
+                }
+            }
+
+            // Colored indicator block 2: Inspired App (PixelPlayer)
+            Surface(
+                shape = AbsoluteSmoothCornerShape(12.dp, 60),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Inspired App (PixelPlayer)",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                        Text(
+                            text = "Offline Music App",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.8f),
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "A great offline music player for local audio files.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 14.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = Icons.Rounded.MusicNote,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -529,9 +666,11 @@ private fun UpstreamCreditCard(modifier: Modifier = Modifier) {
 @Composable
 private fun SocialLinksColumn() {
     val context = LocalContext.current
+    val buttonShape = AbsoluteSmoothCornerShape(16.dp, 60)
+
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         // Telegram button
         Surface(
@@ -541,31 +680,31 @@ private fun SocialLinksColumn() {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/PixelMusicApp"))
                     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
                 },
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF0C417A), // Deep Telegram blue
+            shape = buttonShape,
+            color = MaterialTheme.colorScheme.primary,
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.15f),
-                    modifier = Modifier.size(44.dp),
+                    color = Color.White.copy(alpha = 0.18f),
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                         Icon(
                             painter = painterResource(R.drawable.telegram),
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -588,7 +727,7 @@ private fun SocialLinksColumn() {
                     imageVector = Icons.Rounded.ChevronRight,
                     contentDescription = null,
                     tint = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
@@ -601,44 +740,44 @@ private fun SocialLinksColumn() {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ianshulyadav/ThePixelMusic"))
                     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
                 },
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF21262D), // GitHub dark grey
+            shape = buttonShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.08f),
-                    modifier = Modifier.size(44.dp),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                         Icon(
                             painter = painterResource(R.drawable.github),
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "GitHub",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                     )
                     Text(
                         text = "ianshulyadav/ThePixelMusic",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -647,68 +786,8 @@ private fun SocialLinksColumn() {
                 Icon(
                     imageVector = Icons.Rounded.ChevronRight,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-        }
-
-        // Upstream PixelPlayer button
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/PixelPlayerHQ/PixelPlayerOSS"))
-                    try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
-                },
-            shape = RoundedCornerShape(20.dp),
-            color = Color(0xFF1B2A3B),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.08f),
-                    modifier = Modifier.size(44.dp),
-                ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Icon(
-                            painter = painterResource(R.drawable.github),
-                            contentDescription = null,
-                            tint = Color(0xFF58A6FF),
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Upstream: PixelPlayer",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF58A6FF),
-                        maxLines = 1,
-                    )
-                    Text(
-                        text = "PixelPlayerHQ/PixelPlayerOSS",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.6f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                Icon(
-                    imageVector = Icons.Rounded.ChevronRight,
-                    contentDescription = null,
-                    tint = Color(0xFF58A6FF).copy(alpha = 0.8f),
-                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    modifier = Modifier.size(20.dp),
                 )
             }
         }
@@ -726,17 +805,17 @@ private fun CommunitySignalsRow() {
 
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         labels.forEach { (label, icon) ->
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -744,13 +823,13 @@ private fun CommunitySignalsRow() {
                         imageVector = icon,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(14.dp),
                     )
                     Text(
                         text = label,
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

@@ -50,7 +50,8 @@ data class PlaylistPage(
                     it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
                 } != null,
                 endpoint = renderer.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint,
-                setVideoId = renderer.playlistItemData?.playlistSetVideoId
+                setVideoId = renderer.playlistItemData.playlistSetVideoId,
+                likeStatus = renderer.likeStatus
             )
         }
     }

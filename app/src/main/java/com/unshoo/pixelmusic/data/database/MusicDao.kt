@@ -68,7 +68,8 @@ private const val SONG_DETAIL_PROJECTION = """
     songs.telegram_file_id AS telegram_file_id,
     songs.artists_json AS artists_json,
     songs.source_type AS source_type,
-    songs.album_browse_id AS album_browse_id
+    songs.album_browse_id AS album_browse_id,
+    songs.is_disliked AS is_disliked
 """
 
 // Projection for list queries: excludes lyrics to prevent CursorWindow overflow (2MB limit)
@@ -78,8 +79,9 @@ private const val SONG_LIST_PROJECTION = """
     content_uri_string, album_art_uri_string, duration, genre, file_path,
     parent_directory_path, is_favorite, NULL AS lyrics, track_number, disc_number,
     year, date_added, mime_type, bitrate, sample_rate, telegram_chat_id,
-    telegram_file_id, artists_json, source_type, album_browse_id
+    telegram_file_id, artists_json, source_type, album_browse_id, is_disliked
 """
+
 
 data class DeviceCapabilitySongRow(
     val filePath: String,
@@ -122,6 +124,10 @@ interface MusicDao {
 
     @Update
     suspend fun updateAlbums(albums: List<AlbumEntity>)
+
+    @Query("DELETE FROM albums WHERE id = :albumId")
+    suspend fun deleteAlbumById(albumId: Long)
+
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertArtistsIgnoreConflicts(artists: List<ArtistEntity>): List<Long>
@@ -389,6 +395,16 @@ interface MusicDao {
         deleteOrphanedArtists()
     }
 
+    @Query("UPDATE songs SET is_disliked = :disliked WHERE id = :songId")
+    suspend fun setDislikedStatus(songId: Long, disliked: Boolean)
+
+    @Query("SELECT id FROM songs WHERE is_disliked = 1")
+    suspend fun getDislikedSongIds(): List<Long>
+
+    @Query("SELECT REPLACE(content_uri_string, 'youtube://', '') FROM songs WHERE is_disliked = 1 AND content_uri_string LIKE 'youtube://%'")
+    suspend fun getDislikedYoutubeIds(): List<String>
+
+
     // --- Directory Helper ---
     @Query("SELECT DISTINCT parent_directory_path FROM songs")
     suspend fun getDistinctParentDirectories(): List<String>
@@ -398,6 +414,7 @@ interface MusicDao {
     @Query("SELECT " + SONG_LIST_PROJECTION + """
         FROM songs
         WHERE (:applyDirectoryFilter = 0 OR id < 0 OR parent_directory_path IN (:allowedParentDirs))
+          AND is_disliked = 0
         ORDER BY title ASC
     """)
     fun getSongs(
@@ -662,6 +679,7 @@ interface MusicDao {
     @Query("""
         SELECT id FROM songs
         WHERE (:applyDirectoryFilter = 0 OR parent_directory_path IN (:allowedParentDirs))
+        AND is_disliked = 0
         AND (
             :filterMode = 0
             OR (
@@ -745,6 +763,7 @@ interface MusicDao {
     @Query("""
         SELECT * FROM songs
         WHERE (:applyDirectoryFilter = 0 OR id < 0 OR parent_directory_path IN (:allowedParentDirs))
+        AND is_disliked = 0
         AND (
             source_type = 0
             OR is_favorite = 1

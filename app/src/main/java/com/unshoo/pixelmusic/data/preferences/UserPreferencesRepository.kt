@@ -148,6 +148,7 @@ constructor(
         val ALBUM_ART_PALETTE_STYLE = stringPreferencesKey("album_art_palette_style_v1")
         val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
         val FAVORITE_SONG_IDS = stringSetPreferencesKey("favorite_song_ids")
+        val LIKED_ALBUM_IDS = stringSetPreferencesKey("liked_album_ids")
         val USER_PLAYLISTS = stringPreferencesKey("user_playlists_json_v1")
         val PLAYLIST_SONG_ORDER_MODES = stringPreferencesKey("playlist_song_order_modes")
 
@@ -1198,6 +1199,12 @@ constructor(
                 preferences[PreferencesKeys.FAVORITE_SONG_IDS] ?: emptySet()
             }
 
+    val likedAlbumIdsFlow: Flow<Set<String>> =
+            dataStore.data
+                    .map { preferences ->
+                preferences[PreferencesKeys.LIKED_ALBUM_IDS] ?: emptySet()
+            }
+
     val playlistSongOrderModesFlow: Flow<Map<String, String>> =
             dataStore.data.map { preferences ->
                 val serializedModes = preferences[PreferencesKeys.PLAYLIST_SONG_ORDER_MODES]
@@ -1329,6 +1336,24 @@ constructor(
             preferences[PreferencesKeys.FAVORITE_SONG_IDS] = emptySet()
         }
     }
+
+    suspend fun setLikedAlbum(albumId: String, isLiked: Boolean) {
+        dataStore.edit { preferences ->
+            val current = preferences[PreferencesKeys.LIKED_ALBUM_IDS] ?: emptySet()
+            preferences[PreferencesKeys.LIKED_ALBUM_IDS] = if (isLiked) {
+                current + albumId
+            } else {
+                current - albumId
+            }
+        }
+    }
+
+    suspend fun setLikedAlbumIds(albumIds: Set<String>) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LIKED_ALBUM_IDS] = albumIds
+        }
+    }
+
 
     suspend fun setInitialSetupDone(isDone: Boolean) {
         dataStore.edit { preferences -> preferences[PreferencesKeys.INITIAL_SETUP_DONE] = isDone }

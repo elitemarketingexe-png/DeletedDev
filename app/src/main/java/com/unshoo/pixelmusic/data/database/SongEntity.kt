@@ -96,7 +96,8 @@ data class SongEntity(
     @ColumnInfo(name = "telegram_file_id") val telegramFileId: Int? = null,
     @ColumnInfo(name = "artists_json") val artistsJson: String? = null,
     @ColumnInfo(name = "source_type", defaultValue = "0") val sourceType: Int = SourceType.LOCAL,
-    @ColumnInfo(name = "album_browse_id") val albumBrowseId: String? = null
+    @ColumnInfo(name = "album_browse_id") val albumBrowseId: String? = null,
+    @ColumnInfo(name = "is_disliked", defaultValue = "0") val isDisliked: Boolean = false
 )
 
 private fun SongEntity.toSongInternal(artists: List<ArtistRef>): Song {
@@ -152,7 +153,8 @@ private fun SongEntity.toSongInternal(artists: List<ArtistRef>): Song {
         youtubeId = if (this.contentUriString.startsWith("youtube://")) {
             this.contentUriString.removePrefix("youtube://")
         } else null,
-        albumBrowseId = this.albumBrowseId
+        albumBrowseId = this.albumBrowseId,
+        isDisliked = this.isDisliked
     )
 }
 
@@ -250,7 +252,8 @@ fun Song.toEntity(filePathFromMediaStore: String, parentDirFromMediaStore: Strin
         bitrate = this.bitrate,
         sampleRate = this.sampleRate,
         sourceType = SourceType.fromContentUri(this.contentUriString),
-        albumBrowseId = this.albumBrowseId
+        albumBrowseId = this.albumBrowseId,
+        isDisliked = this.isDisliked
     )
 }
 
@@ -290,6 +293,7 @@ fun Song.toEntityWithoutPaths(): SongEntity {
         bitrate = this.bitrate,
         sampleRate = this.sampleRate,
         sourceType = SourceType.fromContentUri(this.contentUriString),
-        albumBrowseId = this.albumBrowseId
+        albumBrowseId = this.albumBrowseId,
+        isDisliked = this.isDisliked
     )
 }

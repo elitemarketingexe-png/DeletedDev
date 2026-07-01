@@ -76,18 +76,7 @@ class CastTransferStateHolder @Inject constructor(
 
     // Session Management
     private val sessionManager: SessionManager?
-        get() = try {
-            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
-                CastContext.getSharedInstance(context).sessionManager
-            } else {
-                kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Main) {
-                    CastContext.getSharedInstance(context).sessionManager
-                }
-            }
-        } catch (e: Exception) {
-            Timber.tag(CAST_LOG_TAG).e(e, "Failed to get CastContext sharedInstance")
-            null
-        }
+        get() = castStateHolder.sessionManager
     
     // We retain MediaRouter reference if needed, but managing routes is usually done via callbacks
     // in PlayerViewModel. We'll assume route selection logic remains there or is migrated separately.

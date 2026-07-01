@@ -27,4 +27,5 @@ data class PlaylistPanelVideoRenderer(
     val unplayableText: Runs?,
     val menu: Menu?,
     val navigationEndpoint: NavigationEndpoint,
+    val likeStatus: String? = null,
 )

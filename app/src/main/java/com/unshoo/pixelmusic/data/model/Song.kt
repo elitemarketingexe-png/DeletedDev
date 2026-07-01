@@ -44,6 +44,7 @@ data class Song(
     val jellyfinId: String? = null, // Jellyfin item ID
     val youtubeId: String? = null, // YouTube video ID for dynamic streaming
     val albumBrowseId: String? = null, // YouTube album browse ID
+    val isDisliked: Boolean = false,
 ) : Parcelable {
     /**
      * Returns the display string for artists.
@@ -118,7 +119,8 @@ data class Song(
                 navidromeId = null,
                 jellyfinId = null,
                 youtubeId = null,
-                albumBrowseId = null
+                albumBrowseId = null,
+                isDisliked = false
             )
         }
     }

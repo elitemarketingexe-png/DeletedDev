@@ -33,19 +33,31 @@ class CastStateHolder @Inject constructor(
 ) {
     private val CAST_STATE_TAG = "CastStateHolder"
 
+    // Cached SessionManager to avoid runBlocking and repeated lookups across threads
+    @Volatile
+    private var _sessionManager: SessionManager? = null
+
     // Cast session manager
     val sessionManager: SessionManager?
-        get() = try {
-            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
-                CastContext.getSharedInstance(context).sessionManager
-            } else {
-                kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Main) {
-                    CastContext.getSharedInstance(context).sessionManager
+        get() {
+            val cached = _sessionManager
+            if (cached != null) return cached
+            return try {
+                if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                    val manager = CastContext.getSharedInstance(context).sessionManager
+                    _sessionManager = manager
+                    manager
+                } else {
+                    kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Main) {
+                        val manager = CastContext.getSharedInstance(context).sessionManager
+                        _sessionManager = manager
+                        manager
+                    }
                 }
+            } catch (e: Exception) {
+                Timber.tag(CAST_STATE_TAG).e(e, "Failed to get CastContext/SessionManager")
+                null
             }
-        } catch (e: Exception) {
-            Timber.tag(CAST_STATE_TAG).e(e, "Failed to get CastContext sharedInstance")
-            null
         }
     
     // Current cast session

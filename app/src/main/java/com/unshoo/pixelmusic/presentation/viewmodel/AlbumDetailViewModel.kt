@@ -19,26 +19,38 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
+import com.unshoo.pixelmusic.data.database.AlbumEntity
+import com.unshoo.pixelmusic.data.database.toEntity
+import kotlin.math.absoluteValue
 
 data class AlbumDetailUiState(
     val album: Album? = null,
     val songs: List<Song> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val isLiked: Boolean = false
 )
 
 @HiltViewModel
 class AlbumDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val musicRepository: MusicRepository,
-    savedStateHandle: SavedStateHandle
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AlbumDetailUiState())
     val uiState: StateFlow<AlbumDetailUiState> = _uiState.asStateFlow()
+    val isAlbumLiked: StateFlow<Boolean> = _uiState.map { it.isLiked }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     init {
         val albumIdString: String? = savedStateHandle.get("albumId")
@@ -52,8 +64,46 @@ class AlbumDetailViewModel @Inject constructor(
             } else {
                 loadOnlineAlbumData(albumIdString)
             }
+            observeLikedState(albumIdString)
         } else {
             _uiState.update { it.copy(error = context.getString(R.string.album_id_not_found), isLoading = false) }
+        }
+    }
+
+    private fun observeLikedState(albumId: String) {
+        viewModelScope.launch {
+            userPreferencesRepository.likedAlbumIdsFlow.collect { likedSet ->
+                val isLikedNow = likedSet.contains(albumId)
+                _uiState.update { it.copy(isLiked = isLikedNow) }
+            }
+        }
+    }
+
+    fun toggleAlbumLikeStatus(album: Album) {
+        val albumIdString: String = savedStateHandle.get("albumId") ?: return
+        viewModelScope.launch {
+            val isCurrentlyLiked = _uiState.value.isLiked
+            val newLikedState = !isCurrentlyLiked
+
+            // 1. Update local preferences
+            userPreferencesRepository.setLikedAlbum(albumIdString, newLikedState)
+
+            // 2. Sync with YouTube if it is a YouTube album and logged in
+            if (albumIdString.toLongOrNull() == null && InnerTubeYouTube.hasLoginCookie()) {
+                withContext(Dispatchers.IO) {
+                    InnerTubeYouTube.likePlaylist(albumIdString, newLikedState)
+                }
+            }
+
+            // 3. Update local database cache
+            withContext(Dispatchers.IO) {
+                if (newLikedState) {
+                    val albumEntity = album.toEntity(artistIdForAlbum = album.artist.lowercase().hashCode().toLong().absoluteValue)
+                    musicRepository.insertAlbums(listOf(albumEntity))
+                } else {
+                    musicRepository.deleteAlbumById(album.id)
+                }
+            }
         }
     }
 

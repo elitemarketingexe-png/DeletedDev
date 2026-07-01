@@ -304,6 +304,12 @@ interface MusicRepository {
     suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean)
 
     /**
+     * Setea explícitamente el estado no-gustado/lista-negra de una canción.
+     */
+    suspend fun setDislikedStatus(songId: String, disliked: Boolean)
+
+
+    /**
      * Setea explícitamente el estado favorito de una canción, persistiendo metadatos para canciones de YouTube si es necesario.
      */
     suspend fun setFavoriteStatusWithMetadata(song: Song, isFavorite: Boolean, awaitRemoteSync: Boolean = false)
@@ -422,4 +428,7 @@ interface MusicRepository {
      * Inserts/caches a list of YouTube songs in the local database.
      */
     suspend fun insertYoutubeSongs(songs: List<Song>)
+
+    suspend fun insertAlbums(albums: List<com.unshoo.pixelmusic.data.database.AlbumEntity>)
+    suspend fun deleteAlbumById(albumId: Long)
 }

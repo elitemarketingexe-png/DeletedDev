@@ -20,6 +20,7 @@ import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
 
+import com.unshoo.pixelmusic.data.network.deezer.DeezerApiService
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
@@ -43,7 +44,8 @@ class TelegramCoilFetcher(
     private val uri: Uri,
     private val telegramRepository: TelegramRepository,
     private val cacheDir: File,
-    private val telegramCacheManager: com.unshoo.pixelmusic.data.telegram.TelegramCacheManager?
+    private val telegramCacheManager: com.unshoo.pixelmusic.data.telegram.TelegramCacheManager?,
+    private val deezerApiService: DeezerApiService
 ) : Fetcher {
 
     companion object {
@@ -81,6 +83,75 @@ class TelegramCoilFetcher(
 
         if (chatId == null || messageId == null) {
             return null
+        }
+
+        // 1. Try to load high-quality cover from Deezer first
+        val key = "${chatId}_${messageId}"
+        val cachedDeezerFile = File(cacheDir, "telegram_deezer_art_${key}.jpg")
+        val noDeezerMarker = File(cacheDir, "telegram_deezer_art_${key}_none")
+
+        if (cachedDeezerFile.exists() && cachedDeezerFile.length() > 0) {
+            return SourceResult(
+                source = coil.decode.ImageSource(
+                    file = cachedDeezerFile.absolutePath.toPath(),
+                    fileSystem = okio.FileSystem.SYSTEM
+                ),
+                mimeType = "image/jpeg",
+                dataSource = DataSource.DISK
+            )
+        }
+
+        if (!noDeezerMarker.exists()) {
+            val message = telegramRepository.getMessage(chatId, messageId)
+            if (message != null) {
+                var title = ""
+                var artist = ""
+                when (val content = message.content) {
+                    is TdApi.MessageAudio -> {
+                        title = content.audio.title ?: ""
+                        artist = content.audio.performer ?: ""
+                    }
+                    is TdApi.MessageDocument -> {
+                        title = content.document.fileName ?: ""
+                    }
+                }
+
+                val cleanedTitle = cleanTitle(title)
+                if (cleanedTitle.isNotBlank()) {
+                    try {
+                        val query = if (artist.isNotBlank() && artist != "Unknown Artist") {
+                            "track:\"$cleanedTitle\" artist:\"$artist\""
+                        } else {
+                            cleanedTitle
+                        }
+                        val searchResponse = deezerApiService.searchTrack(query, limit = 1)
+                        val track = searchResponse.data.firstOrNull()
+                        val coverUrl = track?.album?.coverXl
+                            ?: track?.album?.coverBig
+                            ?: track?.album?.coverMedium
+                            ?: track?.album?.cover
+
+                        if (coverUrl != null) {
+                            val upgradedCoverUrl = upgradeToHighResDeezerUrl(coverUrl)
+                            val success = downloadDeezerCover(upgradedCoverUrl, cachedDeezerFile)
+                            if (success) {
+                                return SourceResult(
+                                    source = coil.decode.ImageSource(
+                                        file = cachedDeezerFile.absolutePath.toPath(),
+                                        fileSystem = okio.FileSystem.SYSTEM
+                                    ),
+                                    mimeType = "image/jpeg",
+                                    dataSource = DataSource.NETWORK
+                                )
+                            }
+                        }
+                        // Create failed marker if Deezer couldn't find a cover
+                        noDeezerMarker.createNewFile()
+                    } catch (e: Exception) {
+                        Timber.d("TelegramCoilFetcher: Deezer search failed for $artist - $cleanedTitle: ${e.message}")
+                    }
+                }
+            }
         }
 
         val embeddedArtPath = tryExtractEmbeddedArtIfSafe(chatId, messageId)
@@ -362,13 +433,54 @@ class TelegramCoilFetcher(
         }
     }
 
+    private fun cleanTitle(title: String): String {
+        return title
+            .replace(Regex("\\.mp3$", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("^\\[\\d+]"), "")
+            .replace(Regex("^\\d+\\s*-\\s*"), "")
+            .trim()
+    }
+
+    private val deezerSizeRegex = Regex("/\\d{2,4}x\\d{2,4}([\\-.])")
+    private fun upgradeToHighResDeezerUrl(url: String): String {
+        return deezerSizeRegex.replace(url, "/1000x1000$1")
+    }
+
+    private suspend fun downloadDeezerCover(url: String, outputFile: File): Boolean {
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
+                connection.requestMethod = "GET"
+                connection.doInput = true
+                connection.connect()
+
+                if (connection.responseCode == java.net.HttpURLConnection.HTTP_OK) {
+                    connection.inputStream.use { input ->
+                        FileOutputStream(outputFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    true
+                } else {
+                    false
+                }
+            } catch (e: Exception) {
+                Timber.d("TelegramCoilFetcher: Failed to download Deezer cover: ${e.message}")
+                false
+            }
+        }
+    }
+
     /**
      * Factory for creating TelegramCoilFetcher instances.
      * Registered with Coil's ImageLoader to handle telegram_art:// URIs.
      */
     class Factory @Inject constructor(
         private val telegramRepository: TelegramRepository,
-        private val telegramCacheManager: com.unshoo.pixelmusic.data.telegram.TelegramCacheManager
+        private val telegramCacheManager: com.unshoo.pixelmusic.data.telegram.TelegramCacheManager,
+        private val deezerApiService: DeezerApiService
     ) : Fetcher.Factory<Uri> {
         
         private var cacheDir: File? = null
@@ -376,7 +488,7 @@ class TelegramCoilFetcher(
         override fun create(data: Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
             return if (data.scheme == "telegram_art") {
                 val cache = cacheDir ?: options.context.cacheDir.also { cacheDir = it }
-                TelegramCoilFetcher(options.context, data, telegramRepository, cache, telegramCacheManager)
+                TelegramCoilFetcher(options.context, data, telegramRepository, cache, telegramCacheManager, deezerApiService)
             } else {
                 null
             }

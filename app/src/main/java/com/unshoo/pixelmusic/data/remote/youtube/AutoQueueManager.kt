@@ -177,7 +177,7 @@ object AutoQueueManager {
                 val item = player.currentMediaItem ?: return@withContext null
                 val mediaId = item.mediaId
                 val playbackUri = item.localConfiguration?.uri?.toString()
-                val metaUri = item.mediaMetadata?.extras?.getString("com.unshoo.pixelmusic.external.CONTENT_URI")
+                val metaUri = item.mediaMetadata.extras?.getString("com.unshoo.pixelmusic.external.CONTENT_URI")
                 val contentUri = metaUri ?: playbackUri
                 val vid = when {
                     mediaId.startsWith("youtube_") -> mediaId.substringAfter("youtube_")
@@ -612,6 +612,10 @@ object AutoQueueManager {
         }
         val dao = musicDaoRef ?: return (listOf(seedSong) + onlineRelated).distinctBy { it.id }
         val engagementDao = engagementDaoRef
+
+        val dislikedSongIds = try { dao.getDislikedSongIds().toSet() } catch (_: Exception) { emptySet() }
+        val dislikedYoutubeIds = try { dao.getDislikedYoutubeIds().toSet() } catch (_: Exception) { emptySet() }
+
         
         val highlyRotatedIds = mutableSetOf<String>()
         val engagements = try {
@@ -725,6 +729,10 @@ object AutoQueueManager {
         val activeMood = getActiveSessionMood()
         fun canAddSong(song: Song): Boolean {
             val songIdStr = song.id
+            val ytId = song.youtubeId
+            if (dislikedSongIds.contains(songIdStr.toLongOrNull() ?: 0L) || (ytId != null && dislikedYoutubeIds.contains(ytId))) {
+                return false
+            }
             val isInQueue = currentQueueIds.any { isSameSong(it, songIdStr) }
             val isAvoid = avoidIds.any { isSameSong(it, songIdStr) }
             val isAlreadyAdded = finalSongsToAdd.any { isSameSong(it.id, songIdStr) }
@@ -903,6 +911,10 @@ object AutoQueueManager {
         val dao = musicDaoRef ?: return
         val context = contextRef ?: return
         val engagementDao = engagementDaoRef
+
+        val dislikedSongIds = try { dao.getDislikedSongIds().toSet() } catch (_: Exception) { emptySet() }
+        val dislikedYoutubeIds = try { dao.getDislikedYoutubeIds().toSet() } catch (_: Exception) { emptySet() }
+
 
         val entryPoint = try {
             dagger.hilt.android.EntryPointAccessors.fromApplication(
@@ -1123,6 +1135,10 @@ object AutoQueueManager {
             val activeMood = getActiveSessionMood()
             fun canAddSong(song: Song): Boolean {
                 val songIdStr = song.id
+                val ytId = song.youtubeId
+                if (dislikedSongIds.contains(songIdStr.toLongOrNull() ?: 0L) || (ytId != null && dislikedYoutubeIds.contains(ytId))) {
+                    return false
+                }
                 val isInQueue = currentQueueIds.any { isSameSong(it, songIdStr) }
                 val isAvoid = avoidIds.any { isSameSong(it, songIdStr) }
                 val isAlreadyAdded = finalSongsToAdd.any { isSameSong(it.id, songIdStr) }

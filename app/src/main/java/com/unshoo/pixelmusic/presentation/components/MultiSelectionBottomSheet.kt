@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.FolderZip
@@ -99,7 +100,8 @@ fun MultiSelectionBottomSheet(
     onAddToPlaylist: () -> Unit,
     onToggleLikeAll: (shouldLike: Boolean) -> Unit,
     onShareAll: () -> Unit,
-    onDeleteAll: (activity: Activity, onResult: (Boolean) -> Unit) -> Unit
+    onDeleteAll: (activity: Activity, onResult: (Boolean) -> Unit) -> Unit,
+    onDownloadAll: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -348,7 +350,7 @@ fun MultiSelectionBottomSheet(
                         }
                     }
                     
-                    // Row 3: Add to Playlist, Delete
+                    // Row 3: Add to Playlist, Download
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -358,7 +360,7 @@ fun MultiSelectionBottomSheet(
                     ) {
                         FilledTonalButton(
                             modifier = Modifier
-                                .weight(0.5f)
+                                .weight(if (onDownloadAll != null) 0.5f else 1.0f)
                                 .heightIn(min = 66.dp),
                             colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -378,9 +380,42 @@ fun MultiSelectionBottomSheet(
                             Text(stringResource(R.string.shortcut_playlist_short))
                         }
                         
+                        if (onDownloadAll != null) {
+                            FilledTonalButton(
+                                modifier = Modifier
+                                    .weight(0.5f)
+                                    .heightIn(min = 66.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                ),
+                                shape = CircleShape,
+                                onClick = {
+                                    onDownloadAll()
+                                    onDismiss()
+                                }
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Download,
+                                    contentDescription = "Download selected songs"
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("Download")
+                            }
+                        }
+                    }
+
+                    // Row 4: Delete
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         FilledTonalButton(
                             modifier = Modifier
-                                .weight(0.5f)
+                                .weight(1f)
                                 .heightIn(min = 66.dp),
                             colors = ButtonDefaults.filledTonalButtonColors(
                                 containerColor = MaterialTheme.colorScheme.errorContainer,

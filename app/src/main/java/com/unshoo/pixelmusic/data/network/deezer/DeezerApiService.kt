@@ -20,4 +20,16 @@ interface DeezerApiService {
         @Query("q") query: String,
         @Query("limit") limit: Int = 1
     ): DeezerSearchResponse
+
+    /**
+     * Search for a track/song by name and/or artist.
+     * @param query Search query string
+     * @param limit Maximum number of results to return
+     * @return Search response containing list of matching tracks
+     */
+    @GET("search")
+    suspend fun searchTrack(
+        @Query("q") query: String,
+        @Query("limit") limit: Int = 1
+    ): DeezerTrackSearchResponse
 }

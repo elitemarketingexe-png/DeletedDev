@@ -29,7 +29,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AiUsageEntity::class,
         RelatedSongMap::class
     ],
-    version = 45,
+    version = 46,
     exportSchema = true
 )
 abstract class PixelMusicDatabase : RoomDatabase() {
@@ -743,6 +743,13 @@ abstract class PixelMusicDatabase : RoomDatabase() {
                 rebuildSongsSearchIndex(db)
             }
         }
+
+        val MIGRATION_45_46 = object : Migration(45, 46) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE songs ADD COLUMN is_disliked INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
 
         private fun ensureSongsTableHasDateAdded(db: SupportSQLiteDatabase) {
             if (!tableExists(db, "songs")) {

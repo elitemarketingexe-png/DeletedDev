@@ -1310,6 +1310,67 @@ class MusicRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun setDislikedStatus(songId: String, disliked: Boolean) = withContext(Dispatchers.IO) {
+        val youtubeId = if (songId.startsWith("youtube_")) {
+            songId.substringAfter("youtube_")
+        } else if (songId.toLongOrNull() == null) {
+            songId
+        } else {
+            null
+        }
+
+        val id = if (youtubeId != null) {
+            toUnifiedYoutubeSongId(youtubeId)
+        } else {
+            songId.toLongOrNull() ?: return@withContext
+        }
+
+        if (disliked) {
+            if (youtubeId != null) {
+                val exists = musicDao.getSongsByIdsListSimple(listOf(id)).isNotEmpty()
+                if (!exists) {
+                    val ytDb = com.unshoo.pixelmusic.data.database.youtube.AppDatabase.getInstance(context)
+                    val ytSong = ytDb.songRepository().getSong(youtubeId)
+                    if (ytSong != null) {
+                        insertYoutubeSongSkeleton(
+                            youtubeId = youtubeId,
+                            title = ytSong.title,
+                            artist = ytSong.artist,
+                            thumbnailUrl = ytSong.thumbnailPath ?: ytSong.thumbnailHref,
+                            duration = parseDurationStringToMillis(ytSong.duration),
+                            genre = ytSong.genre ?: "YouTube Music"
+                        )
+                    } else {
+                        try {
+                            val networkSong = com.unshoo.pixelmusic.data.remote.youtube.SongDataSource().getSongInfo(youtubeId)
+                            insertYoutubeSongSkeleton(
+                                youtubeId = youtubeId,
+                                title = networkSong.title,
+                                artist = networkSong.artist,
+                                thumbnailUrl = networkSong.thumbnailHref,
+                                duration = parseDurationStringToMillis(networkSong.duration),
+                                genre = "YouTube Music"
+                            )
+                        } catch (e: Exception) {
+                            insertYoutubeSongSkeleton(
+                                youtubeId = youtubeId,
+                                title = "YouTube Song",
+                                artist = "Unknown",
+                                thumbnailUrl = "",
+                                duration = 0L,
+                                genre = "YouTube Music"
+                            )
+                        }
+                    }
+                }
+            }
+            musicDao.setDislikedStatus(id, true)
+        } else {
+            musicDao.setDislikedStatus(id, false)
+        }
+    }
+
+
     override suspend fun setFavoriteStatusWithMetadata(song: Song, isFavorite: Boolean, awaitRemoteSync: Boolean) = withContext(Dispatchers.IO) {
         val youtubeId = song.youtubeId 
             ?: if (song.id.startsWith("youtube_")) song.id.substringAfter("youtube_")
@@ -1906,5 +1967,13 @@ class MusicRepositoryImpl @Inject constructor(
                 Timber.e(e, "Failed to insert songs into YouTube DB")
             }
         }
+    }
+
+    override suspend fun insertAlbums(albums: List<com.unshoo.pixelmusic.data.database.AlbumEntity>) = withContext(Dispatchers.IO) {
+        musicDao.insertAlbums(albums)
+    }
+
+    override suspend fun deleteAlbumById(albumId: Long) = withContext(Dispatchers.IO) {
+        musicDao.deleteAlbumById(albumId)
     }
 }
