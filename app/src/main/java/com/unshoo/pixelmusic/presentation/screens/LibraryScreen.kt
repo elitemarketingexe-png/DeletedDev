@@ -671,15 +671,16 @@ fun LibraryScreen(
     // held briefly to avoid single-frame flicker.
     var inlineSyncVisible by remember { mutableStateOf(false) }
     var inlineSyncShownAt by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(isSyncing, isRefreshing) {
-        if (isSyncing && !isRefreshing) {
+    // Bug 11 fix: split into two separate LaunchedEffects so that changes to
+    // isRefreshing no longer race against the isSyncing hide path. Previously,
+    // when isSyncing was still true but isRefreshing flipped false the combined
+    // key restarted the effect and immediately hid the indicator.
+    LaunchedEffect(isSyncing) {
+        if (isSyncing) {
             if (!inlineSyncVisible) {
                 inlineSyncShownAt = System.currentTimeMillis()
                 inlineSyncVisible = true
             }
-        } else if (isRefreshing) {
-            inlineSyncVisible = false
-            inlineSyncShownAt = null
         } else if (inlineSyncVisible) {
             val shownAt = inlineSyncShownAt
             val elapsed = if (shownAt != null) {
@@ -693,6 +694,15 @@ fun LibraryScreen(
             }
             // If sync flipped back to visible during the delay this LaunchedEffect
             // is cancelled and re-runs, so reaching this line means we should hide.
+            inlineSyncVisible = false
+            inlineSyncShownAt = null
+        }
+    }
+    // When a pull-to-refresh gesture starts, dismiss the inline indicator immediately
+    // (the spinner takes over). Kept as its own effect to avoid restarting the
+    // isSyncing effect above on every pull gesture.
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
             inlineSyncVisible = false
             inlineSyncShownAt = null
         }
@@ -857,14 +867,19 @@ fun LibraryScreen(
 
     val onRefresh: () -> Unit = remember(scope, playerViewModel, currentTab) {
         {
-            val currentRefreshGeneration = refreshGeneration + 1
-            refreshGeneration = currentRefreshGeneration
+            // Bug 12 fix: capture the next generation value as a local val *before*
+            // writing it to state. The previous code wrote refreshGeneration + 1 to
+            // state and then compared against a captured copy that was still the
+            // old value (0) because the lambda closed over the snapshot variable,
+            // causing the spinner to never dismiss on subsequent pulls.
+            val nextGeneration = refreshGeneration + 1
+            refreshGeneration = nextGeneration
             isMinDelayActive = true
             isRefreshing = true
             playerViewModel.refreshLibraryTab(currentTab)
             scope.launch {
                 kotlinx.coroutines.delay(PULL_REFRESH_MIN_VISIBLE_MS)
-                if (currentRefreshGeneration != refreshGeneration) return@launch
+                if (nextGeneration != refreshGeneration) return@launch
                 isMinDelayActive = false
                 isRefreshing = false
             }

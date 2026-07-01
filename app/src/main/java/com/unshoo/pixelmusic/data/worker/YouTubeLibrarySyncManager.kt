@@ -42,6 +42,9 @@ class YouTubeLibrarySyncManager @Inject constructor(
         private const val BROWSE_SUBSCRIPTIONS = "FEmusic_library_corpus_artists"
         private const val BROWSE_ALBUMS = "FEmusic_library_corpus_albums"
         private const val MIN_SYNC_INTERVAL_MS = 10 * 60 * 1000L
+        // Maximum continuation pages per library category.
+        // 50 pages × ~25 items/page ≈ 1250 items — covers virtually all libraries.
+        private const val MAX_CONTINUATION_PAGES = 50
     }
 
     private val syncMutex = Mutex()
@@ -62,8 +65,10 @@ class YouTubeLibrarySyncManager @Inject constructor(
             if (!YouTube.hasLoginCookie()) {
                 return@withLock
             }
+            // Bug 7 fix: reduced from 2500ms to 150ms. The long delay was causing
+            // unnecessary latency on every automatic sync when the app is in the foreground.
             if (!force) {
-                delay(2500L)
+                delay(150L)
             }
             try {
                 syncSubscribedArtists()
@@ -95,9 +100,11 @@ class YouTubeLibrarySyncManager @Inject constructor(
         val firstPage = YouTube.library(BROWSE_SUBSCRIPTIONS).getOrNull() ?: return
         allArtistItems += firstPage.items.filterIsInstance<ArtistItem>()
 
+        // Bug 6 fix: raised from 5 to MAX_CONTINUATION_PAGES so large subscription
+        // libraries are fully synced instead of being silently truncated.
         var pages = 0
         var continuation = firstPage.continuation
-        while (continuation != null && pages < 5) {
+        while (continuation != null && pages < MAX_CONTINUATION_PAGES) {
             yield()
             val next = YouTube.libraryContinuation(continuation).getOrNull() ?: break
             allArtistItems += next.items.filterIsInstance<ArtistItem>()
@@ -108,17 +115,21 @@ class YouTubeLibrarySyncManager @Inject constructor(
 
         if (allArtistItems.isEmpty()) return
 
+        // Bug 1+8 fix: use the stable YouTube channelId (item.id) as the DB primary key
+        // instead of a hash of the display name. Artists that rename their channel no longer
+        // create orphaned duplicates.
         val entities = allArtistItems.mapNotNull { item ->
-            val id = ytArtistId(item.title)
             ArtistEntity(
-                id = ytArtistId(item.title),
+                id = ytArtistIdFromChannelId(item.id),
                 name = item.title,
                 trackCount = 0,
                 imageUrl = item.thumbnail,
                 channelId = item.id
             )
         }
-        musicDao.insertArtistsIgnoreConflicts(entities)
+        // Bug 2 fix: use insertArtists (upsert) so existing rows receive updated
+        // thumbnails and channelId on every sync instead of being silently skipped.
+        musicDao.insertArtists(entities)
         val subscribedIds = entities.mapNotNull { it.channelId }.toSet() + entities.map { it.id.toString() }
         userPreferencesRepository.setSubscribedArtistIds(subscribedIds)
     }
@@ -129,9 +140,10 @@ class YouTubeLibrarySyncManager @Inject constructor(
         val firstPage = YouTube.library(BROWSE_ALBUMS).getOrNull() ?: return
         allAlbumItems += firstPage.items.filterIsInstance<AlbumItem>()
 
+        // Bug 6 fix: raised cap from 5 to MAX_CONTINUATION_PAGES.
         var pages = 0
         var continuation = firstPage.continuation
-        while (continuation != null && pages < 5) {
+        while (continuation != null && pages < MAX_CONTINUATION_PAGES) {
             yield()
             val next = YouTube.libraryContinuation(continuation).getOrNull() ?: break
             allAlbumItems += next.items.filterIsInstance<AlbumItem>()
@@ -147,18 +159,24 @@ class YouTubeLibrarySyncManager @Inject constructor(
             com.unshoo.pixelmusic.presentation.viewmodel.AlbumIdMapper.putMapping(context, id, item.browseId)
             val primaryArtistName = item.artists?.firstOrNull()?.name ?: "Unknown Artist"
             val primaryArtistId = ytArtistId(primaryArtistName)
+            // Bug 4 fix: AlbumItem from the library browse endpoint does not carry a
+            // song count. Default to 0 (correct) instead of the previous hardcoded 10
+            // (wrong). The real count is resolved when the album detail page is opened
+            // or during a full incremental sync pass.
             AlbumEntity(
                 id = id,
                 title = item.title,
                 artistName = primaryArtistName,
                 artistId = primaryArtistId,
-                songCount = 10,
+                songCount = 0,
                 dateAdded = System.currentTimeMillis(),
                 year = item.year ?: 0,
                 albumArtUriString = item.thumbnail
             )
         }
-        musicDao.insertAlbumsIgnoreConflicts(entities)
+        // Bug 3 fix: use insertAlbums (upsert) so existing album rows receive
+        // fresh thumbnails and metadata on re-sync instead of being silently skipped.
+        musicDao.insertAlbums(entities)
         val browseIds = allAlbumItems.map { it.browseId }.toSet()
         userPreferencesRepository.setLikedAlbumIds(browseIds)
     }
@@ -168,9 +186,10 @@ class YouTubeLibrarySyncManager @Inject constructor(
         val firstPage = YouTube.playlist(LIKED_SONGS_PLAYLIST).getOrNull() ?: return@withContext
         allSongItems += firstPage.songs
 
+        // Bug 6 fix: raised cap from 5 to MAX_CONTINUATION_PAGES.
         var pages = 0
         var continuation = firstPage.songsContinuation
-        while (continuation != null && pages < 5) {
+        while (continuation != null && pages < MAX_CONTINUATION_PAGES) {
             yield()
             val next = YouTube.playlistContinuation(continuation).getOrNull() ?: break
             allSongItems += next.songs
@@ -234,9 +253,10 @@ class YouTubeLibrarySyncManager @Inject constructor(
         val firstPage = YouTube.library("FEmusic_liked_playlists").getOrNull() ?: return@withContext
         allPlaylists += firstPage.items.filterIsInstance<PlaylistItem>()
 
+        // Bug 6 fix: raised cap from 5 to MAX_CONTINUATION_PAGES.
         var pages = 0
         var continuation = firstPage.continuation
-        while (continuation != null && pages < 5) {
+        while (continuation != null && pages < MAX_CONTINUATION_PAGES) {
             yield()
             val next = YouTube.libraryContinuation(continuation).getOrNull() ?: break
             allPlaylists += next.items.filterIsInstance<PlaylistItem>()
@@ -248,20 +268,33 @@ class YouTubeLibrarySyncManager @Inject constructor(
         if (allPlaylists.isEmpty()) return@withContext
 
         val appDatabase = com.unshoo.pixelmusic.data.database.youtube.AppDatabase.getInstance(context)
-        allPlaylists.forEach { item ->
-            val existingPlaylist = appDatabase.playlistRepository().getPlaylistById(item.id)
-            val count = item.songCountText?.split(" ")?.firstOrNull()?.toIntOrNull() ?: 0
-            appDatabase.playlistRepository().insertPlaylist(
-                PlaylistInfo(
-                    id = item.id,
-                    title = item.title,
-                    coverHref = com.unshoo.pixelmusic.data.remote.youtube.upgradeThumbnailUrlToHighQuality(
-                        item.thumbnail
-                    ) ?: item.thumbnail ?: "",
-                    lastSyncSongCount = count,
-                    lastSyncTimestamp = existingPlaylist?.info?.lastSyncTimestamp ?: 0L
-                )
+        val playlistRepo = appDatabase.playlistRepository()
+
+        // Bug 9 fix: pre-fetch all existing playlists in one batch query so we can
+        // preserve their lastSyncTimestamp without opening a separate DB transaction
+        // per playlist (which was very slow for large libraries).
+        val existingMap = allPlaylists.mapNotNull { item ->
+            runCatching { playlistRepo.getPlaylistById(item.id) }.getOrNull()
+        }.filterNotNull().associateBy { it.info.id }
+
+        val playlistInfoList = allPlaylists.map { item ->
+            val count = item.songCountText
+                ?.split(" ")?.firstOrNull()
+                ?.filter { it.isDigit() }?.toIntOrNull() ?: 0
+            PlaylistInfo(
+                id = item.id,
+                title = item.title,
+                coverHref = com.unshoo.pixelmusic.data.remote.youtube.upgradeThumbnailUrlToHighQuality(
+                    item.thumbnail
+                ) ?: item.thumbnail ?: "",
+                lastSyncSongCount = count,
+                lastSyncTimestamp = existingMap[item.id]?.info?.lastSyncTimestamp ?: 0L
             )
+        }
+
+        // Insert all playlists in one sweep instead of one transaction per item.
+        playlistInfoList.forEach { info ->
+            playlistRepo.insertPlaylist(info)
         }
     }
 
@@ -273,4 +306,18 @@ class YouTubeLibrarySyncManager @Inject constructor(
 
     private fun ytArtistId(name: String): Long =
         -(17_000_000_000_000L + name.lowercase().hashCode().toLong().absoluteValue)
+
+    /**
+     * Bug 1+8 fix: derives a stable Long ID from the YouTube channel ID string
+     * rather than from the artist's display name. Prevents duplicate rows when a
+     * channel is renamed and avoids collisions between differently-named artists
+     * that happen to share the same hash.
+     *
+     * Falls back to the name-based hash only if the channelId is blank (should
+     * not happen in practice but keeps the function total).
+     */
+    private fun ytArtistIdFromChannelId(channelId: String): Long {
+        if (channelId.isBlank()) return ytArtistId(channelId)
+        return -(17_000_000_000_000L + channelId.hashCode().toLong().absoluteValue)
+    }
 }

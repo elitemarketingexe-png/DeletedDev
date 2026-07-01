@@ -6251,18 +6251,23 @@ class PlayerViewModel @Inject constructor(
     fun refreshLibraryTab(tabId: LibraryTabId) {
         viewModelScope.launch(Dispatchers.IO) {
             if (tabId == LibraryTabId.FOLDERS) {
-                syncManager.sync()
+                // Bug 5+10 fix: use forceRefresh() (REPLACE policy, no throttle) so
+                // pull-to-refresh on the Folders tab always runs regardless of when
+                // the last sync happened. sync() has a 6h guard that silently skips.
+                syncManager.forceRefresh()
                 return@launch
             }
             if (!unshoo.ianshulyadav.pixelmusic.innertube.YouTube.hasLoginCookie()) {
-                syncManager.sync()
+                // Also use forceRefresh() here so local-only users get an immediate
+                // incremental rescan instead of a potentially throttled no-op.
+                syncManager.forceRefresh()
                 return@launch
             }
             try {
                 when (tabId) {
                     LibraryTabId.SONGS -> {
                         youTubeLibrarySyncManager.syncLikedSongs()
-                        syncManager.sync()
+                        syncManager.forceRefresh()
                     }
                     LibraryTabId.LIKED -> {
                         youTubeLibrarySyncManager.syncLikedSongs()
@@ -6277,7 +6282,7 @@ class PlayerViewModel @Inject constructor(
                         youTubeLibrarySyncManager.syncLikedPlaylists()
                     }
                     else -> {
-                        syncManager.sync()
+                        syncManager.forceRefresh()
                     }
                 }
             } catch (e: Exception) {
