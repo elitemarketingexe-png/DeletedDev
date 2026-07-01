@@ -9,8 +9,6 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.material.icons.rounded.Radio
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
-import com.unshoo.pixelmusic.presentation.components.AdSupportCard
-
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -96,7 +94,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
 import com.unshoo.pixelmusic.presentation.components.QuickPicksSection
@@ -159,8 +156,8 @@ fun ExploreScreen(
     val uiState by exploreViewModel.uiState.collectAsStateWithLifecycle()
     val quickPicks by quickPicksViewModel.quickPicks.collectAsStateWithLifecycle()
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
-    val isPlaying by remember(stablePlayerState) { mutableStateOf(stablePlayerState.isPlaying) }
-    val currentSongId = stablePlayerState.currentSong?.id
+    val isPlaying by remember { derivedStateOf { stablePlayerState.isPlaying } }
+    val currentSongId by remember { derivedStateOf { stablePlayerState.currentSong?.id } }
     val quickPicksDisplayMode by playerViewModel.quickPicksDisplayMode.collectAsStateWithLifecycle()
     val pullRefreshState = rememberPullToRefreshState()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -371,7 +368,8 @@ fun ExploreScreen(
                             }
                         }
 
-                        if (uiState.chartsPage != null && uiState.chartsPage!!.sections.isNotEmpty()) {
+                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "Charts") &&
+                            uiState.chartsPage != null && uiState.chartsPage!!.sections.isNotEmpty()) {
                             uiState.chartsPage!!.sections.forEachIndexed { index, chartSection ->
                                 item(key = "chart_${chartSection.title}_${index}_header") {
                                     SectionHeader(title = chartSection.title)
@@ -548,7 +546,7 @@ fun ExploreScreen(
                         }
 
                         if (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") {
-                        var carouselRendered = false
+                            var carouselRendered = false
 
                             homeSectionsFiltered.forEachIndexed { index, section ->
                                 val isSpeed = section.title.contains("speed dial", ignoreCase = true) || 
@@ -615,7 +613,7 @@ fun ExploreScreen(
 
                             if (uiState.homePageContinuation != null) {
                                 item(key = "load_more_trigger") {
-                                    LaunchedEffect(Unit) {
+                                    LaunchedEffect(uiState.homePageContinuation) {
                                         exploreViewModel.loadMore()
                                     }
                                     if (uiState.isContinuationLoading) {
@@ -1242,7 +1240,7 @@ fun PlaylistCardItem(
 
 @Composable
 fun SimilarArtistsCarousel(
-    artists: List<YTItem>,
+    artists: List<ArtistItem>,
     navController: NavController,
     playerViewModel: PlayerViewModel
 ) {
@@ -1265,7 +1263,7 @@ fun SimilarArtistsCarousel(
 
 @Composable
 fun SimilarArtistBentoCard(
-    artist: YTItem,
+    artist: ArtistItem,
     onClick: () -> Unit,
     playerViewModel: PlayerViewModel,
     navController: NavController
@@ -1406,8 +1404,8 @@ fun SimilarArtistBentoCard(
             // Radio button on the top right
             IconButton(
                 onClick = {
-                    val endpoint = (artist as? ArtistItem)?.radioEndpoint
-                        ?: (artist as? ArtistItem)?.shuffleEndpoint
+                    val endpoint = artist.radioEndpoint
+                        ?: artist.shuffleEndpoint
                         ?: unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
                             playlistId = "RDAMVM$artistId",
                             videoId = null
@@ -1479,8 +1477,9 @@ fun SimilarArtistBentoCard(
                                 .fillMaxWidth()
                                 .height(38.dp)
                                 .clickable {
+                                    val allNativeSongs = artistSongs.map { it.toNativeSong() }
                                     playerViewModel.playSongs(
-                                        songsToPlay = listOf(nativeSong),
+                                        songsToPlay = allNativeSongs,
                                         startSong = nativeSong,
                                         queueName = "Artist: ${artistName}"
                                     )
@@ -2315,7 +2314,9 @@ fun MusicCardShelf(
             }
         }
     }
-}@Composable
+}
+
+@Composable
 fun SmartMixStudioHeroCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
