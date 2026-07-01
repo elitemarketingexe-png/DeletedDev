@@ -14,13 +14,7 @@ hs_err_pid*.log
 local.properties
 keystore.properties
 
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-/.idea/planningMode.xml
+.idea/
 
 /build
 /captures
