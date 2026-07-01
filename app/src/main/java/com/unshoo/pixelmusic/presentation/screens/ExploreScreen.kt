@@ -1432,8 +1432,8 @@ private fun LibraryCarouselCard(
     // Blended at low alpha so it tints the M3 surface without overpowering it.
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
-    var tintColor by remember(thumbnail) { mutableStateOf(colorScheme.surfaceContainer) }
-    LaunchedEffect(thumbnail) {
+    var tintColor by remember(thumbnail, colorScheme.surfaceContainer) { mutableStateOf(colorScheme.surfaceContainer) }
+    LaunchedEffect(thumbnail, colorScheme.surfaceContainer) {
         if (!thumbnail.isNullOrBlank()) {
             runCatching {
                 val loader = ImageLoader(context)
@@ -1443,14 +1443,17 @@ private fun LibraryCarouselCard(
                 if (result is SuccessResult) {
                     val bmp = (result.drawable as? BitmapDrawable)?.bitmap
                     if (bmp != null) {
-                        Palette.from(bmp).generate { palette ->
-                            val swatch = palette?.vibrantSwatch
-                                ?: palette?.dominantSwatch
-                                ?: palette?.mutedSwatch
-                            if (swatch != null) {
-                                tintColor = Color(swatch.rgb).copy(alpha = 0.36f)
-                                    .compositeOver(colorScheme.surfaceContainer)
-                            }
+                        val palette = Palette.from(bmp).generate()
+                        val swatch = palette.vibrantSwatch
+                            ?: palette.lightVibrantSwatch
+                            ?: palette.darkVibrantSwatch
+                            ?: palette.mutedSwatch
+                            ?: palette.lightMutedSwatch
+                            ?: palette.darkMutedSwatch
+                            ?: palette.dominantSwatch
+                        if (swatch != null) {
+                            tintColor = Color(swatch.rgb).copy(alpha = 0.36f)
+                                .compositeOver(colorScheme.surfaceContainer)
                         }
                     }
                 }
@@ -1722,9 +1725,9 @@ fun MixedForYouCard(
     }
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
-    var tintColor by remember(cardThumbnail) { mutableStateOf(colors.surfaceContainerHigh) }
+    var tintColor by remember(cardThumbnail, colors.surfaceContainerHigh) { mutableStateOf(colors.surfaceContainerHigh) }
     
-    LaunchedEffect(cardThumbnail) {
+    LaunchedEffect(cardThumbnail, colors.surfaceContainerHigh) {
         if (!cardThumbnail.isNullOrBlank()) {
             runCatching {
                 val loader = ImageLoader(context)
@@ -1737,14 +1740,17 @@ fun MixedForYouCard(
                 if (result is SuccessResult) {
                     val bmp = (result.drawable as? BitmapDrawable)?.bitmap
                     if (bmp != null) {
-                        Palette.from(bmp).generate { palette ->
-                            val swatch = palette?.vibrantSwatch
-                                ?: palette?.dominantSwatch
-                                ?: palette?.mutedSwatch
-                            if (swatch != null) {
-                                tintColor = Color(swatch.rgb).copy(alpha = 0.28f)
-                                    .compositeOver(colors.surfaceContainerHigh)
-                            }
+                        val palette = Palette.from(bmp).generate()
+                        val swatch = palette.vibrantSwatch
+                            ?: palette.lightVibrantSwatch
+                            ?: palette.darkVibrantSwatch
+                            ?: palette.mutedSwatch
+                            ?: palette.lightMutedSwatch
+                            ?: palette.darkMutedSwatch
+                            ?: palette.dominantSwatch
+                        if (swatch != null) {
+                            tintColor = Color(swatch.rgb).copy(alpha = 0.28f)
+                                .compositeOver(colors.surfaceContainerHigh)
                         }
                     }
                 }
