@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -248,7 +249,7 @@ fun ExploreScreen(
                         }
                     }
                 } else {
-                    val homeSectionsFiltered = if (uiState.selectedFilter == "All") {
+                    val homeSectionsRaw = if (uiState.selectedFilter == "All") {
                         if (uiState.activeMoodChip != null) {
                             uiState.explorePageSections
                         } else {
@@ -256,6 +257,12 @@ fun ExploreScreen(
                         }
                     } else {
                         uiState.homePageSections
+                    }
+                    val homeSectionsFiltered = remember(homeSectionsRaw) {
+                        homeSectionsRaw.filter { section ->
+                            val title = section.title.lowercase()
+                            !title.contains("cover") && !title.contains("remix")
+                        }
                     }
                     val cardShelfSections = remember(homeSectionsFiltered) {
                         homeSectionsFiltered.filter { section ->
@@ -1709,16 +1716,20 @@ fun MixedForYouCard(
     playerViewModel: PlayerViewModel,
     navController: NavController
 ) {
+    val cardThumbnail = remember(section) {
+        section.thumbnail.takeIf { !it.isNullOrBlank() }
+            ?: section.items.filterIsInstance<SongItem>().firstOrNull()?.thumbnail
+    }
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
-    var tintColor by remember(section.thumbnail) { mutableStateOf(colors.surfaceContainerHigh) }
+    var tintColor by remember(cardThumbnail) { mutableStateOf(colors.surfaceContainerHigh) }
     
-    LaunchedEffect(section.thumbnail) {
-        if (!section.thumbnail.isNullOrBlank()) {
+    LaunchedEffect(cardThumbnail) {
+        if (!cardThumbnail.isNullOrBlank()) {
             runCatching {
                 val loader = ImageLoader(context)
                 val req = ImageRequest.Builder(context)
-                    .data(section.thumbnail)
+                    .data(cardThumbnail)
                     .allowHardware(false)
                     .size(96)
                     .build()
@@ -1727,11 +1738,11 @@ fun MixedForYouCard(
                     val bmp = (result.drawable as? BitmapDrawable)?.bitmap
                     if (bmp != null) {
                         Palette.from(bmp).generate { palette ->
-                            val swatch = palette?.dominantSwatch
-                                ?: palette?.vibrantSwatch
+                            val swatch = palette?.vibrantSwatch
+                                ?: palette?.dominantSwatch
                                 ?: palette?.mutedSwatch
                             if (swatch != null) {
-                                tintColor = Color(swatch.rgb).copy(alpha = 0.12f)
+                                tintColor = Color(swatch.rgb).copy(alpha = 0.28f)
                                     .compositeOver(colors.surfaceContainerHigh)
                             }
                         }
@@ -1752,7 +1763,7 @@ fun MixedForYouCard(
     Card(
         modifier = Modifier
             .width(320.dp)
-            .height(260.dp),
+            .wrapContentHeight(),
         shape = shape,
         colors = CardDefaults.cardColors(
             containerColor = animatedBackground
@@ -1761,7 +1772,8 @@ fun MixedForYouCard(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .wrapContentHeight()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1786,15 +1798,13 @@ fun MixedForYouCard(
             }
 
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!section.thumbnail.isNullOrBlank()) {
+                if (!cardThumbnail.isNullOrBlank()) {
                     SmartImage(
-                        model = section.thumbnail,
+                        model = cardThumbnail,
                         contentDescription = section.title,
                         modifier = Modifier
                             .size(90.dp)
