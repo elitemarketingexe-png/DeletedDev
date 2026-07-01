@@ -1444,8 +1444,8 @@ private fun LibraryCarouselCard(
                     val bmp = (result.drawable as? BitmapDrawable)?.bitmap
                     if (bmp != null) {
                         Palette.from(bmp).generate { palette ->
-                            val swatch = palette?.dominantSwatch
-                                ?: palette?.vibrantSwatch
+                            val swatch = palette?.vibrantSwatch
+                                ?: palette?.dominantSwatch
                                 ?: palette?.mutedSwatch
                             if (swatch != null) {
                                 tintColor = Color(swatch.rgb).copy(alpha = 0.36f)
@@ -1498,8 +1498,8 @@ private fun LibraryCarouselCard(
                             Brush.horizontalGradient(
                                 colorStops = arrayOf(
                                     0.0f to animatedBgColor,
-                                    0.25f to animatedBgColor,
-                                    0.80f to Color.Transparent
+                                    0.43f to animatedBgColor,
+                                    0.85f to Color.Transparent
                                 )
                             )
                         )
