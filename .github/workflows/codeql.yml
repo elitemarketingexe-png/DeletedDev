@@ -41,7 +41,7 @@ jobs:
           threads: 2
 
       - name: Build with Gradle
-        run: ./gradlew assembleDebug --no-daemon --no-configuration-cache --no-build-cache
+        run: ./gradlew compileDebugKotlin --no-daemon -Dorg.gradle.jvmargs="-Xmx3g -XX:MaxMetaspaceSize=512m"
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
