@@ -245,7 +245,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.appcompat)
     implementation("androidx.webkit:webkit:1.16.0")
-    implementation("com.google.android.gms:play-services-ads:23.0.0")
+    implementation("com.google.android.gms:play-services-ads:25.4.0")
 
     // DI & Navigation
     implementation(libs.hilt.android)
