@@ -277,7 +277,10 @@ fun ExploreScreen(
                             val isSug = title.contains("mix") || title.contains("listen again") || 
                                         title.contains("favorites") || title.contains("suggest") || 
                                         title.contains("recommend") || title.contains("radio") || 
-                                        title.contains("similar") || title.contains("played")
+                                        title.contains("similar") || title.contains("played") ||
+                                        title.contains("liked") || title.contains("cached") ||
+                                        title.contains("you might like") || title.contains("recently") ||
+                                        title.contains("most")
                             val hasSongs = section.items.filterIsInstance<SongItem>().isNotEmpty()
                             isSug && hasSongs
                         }
@@ -588,7 +591,7 @@ fun ExploreScreen(
                         // Standalone Mixed For You Section (Rendered once)
                         if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") && cardShelfSections.isNotEmpty()) {
                             item(key = "mixed_for_you_section") {
-                                MixedForYouSection(cardShelfSections, playerViewModel, navController)
+                                MixedForYouSection(cardShelfSections, playerViewModel, navController, uiState.localSongs)
                             }
                         }
 
@@ -1816,7 +1819,8 @@ private fun LibraryCarouselCard(
 fun MixedForYouSection(
     sections: List<HomePage.Section>,
     playerViewModel: PlayerViewModel,
-    navController: NavController
+    navController: NavController,
+    localSongs: Map<String, Song> = emptyMap()
 ) {
     if (sections.isEmpty()) return
     val pagerState = rememberPagerState(pageCount = { sections.size })
@@ -1842,7 +1846,8 @@ fun MixedForYouSection(
                 MixedForYouCard(
                     section = section,
                     playerViewModel = playerViewModel,
-                    navController = navController
+                    navController = navController,
+                    localSongs = localSongs
                 )
             }
         }
@@ -1853,7 +1858,8 @@ fun MixedForYouSection(
 fun MixedForYouCard(
     section: HomePage.Section,
     playerViewModel: PlayerViewModel,
-    navController: NavController
+    navController: NavController,
+    localSongs: Map<String, Song> = emptyMap()
 ) {
     val cardThumbnail = remember(section) {
         section.thumbnail.takeIf { !it.isNullOrBlank() }
@@ -1963,7 +1969,7 @@ fun MixedForYouCard(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val songs = section.items.filterIsInstance<SongItem>().take(3)
-                    val nativeSongs = remember(songs) { songs.map { it.toNativeSong() } }
+                    val nativeSongs = remember(songs, localSongs) { songs.map { localSongs[it.id] ?: it.toNativeSong() } }
                     songs.forEachIndexed { index, songItem ->
                         val nativeSong = nativeSongs[index]
                         Row(
@@ -2013,7 +2019,7 @@ fun MixedForYouCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val songs = section.items.filterIsInstance<SongItem>()
-                val nativeSongs = remember(songs) { songs.map { it.toNativeSong() } }
+                val nativeSongs = remember(songs, localSongs) { songs.map { localSongs[it.id] ?: it.toNativeSong() } }
                 if (nativeSongs.isNotEmpty()) {
                     Button(
                         onClick = {

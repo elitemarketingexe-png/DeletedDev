@@ -29,6 +29,8 @@ import javax.inject.Inject
 import kotlinx.coroutines.async
 import com.unshoo.pixelmusic.data.model.Playlist
 import com.unshoo.pixelmusic.data.preferences.PlaylistPreferencesRepository
+import com.unshoo.pixelmusic.data.model.Song
+import com.unshoo.pixelmusic.data.database.toSongs
 
 data class ExploreUiState(
     val isLoading: Boolean = true,
@@ -44,7 +46,8 @@ data class ExploreUiState(
     val libraryPlaylists: List<Playlist> = emptyList(),
     val moodChips: List<unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Chip> = emptyList(),
     val explorePageSections: List<unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Section> = emptyList(),
-    val activeMoodChip: unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Chip? = null
+    val activeMoodChip: unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Chip? = null,
+    val localSongs: Map<String, Song> = emptyMap()
 )
 
 @HiltViewModel
@@ -301,7 +304,9 @@ class ExploreViewModel @Inject constructor(
                         }
 
                         val likedSongs = allLocalSongs.filter { it.isFavorite }
-                        val cachedSongs = allLocalSongs.filter { it.filePath.isNotBlank() }
+                        val cachedSongs = allLocalSongs.filter { entity ->
+                            entity.filePath.isNotBlank() && java.io.File(entity.filePath).exists()
+                        }
 
                         val likedSongItems = likedSongs.take(15).map { entity ->
                             SongItem(
@@ -464,7 +469,12 @@ class ExploreViewModel @Inject constructor(
                                 ))
                             }
 
-                            currentState.copy(homePageSections = updatedSections.distinctBy { it.title })
+                            val allLocalSongsMapped = allLocalSongs.toSongs()
+                            val localSongsMap = allLocalSongsMapped.associateBy { it.id }
+                            currentState.copy(
+                                homePageSections = updatedSections.distinctBy { it.title },
+                                localSongs = localSongsMap
+                            )
                         }
                     }
                 } catch (e: Exception) {
