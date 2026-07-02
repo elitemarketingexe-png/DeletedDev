@@ -456,7 +456,7 @@ class ExploreViewModel @Inject constructor(
 
                             if (mostPlayedSongItems.size >= 5) {
                                 updatedSections.add(HomePage.Section(
-                                    title = "Your Most Played On Heavy Rotation",
+                                    title = "Your Most Played",
                                     label = "Your all-time top tracks",
                                     thumbnail = mostPlayedSongItems.firstOrNull()?.thumbnail,
                                     endpoint = null,
