@@ -150,6 +150,19 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import androidx.compose.runtime.snapshotFlow
 
+private fun isBentoSection(title: String, itemSize: Int): Boolean {
+    val t = title.lowercase()
+    return itemSize >= 4 && (
+        t.contains("featured") ||
+        t.contains("supermix") ||
+        t.contains("curated") ||
+        t.contains("mixed for you") ||
+        t.contains("new releases") ||
+        t.contains("forgotten favorites") ||
+        t.contains("forgotten")
+    )
+}
+
 @UnstableApi
 @Composable
 fun ExploreScreen(
@@ -277,14 +290,15 @@ fun ExploreScreen(
                     }
                     val cardShelfSections = remember(homeSectionsFiltered) {
                         homeSectionsFiltered.filter { section ->
+                            val isBento = isBentoSection(section.title, section.items.size)
                             val title = section.title.lowercase()
-                            val isSug = title.contains("mix") || title.contains("listen again") || 
+                            val isSug = !isBento && (title.contains("mix") || title.contains("listen again") || 
                                         title.contains("favorites") || title.contains("suggest") || 
                                         title.contains("recommend") || title.contains("radio") || 
                                         title.contains("similar") || title.contains("played") ||
                                         title.contains("liked") || title.contains("cached") ||
                                         title.contains("you might like") || title.contains("recently") ||
-                                        title.contains("most")
+                                        title.contains("most"))
                             val hasSongs = section.items.filterIsInstance<SongItem>().isNotEmpty()
                             isSug && hasSongs
                         }
@@ -638,11 +652,7 @@ fun ExploreScreen(
                                                  section.title.contains("Similar", ignoreCase = true))
 
                                 val isBento = !isShelf && !isSimilar && 
-                                              (section.title.contains("featured", ignoreCase = true) || 
-                                               section.title.contains("supermix", ignoreCase = true) ||
-                                               section.title.contains("curated", ignoreCase = true) ||
-                                               section.title.contains("mixed for you", ignoreCase = true)) &&
-                                               section.items.size >= 4
+                                              isBentoSection(section.title, section.items.size)
 
                                 if (isShelf && section.items.isNotEmpty()) {
                                     item(key = "shelf_${section.title}_$index") {
