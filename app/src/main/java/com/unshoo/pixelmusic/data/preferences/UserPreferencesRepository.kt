@@ -45,6 +45,7 @@ object AppThemeMode {
     const val FOLLOW_SYSTEM = "follow_system"
     const val LIGHT = "light"
     const val DARK = "dark"
+    const val PITCH_BLACK = "pitch_black"
 }
 
 object AppFontMode {

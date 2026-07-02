@@ -988,6 +988,12 @@ fun ThemeSelectionPage(
             recommended = true
         ),
         ThemeOptionItem(
+            mode = AppThemeMode.PITCH_BLACK,
+            title = "Pitch Black",
+            description = "True black theme to save battery on OLED screens",
+            icon = Icons.Rounded.DarkMode
+        ),
+        ThemeOptionItem(
             mode = AppThemeMode.LIGHT,
             title = stringResource(R.string.setup_theme_light_title),
             description = stringResource(R.string.setup_theme_light_description),

@@ -50,6 +50,7 @@ class ExternalPlayerActivity : ComponentActivity() {
             val appThemeMode by themePreferencesRepository.appThemeModeFlow.collectAsStateWithLifecycle(initialValue = AppThemeMode.FOLLOW_SYSTEM)
             val useDarkTheme = when (appThemeMode) {
                 AppThemeMode.DARK -> true
+                AppThemeMode.PITCH_BLACK -> true
                 AppThemeMode.LIGHT -> false
                 else -> systemDarkTheme
             }
@@ -61,7 +62,8 @@ class ExternalPlayerActivity : ComponentActivity() {
                 darkTheme = useDarkTheme,
                 dynamicColor = dynamicColorEnabled,
                 colorPalette = colorPalette,
-                useSystemFont = (appFontMode == AppFontMode.SYSTEM)
+                useSystemFont = (appFontMode == AppFontMode.SYSTEM),
+                pitchBlack = (appThemeMode == AppThemeMode.PITCH_BLACK)
             ) {
                 ExternalPlayerOverlay(
                     playerViewModel = playerViewModel,

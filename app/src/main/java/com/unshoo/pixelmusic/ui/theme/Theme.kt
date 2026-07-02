@@ -471,11 +471,12 @@ fun PixelMusicTheme(
     colorSchemePairOverride: ColorSchemePair? = null,
     colorPalette: String = "SAGE",
     useSystemFont: Boolean = false,
+    pitchBlack: Boolean = false,
     content: @Composable () -> Unit
 ) {
     FontSettings.useSystemFont = useSystemFont
     val context = LocalContext.current
-    val finalColorScheme = when {
+    val baseColorScheme = when {
         colorSchemePairOverride != null -> {
             if (darkTheme) colorSchemePairOverride.dark else colorSchemePairOverride.light
         }
@@ -489,6 +490,23 @@ fun PixelMusicTheme(
         else -> {
             getStaticColorScheme(colorPalette, darkTheme)
         }
+    }
+
+    val finalColorScheme = if (darkTheme && pitchBlack) {
+        baseColorScheme.copy(
+            background = Color.Black,
+            surface = Color.Black,
+            surfaceVariant = Color(0xFF101010),
+            surfaceContainer = Color(0xFF080808),
+            surfaceContainerHigh = Color(0xFF121212),
+            surfaceContainerHighest = Color(0xFF1A1A1A),
+            surfaceContainerLow = Color(0xFF040404),
+            surfaceContainerLowest = Color.Black,
+            surfaceDim = Color.Black,
+            surfaceBright = Color(0xFF121212)
+        )
+    } else {
+        baseColorScheme
     }
 
     PixelMusicStatusBarStyle(
