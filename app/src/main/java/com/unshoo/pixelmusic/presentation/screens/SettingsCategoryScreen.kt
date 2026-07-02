@@ -171,6 +171,7 @@ import com.unshoo.pixelmusic.data.backup.model.ModuleRestoreDetail
 import com.unshoo.pixelmusic.data.backup.model.RestorePlan
 import com.unshoo.pixelmusic.data.preferences.AppLanguage
 import com.unshoo.pixelmusic.data.preferences.AppThemeMode
+import com.unshoo.pixelmusic.data.preferences.PlayerThemeMode
 import com.unshoo.pixelmusic.data.preferences.AppFontMode
 import com.unshoo.pixelmusic.data.preferences.CollagePattern
 import com.unshoo.pixelmusic.data.preferences.CarouselStyle
@@ -781,6 +782,32 @@ fun SettingsCategoryScreen(
                                     ),
                                     selectedKey = uiState.playerThemePreference,
                                     onSelectionChanged = { settingsViewModel.setPlayerThemePreference(it) },
+                                    leadingIcon = { Icon(Icons.Outlined.PlayCircle, null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                ThemeSelectorItem(
+                                    label = "Full Player Theme Mode",
+                                    description = "Override the color mode of the full player",
+                                    options = mapOf(
+                                        PlayerThemeMode.FOLLOW_APP to "Follow App Theme",
+                                        PlayerThemeMode.LIGHT to "Light Mode",
+                                        PlayerThemeMode.DARK to "Dark Mode",
+                                        PlayerThemeMode.LIGHT_GREY to "Grey Light"
+                                    ),
+                                    selectedKey = uiState.playerThemeMode,
+                                    onSelectionChanged = { settingsViewModel.setPlayerThemeMode(it) },
+                                    leadingIcon = { Icon(Icons.Outlined.PlayCircle, null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
+                                ThemeSelectorItem(
+                                    label = "Miniplayer Theme Mode",
+                                    description = "Override the color mode of the miniplayer",
+                                    options = mapOf(
+                                        PlayerThemeMode.FOLLOW_APP to "Follow App Theme",
+                                        PlayerThemeMode.LIGHT to "Light Mode",
+                                        PlayerThemeMode.DARK to "Dark Mode",
+                                        PlayerThemeMode.LIGHT_GREY to "Grey Light"
+                                    ),
+                                    selectedKey = uiState.miniplayerThemeMode,
+                                    onSelectionChanged = { settingsViewModel.setMiniplayerThemeMode(it) },
                                     leadingIcon = { Icon(Icons.Outlined.PlayCircle, null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
                                 SwitchSettingItem(

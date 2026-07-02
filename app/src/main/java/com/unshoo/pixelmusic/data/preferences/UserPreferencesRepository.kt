@@ -48,6 +48,13 @@ object AppThemeMode {
     const val PITCH_BLACK = "pitch_black"
 }
 
+object PlayerThemeMode {
+    const val FOLLOW_APP = "follow_app"
+    const val LIGHT = "light"
+    const val DARK = "dark"
+    const val LIGHT_GREY = "light_grey"
+}
+
 object AppFontMode {
     const val APP_DEFAULT = "app_default"
     const val SYSTEM = "system"

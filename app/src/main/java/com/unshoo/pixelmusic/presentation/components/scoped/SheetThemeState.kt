@@ -52,52 +52,116 @@ internal fun resolvePlayerSheetTargetScheme(
     }
 }
 
+private fun ColorScheme.toLightGrey(): ColorScheme {
+    return this.copy(
+        background = Color(0xFFF4F4F6),
+        surface = Color.White,
+        surfaceVariant = Color(0xFFEBEBF0),
+        surfaceContainer = Color(0xFFF4F4F6),
+        surfaceContainerHigh = Color(0xFFEBEBF0),
+        surfaceContainerHighest = Color(0xFFE3E3E8),
+        surfaceContainerLow = Color(0xFFFAFAFC),
+        surfaceContainerLowest = Color.White,
+        surfaceDim = Color(0xFFE3E3E8),
+        surfaceBright = Color.White,
+        onBackground = Color(0xFF1C1C1E),
+        onSurface = Color(0xFF1C1C1E),
+        onSurfaceVariant = Color(0xFF3C3C43)
+    )
+}
+
 @Composable
 internal fun rememberSheetThemeState(
     activePlayerSchemePair: ColorSchemePair?,
     isDarkTheme: Boolean,
     playerThemePreference: String,
+    playerThemeMode: String,
+    miniplayerThemeMode: String,
     currentSong: Song?,
     themedAlbumArtUri: String?,
     preparingSongId: String?,
-    systemColorScheme: ColorScheme
+    systemColorScheme: ColorScheme,
+    colorPalette: String = "SAGE"
 ): SheetThemeState {
     val isAlbumArtTheme = playerThemePreference == ThemePreference.ALBUM_ART
     val hasAlbumArt = !currentSong?.albumArtUriString.isNullOrBlank()
 
-    val activePlayerScheme = remember(activePlayerSchemePair, isDarkTheme) {
-        activePlayerSchemePair?.let { if (isDarkTheme) it.dark else it.light }
+    val resolveIsDarkForFull = remember(playerThemeMode, isDarkTheme) {
+        when (playerThemeMode) {
+            "dark" -> true
+            "light" -> false
+            "light_grey" -> false
+            else -> isDarkTheme
+        }
     }
-    val currentSongActiveScheme = remember(
-        activePlayerScheme,
+
+    val resolveIsDarkForMini = remember(miniplayerThemeMode, isDarkTheme) {
+        when (miniplayerThemeMode) {
+            "dark" -> true
+            "light" -> false
+            "light_grey" -> false
+            else -> isDarkTheme
+        }
+    }
+
+    val activePlayerSchemeForFull = remember(activePlayerSchemePair, resolveIsDarkForFull) {
+        activePlayerSchemePair?.let { if (resolveIsDarkForFull) it.dark else it.light }
+    }
+
+    val activePlayerSchemeForMini = remember(activePlayerSchemePair, resolveIsDarkForMini) {
+        activePlayerSchemePair?.let { if (resolveIsDarkForMini) it.dark else it.light }
+    }
+
+    val currentSongActiveSchemeForFull = remember(
+        activePlayerSchemeForFull,
         currentSong?.albumArtUriString,
         themedAlbumArtUri
     ) {
         if (
-            activePlayerScheme != null &&
+            activePlayerSchemeForFull != null &&
             hasAlbumArt &&
             currentSong.albumArtUriString == themedAlbumArtUri
         ) {
-            activePlayerScheme
+            activePlayerSchemeForFull
         } else {
             null
         }
     }
 
-    var lastAlbumScheme by remember { mutableStateOf<ColorScheme?>(null) }
+    val currentSongActiveSchemeForMini = remember(
+        activePlayerSchemeForMini,
+        currentSong?.albumArtUriString,
+        themedAlbumArtUri
+    ) {
+        if (
+            activePlayerSchemeForMini != null &&
+            hasAlbumArt &&
+            currentSong.albumArtUriString == themedAlbumArtUri
+        ) {
+            activePlayerSchemeForMini
+        } else {
+            null
+        }
+    }
+
+    var lastAlbumSchemeForFull by remember { mutableStateOf<ColorScheme?>(null) }
+    var lastAlbumSchemeForMini by remember { mutableStateOf<ColorScheme?>(null) }
     var lastAlbumSchemeSongId by remember { mutableStateOf<String?>(null) }
-    // When song changes, keep lastAlbumScheme as cross-song fallback
-    // to prevent flicker to system color while new color loads.
-    // Only update the tracked song ID so the new scheme replaces it once ready.
+
     LaunchedEffect(currentSong?.id) {
         if (currentSong?.id != lastAlbumSchemeSongId) {
             lastAlbumSchemeSongId = currentSong?.id
         }
     }
-    LaunchedEffect(currentSongActiveScheme, currentSong?.id) {
+    LaunchedEffect(currentSongActiveSchemeForFull, currentSongActiveSchemeForMini, currentSong?.id) {
         val currentSongId = currentSong?.id
-        if (currentSongId != null && currentSongActiveScheme != null) {
-            lastAlbumScheme = currentSongActiveScheme
+        if (currentSongId != null) {
+            if (currentSongActiveSchemeForFull != null) {
+                lastAlbumSchemeForFull = currentSongActiveSchemeForFull
+            }
+            if (currentSongActiveSchemeForMini != null) {
+                lastAlbumSchemeForMini = currentSongActiveSchemeForMini
+            }
             lastAlbumSchemeSongId = currentSongId
         }
     }
@@ -106,26 +170,50 @@ internal fun rememberSheetThemeState(
         preparingSongId != null && preparingSongId == currentSong?.id
     }
 
+    val systemColorSchemeForFull = remember(resolveIsDarkForFull, colorPalette, systemColorScheme) {
+        try {
+            com.unshoo.pixelmusic.ui.theme.getStaticColorScheme(colorPalette, resolveIsDarkForFull)
+        } catch (e: Exception) {
+            systemColorScheme
+        }
+    }
+
+    val systemColorSchemeForMini = remember(resolveIsDarkForMini, colorPalette, systemColorScheme) {
+        try {
+            com.unshoo.pixelmusic.ui.theme.getStaticColorScheme(colorPalette, resolveIsDarkForMini)
+        } catch (e: Exception) {
+            systemColorScheme
+        }
+    }
+
     // Capture nullable var for smart-cast
-    val lastAlbumSchemeSnapshot = lastAlbumScheme
+    val lastAlbumSchemeForFullSnapshot = lastAlbumSchemeForFull
+    val lastAlbumSchemeForMiniSnapshot = lastAlbumSchemeForMini
 
     // Cross-song fallback is only valid while a new track with usable album art is still loading.
     // Tracks without art must resolve directly to the system scheme, otherwise previous colors stick.
-    val rawAlbumColorScheme = resolvePlayerSheetTargetScheme(
+    var rawAlbumColorScheme = resolvePlayerSheetTargetScheme(
         isAlbumArtTheme = isAlbumArtTheme,
         hasAlbumArt = hasAlbumArt,
-        currentSongActiveScheme = currentSongActiveScheme,
-        lastAlbumScheme = lastAlbumSchemeSnapshot,
-        systemColorScheme = systemColorScheme
+        currentSongActiveScheme = currentSongActiveSchemeForFull,
+        lastAlbumScheme = lastAlbumSchemeForFullSnapshot,
+        systemColorScheme = systemColorSchemeForFull
     )
 
-    val rawMiniPlayerScheme = resolvePlayerSheetTargetScheme(
+    var rawMiniPlayerScheme = resolvePlayerSheetTargetScheme(
         isAlbumArtTheme = isAlbumArtTheme,
         hasAlbumArt = hasAlbumArt,
-        currentSongActiveScheme = currentSongActiveScheme,
-        lastAlbumScheme = lastAlbumSchemeSnapshot,
-        systemColorScheme = systemColorScheme
+        currentSongActiveScheme = currentSongActiveSchemeForMini,
+        lastAlbumScheme = lastAlbumSchemeForMiniSnapshot,
+        systemColorScheme = systemColorSchemeForMini
     )
+
+    if (playerThemeMode == "light_grey") {
+        rawAlbumColorScheme = rawAlbumColorScheme.toLightGrey()
+    }
+    if (miniplayerThemeMode == "light_grey") {
+        rawMiniPlayerScheme = rawMiniPlayerScheme.toLightGrey()
+    }
 
     // --- Batch Color Animation ---
     // Instead of 34×2 = 68 independent animateColorAsState (one Spring coroutine each),
