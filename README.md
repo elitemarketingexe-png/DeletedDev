@@ -26,7 +26,7 @@
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge" alt="GPL-3.0 License">
   </a>
-  <a href="https://t.me/PixelMusicApp">
+  <a href="https://t.me/indiaflacmusic">
     <img src="https://img.shields.io/badge/Telegram-Join%20Channel-229ED9?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Channel">
   </a>
   <a href="https://github.com/ianshulyadav/ThePixelMusic">

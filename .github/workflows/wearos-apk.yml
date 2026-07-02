@@ -34,6 +34,7 @@ jobs:
 
       - name: Upload Wear OS APK artifact
         uses: actions/upload-artifact@v7
+        continue-on-error: true
         with:
           name: PixelMusic-wear-only-debug
           path: wear/build/outputs/apk/debug/*.apk

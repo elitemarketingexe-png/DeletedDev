@@ -9,7 +9,7 @@ Required env vars:
   TELEGRAM_API_ID       - from my.telegram.org (integer)
   TELEGRAM_API_HASH     - from my.telegram.org (string)
   TELEGRAM_BOT_TOKEN    - BotFather token
-  TELEGRAM_CHAT_ID      - e.g. "@PixelMusicApp"
+  TELEGRAM_CHAT_ID      - e.g. "@indiaflacmusic"
   TELEGRAM_THREAD_ID    - (optional) message thread id for topics
   VERSION_NAME          - app version string
   COMMIT_SHA            - full commit SHA
@@ -109,13 +109,21 @@ async def publish():
         ("app/build/outputs/apk/release/app-universal-release.apk",   "app-mobile-universal-release.apk",f"📱 <b>Universal — v{version}</b>"),
     ]
 
-    # Verify all files exist before starting
-    for apk_path, _, _ in apks:
-        if not os.path.exists(apk_path):
-            print(f"ERROR: APK not found: {apk_path}", flush=True)
-            sys.exit(1)
-        size_mb = os.path.getsize(apk_path) / (1024 * 1024)
-        print(f"  Found: {apk_path} ({size_mb:.1f} MB)", flush=True)
+    # Filter to files that actually exist
+    existing_apks = []
+    for apk_path, display_name, caption in apks:
+        if os.path.exists(apk_path):
+            size_mb = os.path.getsize(apk_path) / (1024 * 1024)
+            print(f"  Found: {apk_path} ({size_mb:.1f} MB)", flush=True)
+            existing_apks.append((apk_path, display_name, caption))
+        else:
+            print(f"  Skipped (not found): {apk_path}", flush=True)
+
+    if not existing_apks:
+        print("ERROR: No APK files found to publish!", flush=True)
+        sys.exit(1)
+
+    apks = existing_apks
 
     reply_to = int(thread_id) if thread_id else None
 
@@ -227,14 +235,37 @@ async def publish():
 
         else:
            
+            devices = []
+            abis = []
+            if any("wear" in path for path, _, _ in apks):
+                devices.append("wearos")
+            if any("app" in path for path, _, _ in apks):
+                devices.append("mobile")
+            
+            for path, _, _ in apks:
+                if "arm64" in path:
+                    abis.append("arm64")
+                elif "armeabi" in path:
+                    abis.append("armeabi")
+                elif "x86_64" in path:
+                    abis.append("x86_64")
+                elif "universal" in path:
+                    abis.append("universal")
+                elif "wear" in path:
+                    abis.append("wear")
+
+            devices_str = ", ".join(devices)
+            abis_str = ", ".join(abis)
+            files_count = len(apks)
+
             text = (
                 f"🎵 <b>PixelMusic Nightly Build</b> 🎵\n\n"
                 f"Commit by: {commit_author}\n"
                 f"Commit message:\n<blockquote>{commit_message}</blockquote>\n"
                 f"Commit hash: #{commit_sha[:7]}\n"
-                f"Device: mobile, wearos\n"
-                f"ABI: arm64, armeabi, universal, x86_64\n"
-                f"Files: 5\n"
+                f"Device: {devices_str}\n"
+                f"ABI: {abis_str}\n"
+                f"Files: {files_count}\n"
                 f"Version: Android >= 11\n\n"
                 f"💡 <b>Which APK to install?</b>\n"
                 f"<blockquote>• <b>arm64-v8a:</b> Modern phones (recommended)\n"

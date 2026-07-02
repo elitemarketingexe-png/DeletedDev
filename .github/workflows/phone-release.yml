@@ -93,6 +93,7 @@ jobs:
 
       - name: Upload split APK artifacts
         uses: actions/upload-artifact@v7
+        continue-on-error: true
         with:
           name: PixelMusic-phone-release-split-apks
           path: |
@@ -155,7 +156,7 @@ jobs:
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: "@PixelMusicApp"
+          TELEGRAM_CHAT_ID: "@indiaflacmusic"
           TELEGRAM_THREAD_ID: ${{ steps.version_check.outputs.is_new_version == 'true' && '2457' || '2' }}
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           COMMIT_SHA: ${{ github.sha }}

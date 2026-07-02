@@ -33,6 +33,10 @@ val enableComposeCompilerReports = providers.gradleProperty("pixelmusic.enableCo
     .getOrElse("false")
     .toBoolean()
 
+val onlyArm64 = providers.gradleProperty("pixelmusic.onlyArm64")
+    .getOrElse("false")
+    .toBoolean()
+
 @Suppress("DEPRECATION")
 android {
     namespace = "com.unshoo.pixelmusic"
@@ -157,8 +161,13 @@ android {
             isEnable = enableAbiSplits
             reset()
             if (enableAbiSplits) {
-                include("arm64-v8a", "armeabi-v7a", "x86_64")
-                isUniversalApk = true  // also produce a universal APK
+                if (onlyArm64) {
+                    include("arm64-v8a")
+                    isUniversalApk = false
+                } else {
+                    include("arm64-v8a", "armeabi-v7a", "x86_64")
+                    isUniversalApk = true
+                }
             }
         }
     }

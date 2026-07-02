@@ -514,7 +514,8 @@ fun SettingsCategoryScreen(
                                     label = stringResource(R.string.settings_quick_picks_mode_title),
                                     description = stringResource(R.string.settings_quick_picks_mode_desc),
                                     options = mapOf(
-                                        com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.CARD.name to "Card Carousel",
+                                        com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.CARD.name to "Square Carousel",
+                                        com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.CARD_CLASSIC.name to "Classic Carousel",
                                         com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.LIST.name to "List Grid"
                                     ),
                                     selectedKey = uiState.quickPicksDisplayMode.name,
