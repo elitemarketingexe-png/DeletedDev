@@ -632,16 +632,17 @@ fun ExploreScreen(
                                               section.title.contains("cached", ignoreCase = true) ||
                                               section.title.contains("you might like", ignoreCase = true)
 
-                                val isBento = !isShelf && 
+                                val isSimilar = !isShelf && 
+                                                (section.title.startsWith("Similar to", ignoreCase = true) || 
+                                                 section.title.contains("Fans also like", ignoreCase = true) ||
+                                                 section.title.contains("Similar", ignoreCase = true))
+
+                                val isBento = !isShelf && !isSimilar && 
                                               (section.title.contains("featured", ignoreCase = true) || 
                                                section.title.contains("supermix", ignoreCase = true) ||
                                                section.title.contains("curated", ignoreCase = true) ||
                                                section.title.contains("mixed for you", ignoreCase = true)) &&
                                                section.items.size >= 4
-
-                                val isSimilar = !isShelf && !isBento && 
-                                                (section.title.startsWith("Similar to", ignoreCase = true) || 
-                                                 section.title.contains("Fans also like", ignoreCase = true))
 
                                 if (isShelf && section.items.isNotEmpty()) {
                                     item(key = "shelf_${section.title}_$index") {
@@ -1502,84 +1503,102 @@ fun SimilarArtistBentoCard(
         lightBlendFraction = 0.50f
     )
 
-    val cardShape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
+    val cardShape = remember { AbsoluteSmoothCornerShape(24.dp, 60) }
 
     Card(
         modifier = Modifier
-            .width(290.dp)
-            .height(220.dp),
+            .width(160.dp)
+            .height(230.dp),
         shape = cardShape,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = animatedBgColor)
+        colors = CardDefaults.cardColors(containerColor = animatedBgColor),
+        onClick = onClick
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Top half content: Left text column, Right circular artist avatar
-            Row(
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Circular artist photo
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(110.dp)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .size(100.dp)
+                    .clip(CircleShape)
             ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 8.dp)
-                ) {
-                    Text(
-                        text = artistName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontFamily = GoogleSansRounded,
-                        fontWeight = FontWeight.Bold,
-                        color = colorScheme.onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Similar Artist",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
                 if (!artistThumbnail.isNullOrBlank()) {
                     SmartImage(
                         model = artistThumbnail,
                         contentDescription = artistName,
-                        modifier = Modifier
-                            .size(80.dp)
-                            .clip(CircleShape),
+                        modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
                 }
             }
 
-            // Divider
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(horizontal = 16.dp)
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(colorScheme.onSurface.copy(alpha = 0.08f))
-            )
-
-            // Bottom half content: Actions (Radio button and explore link)
+            // Artist details
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(110.dp)
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // Radio Pill Button
-                Button(
+                Text(
+                    text = artistName,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = GoogleSansRounded
+                    ),
+                    color = colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "Similar Artist",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // Clean, compact play/radio buttons row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Play / Shuffle-related button
+                IconButton(
+                    onClick = {
+                        val endpoint = artist.shuffleEndpoint 
+                            ?: artist.radioEndpoint
+                            ?: unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                                playlistId = "RDAMVM$artistId",
+                                videoId = null
+                            )
+                        playerViewModel.playRadio(
+                            endpoint = endpoint,
+                            title = "${artistName} Mix",
+                            artistName = artistName
+                        )
+                    },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(colorScheme.primary, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = "Play",
+                        tint = colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Radio button
+                IconButton(
                     onClick = {
                         val endpoint = artist.radioEndpoint
                             ?: artist.shuffleEndpoint
@@ -1594,42 +1613,16 @@ fun SimilarArtistBentoCard(
                         )
                     },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colorScheme.primary,
-                        contentColor = colorScheme.onPrimary
-                    ),
-                    contentPadding = PaddingValues(horizontal = 16.dp)
+                        .size(36.dp)
+                        .background(colorScheme.secondaryContainer, CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Radio,
-                        contentDescription = null,
+                        contentDescription = "Radio",
+                        tint = colorScheme.onSecondaryContainer,
                         modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Start Artist Radio",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = GoogleSansRounded
-                    )
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Explore Catalog Text Link
-                Text(
-                    text = "Explore Artist Catalog →",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GoogleSansRounded,
-                    color = colorScheme.primary,
-                    modifier = Modifier
-                        .clickable(onClick = onClick)
-                        .padding(vertical = 4.dp)
-                )
             }
         }
     }
