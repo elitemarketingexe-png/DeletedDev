@@ -232,15 +232,17 @@ class ExploreViewModel @Inject constructor(
                 }
                 launch(Dispatchers.IO) {
                     try {
-                        val r = YouTube.newReleaseAlbums().getOrNull()
-                        newReleasesResult = r
-                        if (!r.isNullOrEmpty()) {
-                            _uiState.update { currentState ->
-                                currentState.copy(
-                                    isLoading = false,
-                                    isRefreshing = false,
-                                    newReleaseAlbums = r
-                                )
+                        if (!YouTube.hasLoginCookie()) {
+                            val r = YouTube.newReleaseAlbums().getOrNull()
+                            newReleasesResult = r
+                            if (!r.isNullOrEmpty()) {
+                                _uiState.update { currentState ->
+                                    currentState.copy(
+                                        isLoading = false,
+                                        isRefreshing = false,
+                                        newReleaseAlbums = r
+                                    )
+                                }
                             }
                         }
                     } catch (e: Exception) {
@@ -469,11 +471,47 @@ class ExploreViewModel @Inject constructor(
                                 ))
                             }
 
+                            val finalNewReleases = if (YouTube.hasLoginCookie()) {
+                                val localArtistNames = allLocalSongs.map { it.artistName.lowercase().trim() }.filter { it.isNotBlank() }.toSet()
+                                val globalReleases = YouTube.newReleaseAlbums().getOrNull()
+                                val globalFiltered = globalReleases?.filter { album ->
+                                    album.artists?.any { it.name.lowercase().trim() in localArtistNames } == true
+                                }.orEmpty()
+                                
+                                val enrichedReleases = mutableListOf<AlbumItem>()
+                                enrichedReleases.addAll(globalFiltered)
+                                
+                                val topArtistNames = history
+                                    .mapNotNull { it.artist }
+                                    .filter { it.isNotBlank() }
+                                    .groupingBy { it }
+                                    .eachCount()
+                                    .entries
+                                    .sortedByDescending { it.value }
+                                    .take(3)
+                                    .map { it.key }
+                                    
+                                val searchJobs = topArtistNames.map { artistName ->
+                                    async {
+                                        YouTube.search(query = artistName, filter = YouTube.SearchFilter.FILTER_ALBUM)
+                                            .getOrNull()?.items?.filterIsInstance<AlbumItem>() ?: emptyList()
+                                    }
+                                }
+                                val searchResults = searchJobs.flatMap { it.await() }
+                                
+                                (enrichedReleases + searchResults)
+                                    .distinctBy { it.browseId }
+                                    .take(15)
+                            } else {
+                                null
+                            }
+
                             val allLocalSongsMapped = allLocalSongs.toSongs()
                             val localSongsMap = allLocalSongsMapped.associateBy { it.id }
                             currentState.copy(
                                 homePageSections = updatedSections.distinctBy { it.title },
-                                localSongs = localSongsMap
+                                localSongs = localSongsMap,
+                                newReleaseAlbums = finalNewReleases ?: currentState.newReleaseAlbums
                             )
                         }
                     }
