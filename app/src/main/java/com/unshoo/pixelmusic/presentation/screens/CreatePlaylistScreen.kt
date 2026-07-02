@@ -108,8 +108,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.ImageLoader
+import coil.imageLoader
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.unshoo.pixelmusic.data.model.Song
 import com.unshoo.pixelmusic.presentation.components.ImageCropView
 import com.unshoo.pixelmusic.data.model.PlaylistShapeType
@@ -337,13 +340,13 @@ private fun CreatePlaylistContent(
 
     LaunchedEffect(selectedImageUri) {
          if (selectedImageUri != null) {
-             val loader = ImageLoader(context)
+             val loader = context.imageLoader
              val request = ImageRequest.Builder(context)
                  .data(selectedImageUri)
                  .allowHardware(false)
                  .build()
              
-             val result = loader.execute(request)
+             val result = withContext(Dispatchers.IO) { loader.execute(request) }
              val drawable = result.drawable
              if (drawable is android.graphics.drawable.BitmapDrawable) {
                  imageBitmap = drawable.bitmap.asImageBitmap()
@@ -785,12 +788,12 @@ fun EditPlaylistContent(
     // Image Loader
     LaunchedEffect(selectedImageUri) {
          if (selectedImageUri != null) {
-             val loader = ImageLoader(context)
+             val loader = context.imageLoader
              val request = ImageRequest.Builder(context)
                  .data(selectedImageUri)
                  .allowHardware(false)
                  .build()
-             val result = loader.execute(request)
+             val result = withContext(Dispatchers.IO) { loader.execute(request) }
              val drawable = result.drawable
              if (drawable is android.graphics.drawable.BitmapDrawable) {
                  imageBitmap = drawable.bitmap.asImageBitmap()

@@ -193,81 +193,31 @@ class ExploreViewModel @Inject constructor(
             var newReleasesResult: List<AlbumItem>? = null
 
             coroutineScope {
-                launch(Dispatchers.IO) {
-                    try {
-                        val h = YouTube.home().getOrNull()
-                        home = h
-                        if (h != null) {
-                            _uiState.update { currentState ->
-                                val merged = (h.sections + currentState.explorePageSections).distinctBy { it.title }
-                                currentState.copy(
-                                    isLoading = false,
-                                    isRefreshing = false,
-                                    homePageSections = merged,
-                                    homePageContinuation = h.continuation,
-                                    moodChips = (h.chips.orEmpty() + currentState.moodChips).distinctBy { it.title }
-                                )
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to load home sections in Stage 1")
-                    }
+                val homeDeferred = async(Dispatchers.IO) { runCatching { YouTube.home().getOrNull() }.getOrNull() }
+                val chartsDeferred = async(Dispatchers.IO) { runCatching { YouTube.getChartsPage().getOrNull() }.getOrNull() }
+                val newReleasesDeferred = async(Dispatchers.IO) {
+                    if (!YouTube.hasLoginCookie()) runCatching { YouTube.newReleaseAlbums().getOrNull() }.getOrNull() else null
                 }
-                launch(Dispatchers.IO) {
-                    try {
-                        val c = YouTube.getChartsPage().getOrNull()
-                        charts = c
-                        if (c != null) {
-                            _uiState.update { currentState ->
-                                currentState.copy(
-                                    isLoading = false,
-                                    isRefreshing = false,
-                                    chartsPage = c
-                                )
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to load charts in Stage 1")
-                    }
-                }
-                launch(Dispatchers.IO) {
-                    try {
-                        if (!YouTube.hasLoginCookie()) {
-                            val r = YouTube.newReleaseAlbums().getOrNull()
-                            newReleasesResult = r
-                            if (!r.isNullOrEmpty()) {
-                                _uiState.update { currentState ->
-                                    currentState.copy(
-                                        isLoading = false,
-                                        isRefreshing = false,
-                                        newReleaseAlbums = r
-                                    )
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to load new release albums in Stage 1")
-                    }
-                }
-                launch(Dispatchers.IO) {
-                    try {
-                        val exp = YouTube.explore().getOrNull()
-                        explore = exp
-                        if (exp != null) {
-                            _uiState.update { currentState ->
-                                val merged = (currentState.homePageSections + exp.sections).distinctBy { it.title }
-                                currentState.copy(
-                                    isLoading = false,
-                                    isRefreshing = false,
-                                    moodChips = exp.chips.orEmpty().distinctBy { it.title },
-                                    explorePageSections = exp.sections,
-                                    homePageSections = merged
-                                )
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to load explore albums in Stage 1")
-                    }
+                val exploreDeferred = async(Dispatchers.IO) { runCatching { YouTube.explore().getOrNull() }.getOrNull() }
+
+                home = homeDeferred.await()
+                charts = chartsDeferred.await()
+                newReleasesResult = newReleasesDeferred.await()
+                explore = exploreDeferred.await()
+
+                _uiState.update { currentState ->
+                    val mergedSections = ((home?.sections.orEmpty()) + (explore?.sections.orEmpty()) + currentState.homePageSections).distinctBy { it.title }
+                    val mergedChips = ((home?.chips.orEmpty()) + (explore?.chips.orEmpty()) + currentState.moodChips).distinctBy { it.title }
+                    currentState.copy(
+                        isLoading = false,
+                        isRefreshing = false,
+                        homePageSections = mergedSections,
+                        homePageContinuation = home?.continuation ?: currentState.homePageContinuation,
+                        explorePageSections = explore?.sections ?: currentState.explorePageSections,
+                        chartsPage = charts ?: currentState.chartsPage,
+                        newReleaseAlbums = newReleasesResult ?: currentState.newReleaseAlbums,
+                        moodChips = mergedChips
+                    )
                 }
             }
 

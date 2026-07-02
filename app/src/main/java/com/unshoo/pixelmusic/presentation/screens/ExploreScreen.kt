@@ -107,6 +107,7 @@ import com.unshoo.pixelmusic.data.model.Song
 import com.unshoo.pixelmusic.data.remote.youtube.toNativeSong
 import com.unshoo.pixelmusic.presentation.components.MiniPlayerHeight
 import com.unshoo.pixelmusic.presentation.components.SmartImage
+import com.unshoo.pixelmusic.presentation.utils.rememberDominantCardColor
 import com.unshoo.pixelmusic.presentation.components.subcomps.EnhancedSongListItem
 import com.unshoo.pixelmusic.presentation.navigation.Screen
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
@@ -1388,44 +1389,15 @@ fun SimilarArtistBentoCard(
     val artistName = artist.title
     val artistThumbnail = artist.thumbnail
 
-    // Dynamic color extraction
+    // Dynamic color extraction with in-memory LRU cache and background IO dispatch
     val isDarkTheme = isSystemInDarkTheme()
     val baseSurface = colorScheme.surfaceContainerHigh
-    var tintColor by remember(artistThumbnail, baseSurface) { mutableStateOf(baseSurface) }
-    LaunchedEffect(artistThumbnail, baseSurface, isDarkTheme) {
-        if (!artistThumbnail.isNullOrBlank()) {
-            runCatching {
-                val loader = ImageLoader(context)
-                val req = ImageRequest.Builder(context)
-                    .data(artistThumbnail).allowHardware(false).size(96).build()
-                val result = loader.execute(req)
-                if (result is SuccessResult) {
-                    val bmp = (result.drawable as? BitmapDrawable)?.bitmap
-                    if (bmp != null) {
-                        val palette = Palette.from(bmp).generate()
-                        val swatch = palette.vibrantSwatch
-                            ?: palette.lightVibrantSwatch
-                            ?: palette.darkVibrantSwatch
-                            ?: palette.mutedSwatch
-                            ?: palette.lightMutedSwatch
-                            ?: palette.darkMutedSwatch
-                            ?: palette.dominantSwatch
-                        if (swatch != null) {
-                            val blendFraction = if (isDarkTheme) 0.35f else 0.50f
-                            tintColor = androidx.compose.ui.graphics.lerp(
-                                baseSurface, Color(swatch.rgb), blendFraction
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    val animatedBgColor by animateColorAsState(
-        targetValue = tintColor,
-        animationSpec = tween(450),
-        label = "similar_artist_bg_${artistName}"
+    val animatedBgColor = rememberDominantCardColor(
+        imageUrl = artistThumbnail,
+        baseColor = baseSurface,
+        isDarkTheme = isDarkTheme,
+        darkBlendFraction = 0.35f,
+        lightBlendFraction = 0.50f
     )
 
     val cardShape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
@@ -1576,11 +1548,11 @@ private fun LibrarySwipeableCarousel(
     val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
     LaunchedEffect(pagerState, isDragged) {
         while (!isDragged && items.size > 1) {
-            kotlinx.coroutines.delay(3000L)
+            kotlinx.coroutines.delay(4500L) // Increase to 4.5s for calmer, less busy visual polish
             val nextPage = (pagerState.currentPage + 1) % items.size
             pagerState.animateScrollToPage(
                 page = nextPage,
-                animationSpec = spring(stiffness = androidx.compose.animation.core.Spring.StiffnessLow)
+                animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing)
             )
         }
     }
@@ -1681,46 +1653,16 @@ private fun LibraryCarouselCard(
         else -> null
     }
 
-    // Dynamic color: extract Palette dominant color from album art thumbnail.
-    // Blended with theme-adaptive ratio — stronger in light theme for vibrancy.
+    // Dynamic color: extract dominant color with in-memory LRU cache and background IO dispatch.
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
     val isDarkTheme = isSystemInDarkTheme()
-    var tintColor by remember(thumbnail, colorScheme.surfaceContainer) { mutableStateOf(colorScheme.surfaceContainer) }
-    LaunchedEffect(thumbnail, colorScheme.surfaceContainer, isDarkTheme) {
-        if (!thumbnail.isNullOrBlank()) {
-            runCatching {
-                val loader = ImageLoader(context)
-                val req = ImageRequest.Builder(context)
-                    .data(thumbnail).allowHardware(false).size(96).build()
-                val result = loader.execute(req)
-                if (result is SuccessResult) {
-                    val bmp = (result.drawable as? BitmapDrawable)?.bitmap
-                    if (bmp != null) {
-                        val palette = Palette.from(bmp).generate()
-                        val swatch = palette.vibrantSwatch
-                            ?: palette.lightVibrantSwatch
-                            ?: palette.darkVibrantSwatch
-                            ?: palette.mutedSwatch
-                            ?: palette.lightMutedSwatch
-                            ?: palette.darkMutedSwatch
-                            ?: palette.dominantSwatch
-                        if (swatch != null) {
-                            val blendFraction = if (isDarkTheme) 0.35f else 0.52f
-                            tintColor = androidx.compose.ui.graphics.lerp(
-                                colorScheme.surfaceContainer, Color(swatch.rgb), blendFraction
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    val animatedBgColor by animateColorAsState(
-        targetValue = tintColor,
-        animationSpec = tween(450),
-        label = "card_bg_${title}"
+    val animatedBgColor = rememberDominantCardColor(
+        imageUrl = thumbnail,
+        baseColor = colorScheme.surfaceContainer,
+        isDarkTheme = isDarkTheme,
+        darkBlendFraction = 0.35f,
+        lightBlendFraction = 0.52f
     )
     val cardShape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
 
@@ -1868,45 +1810,12 @@ fun MixedForYouCard(
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
     val isDarkTheme = isSystemInDarkTheme()
-    var tintColor by remember(cardThumbnail, colors.surfaceContainerHigh) { mutableStateOf(colors.surfaceContainerHigh) }
-    
-    LaunchedEffect(cardThumbnail, colors.surfaceContainerHigh, isDarkTheme) {
-        if (!cardThumbnail.isNullOrBlank()) {
-            runCatching {
-                val loader = ImageLoader(context)
-                val req = ImageRequest.Builder(context)
-                    .data(cardThumbnail)
-                    .allowHardware(false)
-                    .size(96)
-                    .build()
-                val result = loader.execute(req)
-                if (result is SuccessResult) {
-                    val bmp = (result.drawable as? BitmapDrawable)?.bitmap
-                    if (bmp != null) {
-                        val palette = Palette.from(bmp).generate()
-                        val swatch = palette.vibrantSwatch
-                            ?: palette.lightVibrantSwatch
-                            ?: palette.darkVibrantSwatch
-                            ?: palette.mutedSwatch
-                            ?: palette.lightMutedSwatch
-                            ?: palette.darkMutedSwatch
-                            ?: palette.dominantSwatch
-                        if (swatch != null) {
-                            val blendFraction = if (isDarkTheme) 0.28f else 0.45f
-                            tintColor = androidx.compose.ui.graphics.lerp(
-                                colors.surfaceContainerHigh, Color(swatch.rgb), blendFraction
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    val animatedBackground by animateColorAsState(
-        targetValue = tintColor,
-        animationSpec = tween(400),
-        label = "mix_card_bg_${section.title}"
+    val animatedBackground = rememberDominantCardColor(
+        imageUrl = cardThumbnail,
+        baseColor = colors.surfaceContainerHigh,
+        isDarkTheme = isDarkTheme,
+        darkBlendFraction = 0.28f,
+        lightBlendFraction = 0.45f
     )
 
     val shape = remember { AbsoluteSmoothCornerShape(24.dp, 60) }

@@ -4592,9 +4592,18 @@ class PlayerViewModel @Inject constructor(
             clearPreparingSongIfMatching()
             return
         }
-        saveYoutubeSongsToDb(songsToPlay)
-        com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
         val effectiveStartSong = songsToPlay.firstOrNull { it.id == startSong.id } ?: songsToPlay.first()
+        saveYoutubeSongsToDb(listOf(effectiveStartSong))
+        if (songsToPlay.size > 1) {
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    saveYoutubeSongsToDb(songsToPlay)
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to save YouTube songs to DB in background")
+                }
+            }
+        }
+        com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
 
         // Update dynamic shortcut for last played playlist
         if (playlistId != null && queueName != "None") {

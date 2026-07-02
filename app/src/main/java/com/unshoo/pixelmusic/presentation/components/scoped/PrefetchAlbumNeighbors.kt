@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
+import coil.imageLoader
 import coil.request.CachePolicy
 import coil.size.Size
 import com.unshoo.pixelmusic.data.model.Song
@@ -24,7 +25,7 @@ fun PrefetchAlbumNeighborsImg(
 ) {
     if (current == null) return
     val context = LocalContext.current
-    val loader = remember { coil.ImageLoader(context) }
+    val loader = context.imageLoader
     val index = remember(current, queue) { queue.indexOfFirst { it.id == current.id } }
     LaunchedEffect(index, queue) {
         if (index == -1) return@LaunchedEffect

@@ -49,6 +49,7 @@ import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.unshoo.pixelmusic.presentation.components.SmartImage
+import com.unshoo.pixelmusic.presentation.utils.rememberDominantCardColor
 import com.unshoo.pixelmusic.presentation.navigation.Screen
 import com.unshoo.pixelmusic.presentation.viewmodel.ExploreViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.ListeningPersonality
@@ -74,38 +75,13 @@ fun RecapScreen(
     val isDarkTheme = isSystemInDarkTheme()
     val view = LocalView.current
 
-    // Extract dominant palette color for background tint
-    var dominantColor by remember(state.dominantCoverUrl) { mutableStateOf(colors.surfaceContainer) }
-    LaunchedEffect(state.dominantCoverUrl) {
-        if (!state.dominantCoverUrl.isNullOrBlank()) {
-            runCatching {
-                val loader = ImageLoader(context)
-                val req = ImageRequest.Builder(context)
-                    .data(state.dominantCoverUrl)
-                    .allowHardware(false)
-                    .size(96)
-                    .build()
-                val result = loader.execute(req)
-                if (result is SuccessResult) {
-                    val bmp = (result.drawable as? BitmapDrawable)?.bitmap
-                    if (bmp != null) {
-                        val palette = Palette.from(bmp).generate()
-                        val swatch = palette.dominantSwatch
-                            ?: palette.vibrantSwatch
-                            ?: palette.mutedSwatch
-                        if (swatch != null) {
-                            dominantColor = Color(swatch.rgb)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    val animatedColor by animateColorAsState(
-        targetValue = dominantColor,
-        animationSpec = tween(600),
-        label = "recap_bg_color"
+    // Extract dominant palette color for background tint using optimized non-blocking extractor
+    val animatedColor = rememberDominantCardColor(
+        imageUrl = state.dominantCoverUrl,
+        baseColor = colors.surfaceContainer,
+        isDarkTheme = isDarkTheme,
+        darkBlendFraction = 1.0f,
+        lightBlendFraction = 1.0f
     )
 
     val backgroundBrush = remember(animatedColor, colors.background) {

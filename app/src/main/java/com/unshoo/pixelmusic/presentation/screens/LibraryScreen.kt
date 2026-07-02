@@ -1009,14 +1009,17 @@ fun LibraryScreen(
                                 selectedIndex = currentTabIndex,
                                 onClick = {
                                     scope.launch {
-                                        pagerState.animateScrollToPage(
-                                            targetPageForTabIndex(
-                                                currentPage = pagerState.currentPage,
-                                                targetTabIndex = index,
-                                                tabCount = tabTitles.size,
-                                                compactMode = isCompactNavigation
-                                            )
+                                        val targetPage = targetPageForTabIndex(
+                                            currentPage = pagerState.currentPage,
+                                            targetTabIndex = index,
+                                            tabCount = tabTitles.size,
+                                            compactMode = isCompactNavigation
                                         )
+                                        if (Math.abs(targetPage - pagerState.currentPage) > 1) {
+                                            pagerState.scrollToPage(targetPage)
+                                        } else {
+                                            pagerState.animateScrollToPage(targetPage)
+                                        }
                                     }
                                 }
                             ) {
@@ -2258,14 +2261,17 @@ fun LibraryScreen(
             currentIndex = currentTabIndex,
             onTabSelected = { index ->
                 scope.launch {
-                    pagerState.animateScrollToPage(
-                        targetPageForTabIndex(
-                            currentPage = pagerState.currentPage,
-                            targetTabIndex = index,
-                            tabCount = tabTitles.size,
-                            compactMode = isCompactNavigation
-                        )
+                    val targetPage = targetPageForTabIndex(
+                        currentPage = pagerState.currentPage,
+                        targetTabIndex = index,
+                        tabCount = tabTitles.size,
+                        compactMode = isCompactNavigation
                     )
+                    if (Math.abs(targetPage - pagerState.currentPage) > 1) {
+                        pagerState.scrollToPage(targetPage)
+                    } else {
+                        pagerState.animateScrollToPage(targetPage)
+                    }
                 }
                 showTabSwitcherSheet = false
             },
@@ -4650,12 +4656,14 @@ private fun LazyPage(
 ) {
     var hasBeenLoaded by remember { mutableStateOf(false) }
 
-    val shouldLoad = remember(pagerState.currentPage, page) {
-        abs(pagerState.currentPage - page) <= 1
+    val shouldLoad = remember(pagerState.currentPage, pagerState.targetPage, page) {
+        pagerState.currentPage == page || pagerState.targetPage == page
     }
 
     LaunchedEffect(shouldLoad) {
-        if (shouldLoad) {
+        if (shouldLoad && !hasBeenLoaded) {
+            // Calm loading transition: wait ~180ms so fast tab transitions/swiping animations finish cleanly
+            kotlinx.coroutines.delay(180L)
             hasBeenLoaded = true
         }
     }
@@ -4667,11 +4675,7 @@ private fun LazyPage(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(
-                color = MaterialTheme.colorScheme.primary,
-                strokeWidth = 3.dp,
-                modifier = Modifier.size(36.dp)
-            )
+            M3MicroAnimatedLoader(color = MaterialTheme.colorScheme.primary)
         }
     }
 }

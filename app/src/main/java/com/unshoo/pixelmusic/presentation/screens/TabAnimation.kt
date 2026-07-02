@@ -64,33 +64,19 @@ fun TabAnimation(
         if (!hasAnimatedSelectionChange) {
             hasAnimatedSelectionChange = true
             scale.snapTo(1f)
+            offsetX.snapTo(0f)
             return@LaunchedEffect
         }
 
         if (isSelected) {
             launch {
-                scale.animateTo(1.08f, animationSpec = springSpec)
-                scale.animateTo(1f, animationSpec = springSpec)
+                scale.animateTo(1.05f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium))
+                scale.animateTo(1f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
             }
         } else {
-            scale.snapTo(1f)
+            scale.animateTo(1f, animationSpec = tween(150))
         }
-
-        if (!isSelected) {
-            val distance = index - selectedIndex
-            if (kotlin.math.abs(distance) == 1) {
-                val direction = if (distance > 0) 1 else -1
-                val offsetValue = 14f * direction
-                launch {
-                    offsetX.animateTo(offsetValue, animationSpec = springSpec)
-                    offsetX.animateTo(0f, animationSpec = springSpec)
-                }
-            } else {
-                offsetX.snapTo(0f)
-            }
-        } else {
-            offsetX.snapTo(0f)
-        }
+        offsetX.snapTo(0f)
     }
 
     Tab(

@@ -111,20 +111,6 @@ fun LibrarySongsTab(
     // Check if list is effectively empty (based on Paging state)
     // val isListEmpty = songs.itemCount == 0 && songs.loadState.refresh is LoadState.NotLoading
     
-    // Calculate current song index for button visibility
-    val currentSongListIndex = remember(songs.itemSnapshotList, currentSongId) {
-        if (currentSongId == null) -1
-        else {
-            val snapshot = songs.itemSnapshotList
-            val indexInSnapshot = snapshot.items.indexOfFirst { it.id == currentSongId }
-            if (indexInSnapshot != -1) {
-                indexInSnapshot + snapshot.placeholdersBefore
-            } else {
-                -1
-            }
-        }
-    }
-
     // Scroll Handler from ViewModel
     LaunchedEffect(Unit) {
         playerViewModel.scrollToIndexEvent.collect { index ->
@@ -174,37 +160,27 @@ fun LibrarySongsTab(
         listState.scrollToItem(0)
         pendingSongSortScrollReset = false
     }
-    
-    // Visibility Logic:
-    // If the song is NOT in the current snapshot (index == -1), we assume it's unloaded, so SHOW the button.
-    // If the song IS in the snapshot (index != -1), we check if it's visible on screen.
-    // - If visible -> Hide button
-    // - If not visible -> Show button
 
-    LaunchedEffect(currentSongListIndex, songs.itemCount, isLoading, listState, currentSongId) {
-        // If list is empty or loading, hide button
-        if (songs.itemCount == 0 || isLoading) {
+    LaunchedEffect(songs.itemCount, isLoading, listState, currentSongId) {
+        if (songs.itemCount == 0 || isLoading || currentSongId == null) {
             visibilityCallback(false)
             return@LaunchedEffect
         }
         
-        // If song is not loaded in current Paging snapshot, we ALWAYS show the button
-        // because we don't know if it's visible or not, so we assume it's reachable via the button (which triggers DB lookup)
-        if (currentSongListIndex == -1) {
-             // Only show if we actually have a current song
-             visibilityCallback(currentSongId != null)
-             return@LaunchedEffect
-        }
-
-        // If song IS loaded, check visibility using layout info
         snapshotFlow {
-            val layoutInfo = listState.layoutInfo
-            val visibleItems = layoutInfo.visibleItemsInfo
+            val visibleItems = listState.layoutInfo.visibleItemsInfo
             if (visibleItems.isEmpty()) {
                 false
             } else {
-                // Consider it visible if it's within the range of visible indices
-                currentSongListIndex in visibleItems.first().index..visibleItems.last().index
+                var foundVisible = false
+                for (item in visibleItems) {
+                    val song = songs.peek(item.index)
+                    if (song?.id == currentSongId) {
+                        foundVisible = true
+                        break
+                    }
+                }
+                foundVisible
             }
         }
             .distinctUntilChanged()
