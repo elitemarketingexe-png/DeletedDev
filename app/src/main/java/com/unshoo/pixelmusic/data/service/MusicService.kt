@@ -1252,6 +1252,11 @@ class MusicService : MediaLibraryService() {
         listeningStatsTracker.onPlayStateChanged(false, player.currentPosition.coerceAtLeast(0L))
     }
 
+    // Prevent infinite re-resolve loops on permanent stream failures.
+    private var streamRecoveryAttempts = 0
+    private var lastStreamRecoveryMediaId: String? = null
+    private var lastStreamRecoveryAtMs = 0L
+
     private val playerListener = object : Player.Listener {
         override fun onVolumeChanged(volume: Float) {
             if (engine.isTransitionRunning()) return
@@ -1494,7 +1499,107 @@ class MusicService : MediaLibraryService() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            Timber.tag(TAG).e(error, "Error en el reproductor: ")
+            Timber.tag(TAG).e(error, "Player error code=%s message=%s", error.errorCode, error.message)
+
+            val player = mediaSession?.player ?: engine.masterPlayer
+            val currentItem = player.currentMediaItem
+            val currentUri = currentItem?.localConfiguration?.uri?.toString()
+            val isYoutube = currentUri?.startsWith("youtube://") == true ||
+                currentUri?.contains("googlevideo.com") == true ||
+                currentItem?.mediaId?.startsWith("youtube_") == true
+
+            // Invalidate any stale resolved stream so the next attempt re-fetches a fresh URL.
+            if (!currentUri.isNullOrBlank()) {
+                engine.invalidateResolvedUri(currentUri)
+                if (currentUri.startsWith("youtube://")) {
+                    val videoId = currentUri.removePrefix("youtube://")
+                    listOf(
+                        "${videoId}_low",
+                        "${videoId}_high",
+                    ).forEach { key ->
+                        com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.remove(key)
+                    }
+                    // Also clear quality-specific keys present in the snapshot.
+                    com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache
+                        .snapshot()
+                        .keys
+                        .filter { it.startsWith("${videoId}_") }
+                        .forEach { com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.remove(it) }
+                }
+            }
+
+            val isNetworkish = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
+                error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
+                error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ||
+                error.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED ||
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+                error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT ||
+                (error.cause is java.io.IOException)
+
+            if (isYoutube || isNetworkish) {
+                val mediaId = currentItem?.mediaId
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (mediaId != null && mediaId == lastStreamRecoveryMediaId && now - lastStreamRecoveryAtMs < 15_000L) {
+                    streamRecoveryAttempts += 1
+                } else {
+                    streamRecoveryAttempts = 0
+                    lastStreamRecoveryMediaId = mediaId
+                }
+                lastStreamRecoveryAtMs = now
+
+                // Recover in-place: re-resolve current item and retry play without requiring
+                // the user to force-stop the app from Recents.
+                serviceScope.launch {
+                    try {
+                        if (streamRecoveryAttempts >= 2) {
+                            Timber.tag(TAG).w("Stream recovery exhausted for %s; skipping", mediaId)
+                            withContext(Dispatchers.Main.immediate) {
+                                streamRecoveryAttempts = 0
+                                if (player.hasNextMediaItem()) {
+                                    player.seekToNextMediaItem()
+                                    player.prepare()
+                                    player.play()
+                                }
+                            }
+                            return@launch
+                        }
+
+                        val position = player.currentPosition.coerceAtLeast(0L)
+                        val item = currentItem ?: return@launch
+                        val resolved = engine.preResolveForPlayback(item)
+                        withContext(Dispatchers.Main.immediate) {
+                            val master = engine.masterPlayer
+                            val index = master.currentMediaItemIndex
+                            if (index != androidx.media3.common.C.INDEX_UNSET) {
+                                master.replaceMediaItem(index, resolved)
+                            } else {
+                                master.setMediaItem(resolved, position)
+                            }
+                            master.prepare()
+                            master.seekTo(position)
+                            master.playWhenReady = true
+                            master.play()
+                        }
+                        Timber.tag(TAG).i("Recovered from player error by re-resolving stream")
+                    } catch (recover: Exception) {
+                        Timber.tag(TAG).e(recover, "In-place stream recovery failed; skipping to next")
+                        withContext(Dispatchers.Main.immediate) {
+                            try {
+                                streamRecoveryAttempts = 0
+                                if (player.hasNextMediaItem()) {
+                                    player.seekToNextMediaItem()
+                                    player.prepare()
+                                    player.play()
+                                }
+                            } catch (skipErr: Exception) {
+                                Timber.tag(TAG).e(skipErr, "Skip-after-error also failed")
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

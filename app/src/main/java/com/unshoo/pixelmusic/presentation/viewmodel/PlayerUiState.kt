@@ -56,6 +56,7 @@ data class PlayerUiState(
     val searchQuery: String = "",
     val isSyncingLibrary: Boolean = false,
     val selectedSearchFilter: SearchFilterType = SearchFilterType.ALL,
+    val isSearching: Boolean = false,
     val currentStorageFilter: com.unshoo.pixelmusic.data.model.StorageFilter = com.unshoo.pixelmusic.data.model.StorageFilter.ALL,
     val hideLocalMedia: Boolean = false,
     val showQueueItemUndoBar: Boolean = false,

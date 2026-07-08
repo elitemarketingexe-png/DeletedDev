@@ -56,6 +56,7 @@ class ExploreViewModel @Inject constructor(
     private val userPreferencesRepository: com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository,
     private val playlistPreferencesRepository: PlaylistPreferencesRepository,
     private val musicDao: com.unshoo.pixelmusic.data.database.MusicDao,
+    private val listeningStatsTracker: ListeningStatsTracker,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -157,8 +158,16 @@ class ExploreViewModel @Inject constructor(
         }
         try {
             // 1. Get history and candidateArtistId immediately (fast database/prefs calls)
+            // Prefer merged local + YT Music history (kept hot by ListeningStatsTracker).
+            // Fall back to disk-only local history if the tracker has not initialized yet.
             val history = withContext(Dispatchers.IO) {
-                playbackStatsRepository.loadPlaybackHistory(limit = 30)
+                listeningStatsTracker.refreshMergedYoutubeHistory()
+                val merged = listeningStatsTracker.playbackHistory.value
+                if (merged.isNotEmpty()) {
+                    merged.take(30)
+                } else {
+                    playbackStatsRepository.loadPlaybackHistory(limit = 30)
+                }
             }
             val candidateArtistId = withContext(Dispatchers.IO) {
                 userPreferencesRepository.subscribedArtistIdsFlow.first().firstOrNull()
@@ -528,7 +537,9 @@ class ExploreViewModel @Inject constructor(
                 _uiState.update { it.copy(isContinuationLoading = true) }
                 try {
                     val recentSongs = withContext(Dispatchers.IO) {
-                        playbackStatsRepository.loadPlaybackHistory(limit = 20)
+                        val merged = listeningStatsTracker.playbackHistory.value
+                        if (merged.isNotEmpty()) merged.take(20)
+                        else playbackStatsRepository.loadPlaybackHistory(limit = 20)
                     }
                     val dbArtists = withContext(Dispatchers.IO) {
                         try {

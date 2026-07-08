@@ -168,10 +168,12 @@ fun RecentlyPlayedScreen(
     }.collectAsStateWithLifecycle(initialValue = recentSongsInitialValue)
 
     val localRecentlyPlayedSongs = remember(playbackHistory, recentlyPlayedSourceSongs, selectedRange) {
-        val sourceSongs = recentlyPlayedSourceSongs ?: return@remember emptyList()
+        if (recentlyPlayedSourceSongs == null && playbackHistory.isEmpty()) {
+            return@remember emptyList()
+        }
         mapRecentlyPlayedSongs(
             playbackHistory = playbackHistory,
-            songs = sourceSongs,
+            songs = recentlyPlayedSourceSongs.orEmpty(),
             range = selectedRange,
             maxItems = Int.MAX_VALUE
         )

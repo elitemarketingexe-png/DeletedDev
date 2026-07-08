@@ -227,27 +227,31 @@ fun HomeScreen(
             .map<List<Song>, List<Song>?> { it }
     }.collectAsStateWithLifecycle(initialValue = recentlyPlayedSourceSongsInitialValue)
     val latestRecentlyPlayedSongs = remember(playbackHistory, recentlyPlayedSourceSongs) {
-        val sourceSongs = recentlyPlayedSourceSongs ?: return@remember emptyList()
+        // Map even when DB has not hydrated YT songs yet — history entries carry title/artist/
+        // thumbnail for optimistic + YT Music merged items (SpatialFlow-style live recents).
+        if (recentlyPlayedSourceSongs == null && playbackHistory.isEmpty()) {
+            return@remember emptyList()
+        }
         mapRecentlyPlayedSongs(
             playbackHistory = playbackHistory,
-            songs = sourceSongs,
+            songs = recentlyPlayedSourceSongs.orEmpty(),
             maxItems = 64
         )
     }
-    // Keep the visible Home snapshot stable and only refresh it once the screen is off-screen.
+    // SpatialFlow parity: Recently Played must reflect the currently playing song immediately.
+    // Keep a stable list identity for animations, but always adopt the latest mapped history
+    // while Home is visible (do not wait for ON_STOP).
     var recentlyPlayedSongs by rememberSaveable { mutableStateOf(latestRecentlyPlayedSongs) }
     val latestRecentlyPlayedSongsState = rememberUpdatedState(latestRecentlyPlayedSongs)
 
-    LaunchedEffect(latestRecentlyPlayedSongs, lifecycleOwner) {
-        val isHomeVisible = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-        if (recentlyPlayedSongs.isEmpty() || !isHomeVisible) {
-            recentlyPlayedSongs = latestRecentlyPlayedSongs
-        }
+    LaunchedEffect(latestRecentlyPlayedSongs) {
+        // Always sync when history changes — including while Home is on screen.
+        recentlyPlayedSongs = latestRecentlyPlayedSongs
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
+            if (event == Lifecycle.Event.ON_START || event == Lifecycle.Event.ON_RESUME) {
                 recentlyPlayedSongs = latestRecentlyPlayedSongsState.value
             }
         }

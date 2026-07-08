@@ -72,6 +72,74 @@ class ListeningStatsTracker @Inject constructor(
             _playbackHistory.value = playbackStatsRepository.loadPlaybackHistory(
                 limit = MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS
             )
+            // Merge authenticated YouTube Music history on top of local history so
+            // Recently Played shows local songs + YT Music synced history together.
+            refreshMergedYoutubeHistory()
+        }
+    }
+
+    /**
+     * Pull FEmusic_history from YouTube Music (when logged in) and merge with local
+     * playback history. Local entries win on id collisions so offline plays stay accurate.
+     */
+    @Volatile private var lastMergedHistoryAtMs = 0L
+    @Volatile private var mergeInFlight = false
+
+    fun refreshMergedYoutubeHistory() {
+        val now = System.currentTimeMillis()
+        // Debounce: Explore refresh + login + init can all fire; avoid spamming FEmusic_history.
+        if (mergeInFlight) return
+        if (now - lastMergedHistoryAtMs < 30_000L && _playbackHistory.value.isNotEmpty()) return
+        val activeScope = scope ?: persistenceScope
+        mergeInFlight = true
+        activeScope.launch(Dispatchers.IO) {
+            try {
+            runCatching {
+                val ytPage = unshoo.ianshulyadav.pixelmusic.innertube.YouTube.musicHistory().getOrNull()
+                    ?: return@runCatching
+                val now = System.currentTimeMillis()
+                val ytEntries = ytPage.sections
+                    .orEmpty()
+                    .asSequence()
+                    .flatMap { section -> section.songs.asSequence() }
+                    .mapIndexedNotNull { index, songItem ->
+                        val videoId = songItem.id.takeIf { it.isNotBlank() } ?: return@mapIndexedNotNull null
+                        val artistName = songItem.artists
+                            .map { it.name }
+                            .filter { it.isNotBlank() }
+                            .joinToString(", ")
+                            .ifBlank { "Unknown Artist" }
+                        PlaybackStatsRepository.PlaybackHistoryEntry(
+                            songId = "youtube_$videoId",
+                            // Decreasing timestamps preserve YT history order in our sorted list.
+                            timestamp = now - index,
+                            title = songItem.title,
+                            artist = artistName,
+                            thumbnail = songItem.thumbnail
+                        )
+                    }
+                    .distinctBy { it.songId }
+                    .toList()
+                if (ytEntries.isEmpty()) return@runCatching
+
+                _playbackHistory.update { local ->
+                    val localIds = local.map { it.songId }.toHashSet()
+                    // Prefer local first (more accurate timestamps), then append remote-only items.
+                    val remoteOnly = ytEntries.filter { it.songId !in localIds }
+                    (local + remoteOnly).take(MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS)
+                }
+                Timber.d(
+                    "Merged YT Music history: remote=%d total=%d",
+                    ytEntries.size,
+                    _playbackHistory.value.size
+                )
+                lastMergedHistoryAtMs = System.currentTimeMillis()
+            }.onFailure {
+                Timber.w(it, "Failed to merge YouTube Music listening history")
+            }
+            } finally {
+                mergeInFlight = false
+            }
         }
     }
 
@@ -166,6 +234,23 @@ class ListeningStatsTracker @Inject constructor(
             genre = genre,
             album = album
         )
+
+        // Instant local history head so Recently Played matches the current song immediately
+        // (before the full session finalize / YT remote sync completes).
+        if (!title.isNullOrBlank()) {
+            val optimistic = PlaybackStatsRepository.PlaybackHistoryEntry(
+                songId = safeSongId,
+                timestamp = nowEpoch,
+                title = title,
+                artist = artist,
+                thumbnail = thumbnail
+            )
+            _playbackHistory.update { current ->
+                val withoutDup = current.filterNot { it.songId == safeSongId }
+                (listOf(optimistic) + withoutDup).take(MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS)
+            }
+        }
+
         persistenceScope.launch(Dispatchers.IO) {
             runCatching {
                 val ytId = resolveYtId(safeSongId)
@@ -177,24 +262,99 @@ class ListeningStatsTracker @Inject constructor(
                     isPlaybackStartReported = false
                     isWatchCompleted = false
 
-                    // Wait up to 1.5 seconds for Stream extraction tracking URL if not cached
-                    var trackingUrl: String? = null
-                    repeat(15) {
-                        trackingUrl = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[ytId]
-                        if (trackingUrl != null) return@repeat
-                        kotlinx.coroutines.delay(100L)
+                    // SpatialFlow parity: resolve tracking URLs quickly, then:
+                    //  1) send stats/playback start ping (with auth headers via sendTelemetryPing)
+                    //  2) call YouTube.registerPlayback when we have a real tracking base URL
+                    // Both are needed for the currently playing song to appear in YT Music history.
+                    var trackingUrl: String? =
+                        com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[ytId]
+                    var watchtimeUrl: String? =
+                        com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.watchtimeTrackingCache[ytId]
+                    if (trackingUrl == null) {
+                        // Wait up to ~1.2s for stream resolve to populate tracking cache.
+                        repeat(12) {
+                            kotlinx.coroutines.delay(100L)
+                            trackingUrl =
+                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[ytId]
+                            watchtimeUrl =
+                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.watchtimeTrackingCache[ytId]
+                            if (trackingUrl != null) return@repeat
+                        }
                     }
 
-                    val finalTrackingUrl = trackingUrl?.replace("https://s.youtube.com", "https://music.youtube.com")
-                        ?: "https://music.youtube.com/api/stats/playback?ns=yt&el=detailpage&docid=$ytId"
-                    
+                    // If still missing, fetch a lightweight WEB_REMIX player response just for tracking URLs
+                    // (same fallback SpatialFlow / registerYoutubePlaybackHistory uses).
+                    if (trackingUrl.isNullOrBlank()) {
+                        runCatching {
+                            val signatureTimestamp = unshoo.ianshulyadav.pixelmusic.innertube.NewPipeUtils
+                                .getSignatureTimestamp(ytId)
+                                .getOrNull()
+                            val playerRes = unshoo.ianshulyadav.pixelmusic.innertube.YouTube.player(
+                                videoId = ytId,
+                                playlistId = null,
+                                client = unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.WEB_REMIX,
+                                signatureTimestamp = signatureTimestamp,
+                                setLogin = true
+                            ).getOrNull()
+                            trackingUrl = playerRes?.playbackTracking?.videostatsPlaybackUrl?.baseUrl
+                            watchtimeUrl = playerRes?.playbackTracking?.videostatsWatchtimeUrl?.baseUrl
+                            if (!trackingUrl.isNullOrBlank()) {
+                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
+                                    .playbackTrackingCache[ytId] = trackingUrl!!
+                            }
+                            if (!watchtimeUrl.isNullOrBlank()) {
+                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
+                                    .watchtimeTrackingCache[ytId] = watchtimeUrl!!
+                            }
+                        }
+                    }
+
+                    val finalTrackingUrl = (trackingUrl ?: "")
+                        .replace("https://s.youtube.com", "https://music.youtube.com")
+                        .ifBlank {
+                            "https://music.youtube.com/api/stats/playback?ns=yt&el=detailpage&docid=$ytId"
+                        }
+
                     val separator = if (finalTrackingUrl.contains("?")) "&" else "?"
                     val rtSec = (System.currentTimeMillis() - telemetrySessionStartTimeMs) / 1000
-                    val startUrl = "$finalTrackingUrl${separator}ver=2&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER&cpn=$cpn&rt=$rtSec"
-                    
+                    val startUrl =
+                        "${finalTrackingUrl}${separator}ver=2&c=WEB_REMIX&cver=1.20260531.05.00" +
+                            "&cplayer=UNIPLAYER&cpn=$cpn&rt=$rtSec&docid=$ytId"
+
                     unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(startUrl)
                     isPlaybackStartReported = true
+
+                    // Full registerPlayback path (InnerTube-authenticated) when we have a real tracking URL.
+                    if (!trackingUrl.isNullOrBlank()) {
+                        runCatching {
+                            unshoo.ianshulyadav.pixelmusic.innertube.YouTube.registerPlayback(
+                                playlistId = null,
+                                playbackTracking = trackingUrl!!,
+                                videoId = ytId
+                            )
+                        }.onSuccess {
+                            timber.log.Timber.d("YT history registerPlayback OK for %s", ytId)
+                        }.onFailure {
+                            timber.log.Timber.w(it, "YT history registerPlayback failed for %s", ytId)
+                        }
+                    }
+
+                    // Immediate first watchtime heartbeat at t≈1s (SpatialFlow does this at 1s).
+                    kotlinx.coroutines.delay(1_000L)
+                    if (telemetryCpn == cpn && currentSession?.songId == safeSongId) {
+                        sendWatchtimePingInternal(
+                            videoId = ytId,
+                            st = 0,
+                            et = 1,
+                            cpn = cpn,
+                            sessionStartTimeMs = telemetrySessionStartTimeMs,
+                            isPaused = false
+                        )
+                        telemetryLastReportedTimeMs = 1_000L
+                    }
                 }
+            }.onFailure {
+                timber.log.Timber.w(it, "YT telemetry start failed")
             }
         }
         if (pendingVoluntarySongId == safeSongId) {
@@ -634,7 +794,7 @@ class ListeningStatsTracker @Inject constructor(
     }
 
     companion object {
-        private val MIN_SESSION_LISTEN_MS = 15000L
+        private val MIN_SESSION_LISTEN_MS = 2_000L
         private const val MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS = 500
         /** Number of plays before a YouTube song is auto-downloaded for offline use. */
         private const val AUTO_CACHE_PLAY_COUNT_THRESHOLD = 3

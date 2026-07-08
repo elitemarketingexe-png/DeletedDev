@@ -125,11 +125,18 @@ object QueuePreloadManager {
 
                 var streamUrl: String? = null
                 try {
+                    // Prefetch at the user's selected quality (HIGH → highest stream first).
                     streamUrl = YoutubeHelper.getSongPlayerUrl(ctx, song, allowLocal = false)
+                    if (!streamUrl.isNullOrBlank() && streamUrl.startsWith("http")) {
+                        val ytUri = "youtube://$videoId"
+                        engineRef?.resolvedUriCache?.put(ytUri, android.net.Uri.parse(streamUrl))
+                        engineRef?.preCacheFirstChunk(streamUrl)
+                    }
                 } catch (_: Exception) {
                 }
 
                 if (!streamUrl.isNullOrBlank() && streamUrl.startsWith("http") && i <= currentIndex + 1) {
+                    // Smaller first-chunk on preload; DualPlayerEngine also pre-caches on resolve.
                     prefetchAudioBytes(ctx, videoId, streamUrl)
                 }
 
@@ -187,7 +194,7 @@ object QueuePreloadManager {
             val dataSpec = DataSpec.Builder()
                 .setUri(uri)
                 .setPosition(0)
-                .setLength(512 * 1024)
+                .setLength(256 * 1024)
                 .build()
 
             val parentJob = kotlin.coroutines.coroutineContext[Job]

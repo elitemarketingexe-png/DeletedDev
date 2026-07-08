@@ -73,6 +73,9 @@ class SearchStateHolder @Inject constructor(
     )
     private val latestSearchRequestId = AtomicLong(0L)
 
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching = _isSearching.asStateFlow()
+
     private var scope: CoroutineScope? = null
     private var searchJob: Job? = null
 
@@ -113,20 +116,24 @@ class SearchStateHolder @Inject constructor(
                     val query = request.query
                     if (query.isBlank()) {
                         _searchResults.value = persistentListOf()
+                        _isSearching.value = false
                         return@collectLatest
                     }
 
+                    _isSearching.value = true
                     val source = userPreferencesRepository.searchSourceFlow.first()
                     if (source == SearchSource.LOCAL) {
                         try {
                             val results = musicRepository.searchAllOnce(query, _selectedSearchFilter.value)
                             if (request.requestId == latestSearchRequestId.get()) {
                                 _searchResults.value = results.toImmutableList()
+                                _isSearching.value = false
                             }
                         } catch (_: CancellationException) {
                         } catch (e: Exception) {
                             if (request.requestId == latestSearchRequestId.get()) {
                                 Timber.e(e, "Local search error: $query")
+                                _isSearching.value = false
                             }
                         }
                         return@collectLatest
@@ -135,6 +142,7 @@ class SearchStateHolder @Inject constructor(
                     val cached = searchResultCache.get(query) ?: getLongestPrefixMatch(query)
                     if (cached != null) {
                         _searchResults.value = cached
+                        _isSearching.value = false
                     }
 
                     try {
@@ -149,6 +157,7 @@ class SearchStateHolder @Inject constructor(
                         if (request.requestId == latestSearchRequestId.get()) {
                             val immutable = results.toImmutableList()
                             _searchResults.value = immutable
+                            _isSearching.value = false
                             searchResultCache.put(query, immutable)
 
                             scope?.launch(Dispatchers.IO) {
@@ -174,6 +183,7 @@ class SearchStateHolder @Inject constructor(
                     } catch (e: Exception) {
                         if (request.requestId == latestSearchRequestId.get()) {
                             Timber.e(e, "YouTube search error: $query")
+                            _isSearching.value = false
                         }
                     }
                 }

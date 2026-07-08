@@ -20,7 +20,8 @@ import javax.inject.Inject
 class AuthViewModel @Inject constructor(
     private val datastoreRepository: DatastoreRepository,
     private val syncManager: SyncManager,
-    private val youTubeLibrarySyncManager: YouTubeLibrarySyncManager
+    private val youTubeLibrarySyncManager: YouTubeLibrarySyncManager,
+    private val listeningStatsTracker: com.unshoo.pixelmusic.presentation.viewmodel.ListeningStatsTracker
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SettingsState())
 
@@ -36,6 +37,9 @@ class AuthViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoggedIn = true) }
                 _eventsChannel.emit(ScreenEvent.Out.LoginCompleted)
                 launch(kotlinx.coroutines.Dispatchers.IO) { youTubeLibrarySyncManager.syncNow(force = true) }
+                // Immediately pull YT Music listening history so Recently Played shows
+                // local songs + authenticated YT history after login.
+                listeningStatsTracker.refreshMergedYoutubeHistory()
                 syncManager.incrementalSync()
             }
         }

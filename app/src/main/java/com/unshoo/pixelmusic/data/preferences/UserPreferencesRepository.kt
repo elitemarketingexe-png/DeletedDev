@@ -1017,10 +1017,10 @@ constructor(
             preferences[PreferencesKeys.STREAMING_AUDIO_QUALITY_WIFI] = quality.name
         }
     }
-    /** Audio quality when on mobile data. Default: HIGH. */
+    /** Audio quality when on mobile data. Default: LOW (fast start on weak networks). */
     val streamingAudioQualityMobileFlow: Flow<StreamingAudioQuality> =
         dataStore.data.map { preferences ->
-            StreamingAudioQuality.fromName(
+            StreamingAudioQuality.fromNameOrLow(
                 preferences[PreferencesKeys.STREAMING_AUDIO_QUALITY_MOBILE]
             )
         }

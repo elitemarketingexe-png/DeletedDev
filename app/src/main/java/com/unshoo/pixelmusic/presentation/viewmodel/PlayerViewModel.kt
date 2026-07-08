@@ -3043,27 +3043,37 @@ class PlayerViewModel @Inject constructor(
                     }
                     
                     if (stablePlayerState.value.currentSong?.id == first.id) {
-                        withContext(Dispatchers.Main) {
-                            try {
+                        try {
+                            val newSongs = fullQueue.drop(1)
+                            val mediaItems = newSongs.map { MediaItemBuilder.build(it) }.toMutableList()
+                            if (mediaItems.isNotEmpty()) {
+                                runCatching {
+                                    mediaItems[0] = dualPlayerEngine.preResolveForPlayback(mediaItems[0])
+                                }
+                            }
+                            withContext(Dispatchers.Main) {
                                 val player = dualPlayerEngine.masterPlayer
-                                val newSongs = fullQueue.drop(1)
-                                val mediaItems = newSongs.map { MediaItemBuilder.build(it) }
-                                
                                 val totalCount = player.mediaItemCount
                                 if (totalCount > 1) {
                                     player.removeMediaItems(1, totalCount)
                                 }
                                 player.addMediaItems(mediaItems)
-                                
-                                _playerUiState.update { 
+                                _playerUiState.update {
                                     it.copy(
                                         currentPlaybackQueue = fullQueue.toPlaybackQueue(),
                                         currentQueueSourceName = "Quick Picks Radio"
                                     )
                                 }
-                            } catch (e: Exception) {
-                                Timber.e(e, "Error dynamically updating ExoPlayer queue for quick picks radio")
                             }
+                            if (mediaItems.size > 1) {
+                                launch(Dispatchers.IO) {
+                                    mediaItems.drop(1).take(3).forEach { item ->
+                                        runCatching { dualPlayerEngine.preResolveForPlayback(item) }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "Error dynamically updating ExoPlayer queue for quick picks radio")
                         }
                     }
                     
@@ -3136,27 +3146,40 @@ class PlayerViewModel @Inject constructor(
                     }
                     
                     if (stablePlayerState.value.currentSong?.id == song.id) {
-                        withContext(Dispatchers.Main) {
-                            try {
+                        try {
+                            val newSongs = fullQueue.drop(1)
+                            val mediaItems = newSongs.map { MediaItemBuilder.build(it) }.toMutableList()
+                            // Resolve only the immediate next track (LOW) so auto-advance
+                            // never hits an unresolved youtube:// URI on weak networks.
+                            if (mediaItems.isNotEmpty()) {
+                                runCatching {
+                                    mediaItems[0] = dualPlayerEngine.preResolveForPlayback(mediaItems[0])
+                                }
+                            }
+                            withContext(Dispatchers.Main) {
                                 val player = dualPlayerEngine.masterPlayer
-                                val newSongs = fullQueue.drop(1)
-                                val mediaItems = newSongs.map { MediaItemBuilder.build(it) }
-                                
                                 val totalCount = player.mediaItemCount
                                 if (totalCount > 1) {
                                     player.removeMediaItems(1, totalCount)
                                 }
                                 player.addMediaItems(mediaItems)
-                                
-                                _playerUiState.update { 
+                                _playerUiState.update {
                                     it.copy(
                                         currentPlaybackQueue = fullQueue.toPlaybackQueue(),
                                         currentQueueSourceName = queueName
                                     )
                                 }
-                            } catch (e: Exception) {
-                                Timber.e(e, "ArchiveTune Queue Builder: Error dynamically updating ExoPlayer queue")
                             }
+                            // Warm the rest of the mix off the critical path.
+                            if (mediaItems.size > 1) {
+                                launch(Dispatchers.IO) {
+                                    mediaItems.drop(1).take(3).forEach { item ->
+                                        runCatching { dualPlayerEngine.preResolveForPlayback(item) }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "ArchiveTune Queue Builder: Error dynamically updating ExoPlayer queue")
                         }
                     }
                     
@@ -3202,10 +3225,8 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun playLoadedControllerItem(controller: MediaController, targetIndex: Int, targetSong: Song? = null) {
+        // Optimistic UI first so the miniplayer/card respond instantly.
         runOnMainImmediate {
-            // Optimistically update the canonical UI state. Media3 may deliver the transition
-            // callback later (or not at all if rapid seeks collapse), which made the metadata card
-            // stay on the previous song while the carousel/audio moved ahead.
             targetSong?.let { song ->
                 playbackStateHolder.setCurrentPosition(0L)
                 playbackStateHolder.updateStablePlayerState { state ->
@@ -3222,32 +3243,111 @@ class PlayerViewModel @Inject constructor(
                 resetLyricsSearchState()
                 loadLyricsForCurrentSong()
             }
+        }
 
-            val shouldSeekToStart =
-                controller.currentMediaItemIndex != targetIndex ||
-                    controller.playbackState == Player.STATE_ENDED
+        // FREEZE FIX: queue reuse used to seekTo() a still-unresolved youtube:// URI.
+        // ResolvingDataSource no longer runBlocks, so that left the player stuck until
+        // force-stop. Resolve the target item (LOW stream) before seek/prepare/play.
+        viewModelScope.launch {
+            try {
+                val targetItem = withContext(Dispatchers.Main.immediate) {
+                    runCatching {
+                        if (targetIndex in 0 until controller.mediaItemCount) {
+                            controller.getMediaItemAt(targetIndex)
+                        } else null
+                    }.getOrNull()
+                }
 
-            if (shouldSeekToStart) {
-                controller.seekTo(targetIndex, 0L)
-            }
-            if (controller.playbackState == Player.STATE_IDLE && controller.mediaItemCount > 0) {
-                controller.prepare()
-            }
-            controller.play()
+                val scheme = targetItem?.localConfiguration?.uri?.scheme
+                val needsResolve = scheme == "youtube" || scheme == "telegram" ||
+                    scheme == "gdrive" || scheme == "netease" || scheme == "qqmusic" ||
+                    scheme == "navidrome" || scheme == "jellyfin"
 
-            viewModelScope.launch {
-                delay(2_500L)
-                runOnMainImmediate {
+                val resolvedItem = if (targetItem != null && needsResolve) {
+                    withContext(Dispatchers.IO) {
+                        kotlinx.coroutines.withTimeoutOrNull(5_000L) {
+                            dualPlayerEngine.preResolveForPlayback(targetItem)
+                        } ?: dualPlayerEngine.preResolveForPlayback(targetItem)
+                    }
+                } else {
+                    targetItem
+                }
+
+                withContext(Dispatchers.Main.immediate) {
+                    if (resolvedItem != null && needsResolve &&
+                        targetIndex in 0 until controller.mediaItemCount
+                    ) {
+                        // Prefer engine replace so master player sees the http(s) URI.
+                        runCatching {
+                            val master = dualPlayerEngine.masterPlayer
+                            if (targetIndex in 0 until master.mediaItemCount) {
+                                master.replaceMediaItem(targetIndex, resolvedItem)
+                            }
+                        }
+                        runCatching {
+                            if (targetIndex in 0 until controller.mediaItemCount) {
+                                // MediaController may not expose replaceMediaItem on all versions;
+                                // engine replace above is authoritative.
+                            }
+                        }
+                    }
+
+                    val shouldSeekToStart =
+                        controller.currentMediaItemIndex != targetIndex ||
+                            controller.playbackState == Player.STATE_ENDED
+
+                    if (shouldSeekToStart) {
+                        controller.seekTo(targetIndex, 0L)
+                    }
+                    if (controller.playbackState == Player.STATE_IDLE && controller.mediaItemCount > 0) {
+                        controller.prepare()
+                    }
+                    controller.playWhenReady = true
+                    controller.play()
+                    controller.currentMediaItem?.let { registerYoutubePlaybackHistoryIfNeeded(it) }
+                }
+
+                // Stuck recovery: re-resolve LOW stream once if still not progressing.
+                delay(2_000L)
+                withContext(Dispatchers.Main.immediate) {
                     val stuckAtStart = controller.currentMediaItemIndex == targetIndex &&
                         controller.playWhenReady &&
-                        controller.currentPosition < 1_000L &&
-                        (controller.playbackState == Player.STATE_BUFFERING || controller.playbackState == Player.STATE_IDLE)
+                        controller.currentPosition < 800L &&
+                        (controller.playbackState == Player.STATE_BUFFERING ||
+                            controller.playbackState == Player.STATE_IDLE ||
+                            controller.playbackState == Player.STATE_ENDED)
                     if (stuckAtStart) {
-                        controller.currentMediaItem?.localConfiguration?.uri?.toString()?.let { uri ->
+                        Timber.w("playLoadedControllerItem stuck — re-resolving LOW stream")
+                        val item = runCatching { controller.getMediaItemAt(targetIndex) }.getOrNull()
+                        val uri = item?.localConfiguration?.uri?.toString()
+                        if (!uri.isNullOrBlank()) {
                             dualPlayerEngine.invalidateResolvedUri(uri)
                         }
-                        controller.prepare()
+                    } else {
+                        return@withContext
+                    }
+                }
+                val item = withContext(Dispatchers.Main.immediate) {
+                    runCatching { controller.getMediaItemAt(targetIndex) }.getOrNull()
+                } ?: return@launch
+                val retried = withContext(Dispatchers.IO) {
+                    runCatching { dualPlayerEngine.preResolveForPlayback(item) }.getOrNull()
+                }
+                withContext(Dispatchers.Main.immediate) {
+                    if (retried != null && targetIndex in 0 until dualPlayerEngine.masterPlayer.mediaItemCount) {
+                        dualPlayerEngine.masterPlayer.replaceMediaItem(targetIndex, retried)
+                    }
+                    controller.prepare()
+                    controller.seekTo(targetIndex, 0L)
+                    controller.playWhenReady = true
+                    controller.play()
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "playLoadedControllerItem failed")
+                runOnMainImmediate {
+                    runCatching {
                         controller.seekTo(targetIndex, 0L)
+                        controller.prepare()
                         controller.play()
                     }
                 }
@@ -4704,28 +4804,112 @@ class PlayerViewModel @Inject constructor(
                 playlistId = playlistId
             )
 
-            val playSongsAction = {
+            val playSongsAction: () -> Unit = {
                 // Use Direct Engine Access to avoid TransactionTooLargeException on Binder
                 dualPlayerEngine.cancelNext()
                 val enginePlayer = dualPlayerEngine.masterPlayer
 
                 if (preparedPlaybackQueue.mediaItems.isNotEmpty()) {
-                    // Direct access: No IPC limit involved
-                    enginePlayer.setMediaItems(
-                        preparedPlaybackQueue.mediaItems,
-                        preparedPlaybackQueue.startIndex,
-                        0L
-                    )
-                    enginePlayer.shuffleModeEnabled = playbackStateHolder.stablePlayerState.value.isShuffleEnabled
-                    (enginePlayer as? androidx.media3.exoplayer.ExoPlayer)?.setShuffleOrder(
-                        androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(IntArray(preparedPlaybackQueue.mediaItems.size) { it }, System.currentTimeMillis())
-                    )
-                    enginePlayer.prepare()
-                    enginePlayer.play()
+                    // FREEZE FIX: pre-resolve youtube/telegram/gdrive URIs off the ExoPlayer
+                    // load thread BEFORE prepare/play. Without this, ResolvingDataSource used
+                    // to runBlocking network work and froze the miniplayer/UI on song taps.
+                    viewModelScope.launch {
+                        // INSTANT PLAY on low connectivity (SpatialFlow pattern):
+                        // Resolve ONLY the tapped track to a real http(s)/file URL first
+                        // (always LOW bitrate for fastest first-byte), then inject into ExoPlayer.
+                        // Never prepare unresolved youtube:// URIs — the non-blocking resolver
+                        // will error and stall playback.
+                        val items = preparedPlaybackQueue.mediaItems.toMutableList()
+                        val startIndex = preparedPlaybackQueue.startIndex
+                        val startItem = items.getOrNull(startIndex)
+
+                        val resolvedStart = if (startItem != null) {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    // 5s hard budget for click-to-play on weak networks.
+                                    kotlinx.coroutines.withTimeoutOrNull(5_000L) {
+                                        dualPlayerEngine.preResolveForPlayback(startItem)
+                                    } ?: run {
+                                        // Timeout: retry quality-aware resolve once more (HIGH stays high).
+                                        // Only fall back to lowest if that also fails.
+                                        val uri = startItem.localConfiguration?.uri
+                                        if (uri?.scheme == "youtube") {
+                                            val videoId = uri.toString().removePrefix("youtube://")
+                                            val ytSong = com.unshoo.pixelmusic.data.model.youtube.Song(
+                                                youtubeId = videoId
+                                            )
+                                            val url = try {
+                                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
+                                                    .getSongPlayerUrl(context, ytSong, allowLocal = true)
+                                            } catch (_: Exception) {
+                                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
+                                                    .getLowestQualityStreamUrl(context, ytSong)
+                                            }
+                                            if (url.startsWith("http")) {
+                                                dualPlayerEngine.resolvedUriCache.put(
+                                                    uri.toString(),
+                                                    android.net.Uri.parse(url)
+                                                )
+                                                dualPlayerEngine.preCacheFirstChunk(url)
+                                                startItem.buildUpon().setUri(android.net.Uri.parse(url)).build()
+                                            } else if (url.isNotBlank() && java.io.File(url).exists()) {
+                                                startItem.buildUpon()
+                                                    .setUri(android.net.Uri.fromFile(java.io.File(url)))
+                                                    .build()
+                                            } else {
+                                                startItem
+                                            }
+                                        } else {
+                                            startItem
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Timber.w(e, "instant start resolve failed")
+                                startItem
+                            }
+                        } else {
+                            null
+                        }
+
+                        if (resolvedStart != null) {
+                            items[startIndex] = resolvedStart
+                        }
+
+                        withContext(Dispatchers.Main.immediate) {
+                            dualPlayerEngine.cancelNext()
+                            val player = dualPlayerEngine.masterPlayer
+                            player.setMediaItems(items, startIndex, 0L)
+                            player.shuffleModeEnabled =
+                                playbackStateHolder.stablePlayerState.value.isShuffleEnabled
+                            (player as? androidx.media3.exoplayer.ExoPlayer)?.setShuffleOrder(
+                                androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(
+                                    IntArray(items.size) { it },
+                                    System.currentTimeMillis()
+                                )
+                            )
+                            player.prepare()
+                            player.playWhenReady = true
+                            player.play()
+                            // Instant YT Music history sync for the song just launched.
+                            player.currentMediaItem?.let { registerYoutubePlaybackHistoryIfNeeded(it) }
+                            _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+                        }
+
+                        // Warm next/prev + first-chunk cache OFF the critical path.
+                        launch(Dispatchers.IO) {
+                            runCatching {
+                                dualPlayerEngine.preResolveForPlayback(
+                                    preparedPlaybackQueue.mediaItems,
+                                    startIndex
+                                )
+                            }
+                        }
+                    }
                 } else {
                     clearPreparingSongIfMatching(effectiveStartSong.id)
+                    _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
                 }
-                _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
             }
 
             // We still check for mediaController to ensure the Service is bound and active
@@ -4841,6 +5025,7 @@ class PlayerViewModel @Inject constructor(
                 controller.prepare()
                 controller.play()
             }
+            registerYoutubePlaybackHistoryIfNeeded(mediaItem)
         }
     }
 
@@ -4862,10 +5047,20 @@ class PlayerViewModel @Inject constructor(
         youtubePlaybackHistoryJob?.cancel()
         youtubePlaybackHistoryJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Match ArchiveTune PR #780 behavior: register after meaningful playback,
-                // not immediately on a short accidental skip. YouTube Music may still show
-                // it with a small server-side delay after this request succeeds.
-                delay(30_000L)
+                // SpatialFlow parity: register the currently playing song with YT Music
+                // immediately on launch (not after 30s). Confirmation follows after a short
+                // continuous listen window so accidental skips do not flood history.
+                val instantRegistered = registerYoutubePlaybackHistory(videoId, playlistId)
+                if (instantRegistered) {
+                    lastRegisteredVideoId = videoId
+                    Timber.d("Instant YT history sync registered for %s", videoId)
+                }
+
+                // Also ensure ListeningStatsTracker merged history + optimistic head stay hot.
+                listeningStatsTracker.refreshMergedYoutubeHistory()
+
+                // Confirmation after ~5s of continuous play (SpatialFlow pings watchtime early).
+                delay(5_000L)
                 val stillPlayingSameVideo = withContext(Dispatchers.Main.immediate) {
                     val controller = mediaController
                     val currentItem = controller?.currentMediaItem
@@ -4879,9 +5074,10 @@ class PlayerViewModel @Inject constructor(
                 }
                 if (!stillPlayingSameVideo) return@launch
 
-                val registered = registerYoutubePlaybackHistory(videoId, playlistId)
-                if (registered) {
+                val confirmed = registerYoutubePlaybackHistory(videoId, playlistId)
+                if (confirmed) {
                     lastRegisteredVideoId = videoId
+                    Timber.d("Confirmed YT history sync for %s", videoId)
                 }
             } finally {
                 if (pendingYoutubeHistoryVideoId == videoId) {
@@ -5125,18 +5321,24 @@ class PlayerViewModel @Inject constructor(
                 saveYoutubeSongsToDb(listOf(song))
             }
         }
-        runOnMainImmediate {
-            val controller = mediaController ?: return@runOnMainImmediate
-            val mediaItem = buildPlaybackMediaItem(song)
-
-            val insertionIndex = if (controller.currentMediaItemIndex != C.INDEX_UNSET) {
-                (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount)
-            } else {
-                controller.mediaItemCount
+        viewModelScope.launch {
+            var mediaItem = buildPlaybackMediaItem(song)
+            val scheme = mediaItem.localConfiguration?.uri?.scheme
+            if (scheme == "youtube" || scheme == "telegram" || scheme == "gdrive") {
+                mediaItem = withContext(Dispatchers.IO) {
+                    runCatching { dualPlayerEngine.preResolveForPlayback(mediaItem) }
+                        .getOrDefault(mediaItem)
+                }
             }
-
-            controller.addMediaItem(insertionIndex, mediaItem)
-            // Queue UI is synced via onTimelineChanged listener
+            withContext(Dispatchers.Main.immediate) {
+                val controller = mediaController ?: return@withContext
+                val insertionIndex = if (controller.currentMediaItemIndex != C.INDEX_UNSET) {
+                    (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount)
+                } else {
+                    controller.mediaItemCount
+                }
+                controller.addMediaItem(insertionIndex, mediaItem)
+            }
         }
     }
     private fun buildPlaybackMediaItem(song: Song, playlistId: String? = null): MediaItem {
@@ -5183,12 +5385,22 @@ class PlayerViewModel @Inject constructor(
                 saveYoutubeSongsToDb(youtubeSongs)
             }
         }
-        runOnMainImmediate {
-            val controller = mediaController ?: return@runOnMainImmediate
-            val mediaItems = songs.map { buildPlaybackMediaItem(it) }
-            controller.addMediaItems(mediaItems)
-        }
         viewModelScope.launch {
+            val mediaItems = songs.map { buildPlaybackMediaItem(it) }.toMutableList()
+            withContext(Dispatchers.IO) {
+                mediaItems.take(3).forEachIndexed { idx, item ->
+                    val scheme = item.localConfiguration?.uri?.scheme
+                    if (scheme == "youtube" || scheme == "telegram" || scheme == "gdrive") {
+                        runCatching {
+                            mediaItems[idx] = dualPlayerEngine.preResolveForPlayback(item)
+                        }
+                    }
+                }
+            }
+            withContext(Dispatchers.Main.immediate) {
+                val controller = mediaController ?: return@withContext
+                controller.addMediaItems(mediaItems)
+            }
             val n = songs.size
             _toastEvents.emit(
                 context.resources.getQuantityString(R.plurals.n_songs_added_to_queue, n, n),

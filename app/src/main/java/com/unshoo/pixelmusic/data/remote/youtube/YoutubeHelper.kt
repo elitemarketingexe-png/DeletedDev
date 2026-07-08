@@ -17,6 +17,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -56,8 +57,17 @@ import java.util.concurrent.ConcurrentHashMap
 
 
 object YoutubeHelper {
+    private val backgroundScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + Dispatchers.IO
+    )
     val client = OkHttpClient.Builder()
         .connectionPool(okhttp3.ConnectionPool(10, 5, java.util.concurrent.TimeUnit.MINUTES))
+        // SpatialFlow-style tight timeouts: fail fast on weak links instead of hanging the tap-to-play path.
+        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     /**
@@ -538,7 +548,20 @@ object YoutubeHelper {
      * Checks the in-memory LRU cache first, then falls back to local file if available,
      * then resolves from YouTube.
      */
-    private suspend fun getTargetBitrateCeiling(context: Context): Int {
+    /**
+     * Effective streaming quality for the current network + user settings.
+     * HIGH on Wi‑Fi (or forced high on mobile) → unbounded highest stream.
+     * LOW/MEDIUM on metered → capped; offline → LOW.
+     */
+    private data class StreamQualityPlan(
+        val quality: StreamingAudioQuality,
+        /** 0 = no ceiling (pick highest available). */
+        val maxBitrateKbps: Int,
+        /** When true, pick lowest bitrate first (Data Saver / weak nets). */
+        val preferLowFirst: Boolean,
+    )
+
+    private suspend fun resolveStreamQualityPlan(context: Context): StreamQualityPlan {
         return try {
             val entryPoint = dagger.hilt.android.EntryPointAccessors.fromApplication(
                 context.applicationContext,
@@ -547,20 +570,63 @@ object YoutubeHelper {
             val connectivityStateHolder = entryPoint.connectivityStateHolder()
             val userPreferencesRepository = entryPoint.userPreferencesRepository()
 
+            val isOnline = connectivityStateHolder.isOnline.value
             val isMetered = connectivityStateHolder.isMeteredNetwork.value
             val forceHigh = userPreferencesRepository.forceHighQualityOnMobileFlow.first()
+
+            if (!isOnline) {
+                return StreamQualityPlan(
+                    quality = StreamingAudioQuality.LOW,
+                    maxBitrateKbps = StreamingAudioQuality.LOW.maxBitrateKbps,
+                    preferLowFirst = true,
+                )
+            }
 
             val targetQuality = if (isMetered && !forceHigh) {
                 userPreferencesRepository.streamingAudioQualityMobileFlow.first()
             } else {
                 userPreferencesRepository.streamingAudioQualityWifiFlow.first()
             }
-            if (targetQuality == StreamingAudioQuality.HIGH) 0 else targetQuality.maxBitrateKbps
-        } catch (e: Exception) {
-            0
+
+            when (targetQuality) {
+                StreamingAudioQuality.HIGH -> StreamQualityPlan(
+                    quality = StreamingAudioQuality.HIGH,
+                    maxBitrateKbps = 0, // no ceiling → highest available
+                    preferLowFirst = false,
+                )
+                StreamingAudioQuality.MEDIUM -> StreamQualityPlan(
+                    quality = StreamingAudioQuality.MEDIUM,
+                    maxBitrateKbps = StreamingAudioQuality.MEDIUM.maxBitrateKbps,
+                    // Medium: pick best under ceiling (not lowest).
+                    preferLowFirst = false,
+                )
+                StreamingAudioQuality.LOW -> StreamQualityPlan(
+                    quality = StreamingAudioQuality.LOW,
+                    maxBitrateKbps = StreamingAudioQuality.LOW.maxBitrateKbps,
+                    preferLowFirst = true,
+                )
+            }
+        } catch (_: Exception) {
+            StreamQualityPlan(
+                quality = StreamingAudioQuality.LOW,
+                maxBitrateKbps = StreamingAudioQuality.LOW.maxBitrateKbps,
+                preferLowFirst = true,
+            )
         }
     }
 
+    private suspend fun getTargetBitrateCeiling(context: Context): Int =
+        resolveStreamQualityPlan(context).maxBitrateKbps
+
+    private suspend fun shouldPreferLowQualityFirst(context: Context): Boolean =
+        resolveStreamQualityPlan(context).preferLowFirst
+
+    /**
+     * Resolve the stream URL for playback using the user's quality setting:
+     * - **HIGH**: fetch highest available bitrate first and start on that stream immediately.
+     * - **MEDIUM**: highest stream under the 128 kbps ceiling.
+     * - **LOW** / weak-offline: lowest available stream for fastest first-byte.
+     */
     suspend fun getSongPlayerUrl(
         context: Context,
         song: Song,
@@ -574,13 +640,11 @@ object YoutubeHelper {
         }
 
         // ── OFFLINE-FIRST GATE ─────────────────────────────────────────────────
-        // Check in-memory local path cache (populated by downloads/workers)
         val cachedLocalPath = localFilePathCache.get(videoId)
         if (cachedLocalPath != null && File(cachedLocalPath).exists()) {
             UmihiHelper.printd("$videoId : Playing from in-memory local file cache")
             return cachedLocalPath
         }
-        // ──────────────────────────────────────────────────────────────────────
 
         val localSongRepository = AppDatabase.getInstance(context).songRepository()
         var savedSong: Song? = null
@@ -591,51 +655,148 @@ object YoutubeHelper {
         }
 
         if (savedSong != null) {
-            // Always prefer local file
             if (savedSong.audioFilePath != null && File(savedSong.audioFilePath).exists()) {
                 UmihiHelper.printd("$videoId : Was downloaded, playing from local file")
-                // Populate in-memory cache for next time
                 localFilePathCache.put(videoId, savedSong.audioFilePath)
                 return savedSong.audioFilePath
             }
         }
 
-        val maxBitrate = getTargetBitrateCeiling(context)
-        val cacheKey = if (maxBitrate > 0) "${videoId}_q$maxBitrate" else "${videoId}_high"
-
-        // Check quality-specific LRU cache and validate expiration
-        val cachedQuality = streamUrlLruCache.get(cacheKey)
-        if (cachedQuality != null && isYoutubeUrlValid(cachedQuality)) {
-            UmihiHelper.printd("$videoId : Got quality-specific URL from LRU cache")
-            return cachedQuality
+        val plan = resolveStreamQualityPlan(context)
+        val maxBitrate = plan.maxBitrateKbps
+        val preferLowFirst = plan.preferLowFirst
+        val targetCacheKey = when {
+            preferLowFirst -> "${videoId}_low"
+            maxBitrate > 0 -> "${videoId}_q$maxBitrate"
+            else -> "${videoId}_high"
         }
 
-        // Check high-quality LRU cache only if high quality is currently allowed/requested
-        if (maxBitrate == 0 || maxBitrate >= 256) {
-            val cachedHigh = streamUrlLruCache.get("${videoId}_high")
-            if (cachedHigh != null && isYoutubeUrlValid(cachedHigh)) {
-                UmihiHelper.printd("$videoId : Got high-quality URL from LRU cache")
-                return cachedHigh
+        // ── Cache hit at the quality the user actually wants ───────────────────
+        streamUrlLruCache.get(targetCacheKey)?.let {
+            if (isYoutubeUrlValid(it)) {
+                UmihiHelper.printd(
+                    "$videoId : INSTANT start from cache ($targetCacheKey, quality=${plan.quality})"
+                )
+                return it
+            }
+        }
+        // HIGH: also accept a valid _high entry under any alias.
+        if (!preferLowFirst && maxBitrate == 0) {
+            streamUrlLruCache.get("${videoId}_high")?.let {
+                if (isYoutubeUrlValid(it)) {
+                    UmihiHelper.printd("$videoId : INSTANT start from cached HIGH stream")
+                    return it
+                }
+            }
+        }
+        // LOW-only path may reuse a valid low cache.
+        if (preferLowFirst) {
+            streamUrlLruCache.get("${videoId}_low")?.let {
+                if (isYoutubeUrlValid(it)) {
+                    UmihiHelper.printd("$videoId : INSTANT start from cached LOW stream")
+                    return it
+                }
             }
         }
 
-        val result = getSongUrlFromYoutube(context, song, lowQuality = false, maxBitrateKbps = maxBitrate)
+        // ── Resolve at the selected quality FIRST (no forced low on HIGH) ──────
+        // HIGH  → lowQuality=false, maxBitrate=0  → highest available instantly
+        // MEDIUM→ lowQuality=false, maxBitrate=128 → best under ceiling
+        // LOW   → lowQuality=true                  → lowest available
+        val useLowQuality = preferLowFirst
+        val result = try {
+            getSongUrlFromYoutube(
+                context = context,
+                song = song,
+                retries = 1,
+                lowQuality = useLowQuality,
+                maxBitrateKbps = maxBitrate,
+            )
+        } catch (primary: Exception) {
+            UmihiHelper.printe(
+                "$videoId : ${plan.quality} stream resolve failed (${primary.message}); " +
+                    "retrying with fallback quality"
+            )
+            // Fallback: if HIGH fails (weak link), try LOW so playback still starts.
+            // If LOW fails, try unrestricted once more.
+            try {
+                if (!useLowQuality) {
+                    getSongUrlFromYoutube(
+                        context = context,
+                        song = song,
+                        retries = 1,
+                        lowQuality = true,
+                        maxBitrateKbps = StreamingAudioQuality.LOW.maxBitrateKbps,
+                    )
+                } else {
+                    getSongUrlFromYoutube(
+                        context = context,
+                        song = song,
+                        retries = 1,
+                        lowQuality = false,
+                        maxBitrateKbps = 0,
+                    )
+                }
+            } catch (secondary: Exception) {
+                throw primary
+            }
+        }
+
         val newUri = result.first
         val mimeType = result.second
         val bitrate = result.third
-        streamUrlLruCache.put(cacheKey, newUri)
-        mimeType?.let { streamMimeTypeLruCache.put(cacheKey, it) }
-        bitrate?.let { streamBitrateLruCache.put(cacheKey, it) }
-        if (maxBitrate == 0 || maxBitrate >= 256) {
+
+        streamUrlLruCache.put(targetCacheKey, newUri)
+        mimeType?.let { streamMimeTypeLruCache.put(targetCacheKey, it) }
+        bitrate?.let { streamBitrateLruCache.put(targetCacheKey, it) }
+
+        if (useLowQuality) {
+            streamUrlLruCache.put("${videoId}_low", newUri)
+            mimeType?.let { streamMimeTypeLruCache.put("${videoId}_low", it) }
+            bitrate?.let { streamBitrateLruCache.put("${videoId}_low", it) }
+        } else if (maxBitrate == 0 || maxBitrate >= StreamingAudioQuality.HIGH.maxBitrateKbps) {
             streamUrlLruCache.put("${videoId}_high", newUri)
             mimeType?.let { streamMimeTypeLruCache.put("${videoId}_high", it) }
             bitrate?.let { streamBitrateLruCache.put("${videoId}_high", it) }
         }
 
-        // We do NOT save transient remote streaming URLs to the Room database anymore.
-        // This guarantees that streaming quality is purely dependent on the user settings and network type at playback time.
-        UmihiHelper.printd("$videoId : Got quality-specific url from YouTube ($maxBitrate kbps)")
+        UmihiHelper.printd(
+            "$videoId : INSTANT ${plan.quality} stream ready " +
+                "(ceiling=${maxBitrate}kbps lowFirst=$preferLowFirst bitrate=$bitrate)"
+        )
         return newUri
+    }
+
+    /**
+     * Resolve a higher-bitrate stream in the background so the next skip/replay can use it.
+     * Never blocks the critical click-to-play path.
+     */
+    private fun warmHigherQualityInBackground(context: Context, song: Song, maxBitrateKbps: Int) {
+        val videoId = song.youtubeId
+        val cacheKey = if (maxBitrateKbps > 0) "${videoId}_q$maxBitrateKbps" else "${videoId}_high"
+        if (streamUrlLruCache.get(cacheKey) != null) return
+        // Fire-and-forget on OkHttp's dispatcher via a cheap coroutine scope-less launch
+        backgroundScope.launch(Dispatchers.IO) {
+            try {
+                val result = getSongUrlFromYoutube(
+                    context = context,
+                    song = song,
+                    lowQuality = false,
+                    maxBitrateKbps = maxBitrateKbps
+                )
+                streamUrlLruCache.put(cacheKey, result.first)
+                result.second?.let { streamMimeTypeLruCache.put(cacheKey, it) }
+                result.third?.let { streamBitrateLruCache.put(cacheKey, it) }
+                if (maxBitrateKbps == 0 || maxBitrateKbps >= 256) {
+                    streamUrlLruCache.put("${videoId}_high", result.first)
+                    result.second?.let { streamMimeTypeLruCache.put("${videoId}_high", it) }
+                    result.third?.let { streamBitrateLruCache.put("${videoId}_high", it) }
+                }
+                UmihiHelper.printd("$videoId : Background quality upgrade cached ($cacheKey)")
+            } catch (e: Exception) {
+                UmihiHelper.printe("$videoId : Background quality upgrade failed: ${e.message}")
+            }
+        }
     }
 
     /**
@@ -671,7 +832,7 @@ object YoutubeHelper {
             if (isYoutubeUrlValid(it)) return it 
         }
 
-        val lowResult = getSongUrlFromYoutube(context, song, lowQuality = true)
+        val lowResult = getSongUrlFromYoutube(context, song, retries = 1, lowQuality = true)
         val lowUrl = lowResult.first
         val mimeType = lowResult.second
         val bitrate = lowResult.third
@@ -976,7 +1137,13 @@ object YoutubeHelper {
             }
         }
 
-        // ── Slow path: live byte-range probe ─────────────────────────────────────────
+        // ── Slow path: live byte-range probe (bounded, low-connectivity safe) ────────
+        // On weak networks this probe is the #1 source of multi-second click-to-play lag.
+        // Prefer trusting googlevideo URLs that still have an expire param over hanging.
+        if (url.contains("googlevideo.com", ignoreCase = true) && expireParam.isNotEmpty()) {
+            UmihiHelper.printd("validateStatus: trusting googlevideo URL without probe (low-latency path)")
+            return true
+        }
         UmihiHelper.printd("validateStatus: URL near/past expiry — performing HTTP probe")
         try {
             val requestProfile = StreamClientUtils.resolveRequestProfile(url)
@@ -992,6 +1159,9 @@ object YoutubeHelper {
             val httpClient = if (streamProxy != null) {
                 OkHttpClient.Builder()
                     .connectionPool(okhttp3.ConnectionPool(10, 5, java.util.concurrent.TimeUnit.MINUTES))
+                    .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .callTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
                     .proxy(streamProxy)
                     .build()
             } else {
@@ -1107,6 +1277,18 @@ object YoutubeHelper {
 
         val clients = buildStreamClientOrder(preferredClient, authState).filterNot { client ->
             isStreamClientTemporarilyBlocked(videoId, client.clientName, authState.fingerprint)
+        }.let { ordered ->
+            if (!lowQuality) ordered
+            else {
+                // LOW / weak-network path: try clients that return plain (non-cipher) audio URLs first.
+                // Skipping WEB_* cipher clients first cuts multi-second signature work on slow links.
+                val fast = ordered.filter { c ->
+                    val n = c.clientName.uppercase(java.util.Locale.US)
+                    n.contains("ANDROID_VR") || n == "IOS" || n == "ANDROID_MUSIC" || n == "MOBILE"
+                }
+                val rest = ordered.filterNot { it in fast }
+                (fast + rest).distinct()
+            }
         }
 
         var signatureTimestamp: Int? = null
@@ -1123,7 +1305,8 @@ object YoutubeHelper {
         // selectCandidates() already returns formats in Opus → M4A → WebM → other priority
         // order, so no separate Opus-first scan is needed. Removed the old "Phase 1" that
         // iterated all clients twice, doubling API call count for no quality benefit.
-        for (clientObj in clients) {
+        val clientsToTry = if (lowQuality) clients.take(4) else clients
+        for (clientObj in clientsToTry) {
             try {
                 UmihiHelper.printd("Trying playback client: ${clientObj.clientName}")
                 var playerResponse = playerResponseCache[clientObj.clientName]
@@ -1194,18 +1377,32 @@ object YoutubeHelper {
                 var resolvedUrl: String? = null
                 var resolvedMimeType: String? = null
                 var resolvedBitrate: Int? = null
-                for (candidate in candidates) {
+                // On lowQuality path only evaluate the cheapest few formats for speed.
+                val candidateList = if (lowQuality) candidates.take(3) else candidates
+                for (candidate in candidateList) {
                     if (shouldSkipCipheredWebCandidate(clientObj, candidate, authState)) continue
                     val deobfuscated = NewPipeUtils.getStreamUrl(candidate, videoId, clientObj, authState).getOrNull() ?: continue
                     val patched = StreamClientUtils.patchClientVersion(deobfuscated, clientObj.clientVersion)
-                    
-                    if (validateStatus(patched)) {
+
+                    // Fast accept: googlevideo URLs with a future expire are trusted immediately
+                    // (validateStatus already does this; call it for non-fast cases too).
+                    val accepted = if (lowQuality && patched.contains("googlevideo.com") &&
+                        patched.contains("expire=")
+                    ) {
+                        true
+                    } else {
+                        validateStatus(patched)
+                    }
+
+                    if (accepted) {
                         resolvedUrl = patched
-                        // Extract bare MIME type (e.g. "audio/webm; codecs=\"opus\"" → "audio/opus")
                         resolvedMimeType = normalizeMimeType(candidate.mimeType)
                         resolvedBitrate = candidate.bitrate
                         lastSuccessfulClientKey = StreamClientUtils.buildClientKey(clientObj)
-                        UmihiHelper.printd("Successfully validated stream URL with client: ${clientObj.clientName} mime=$resolvedMimeType")
+                        UmihiHelper.printd(
+                            "Successfully resolved stream with client: ${clientObj.clientName} " +
+                                "mime=$resolvedMimeType low=$lowQuality bitrate=$resolvedBitrate"
+                        )
                         break
                     } else {
                         UmihiHelper.printe("Stream URL validation failed for client ${clientObj.clientName}")
@@ -1302,7 +1499,7 @@ object YoutubeHelper {
                 return streamUrl
             } catch (e: Exception) {
                 UmihiHelper.printe("Failsafe NewPipe extraction failed: ${e.message}")
-                delay(Constants.YoutubeApi.RETRY_DELAY * (attempt + 1))
+                if (!lowQuality) delay(Constants.YoutubeApi.RETRY_DELAY * (attempt + 1))
             }
         }
 
@@ -1330,40 +1527,27 @@ object YoutubeHelper {
     }
 
     private suspend fun isYoutubeUrlValid(url: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // Fast check: Extract expire timestamp from the URL if present
-            val expireParam = url.substringAfter("expire=", "").substringBefore("&")
-            if (expireParam.isNotEmpty()) {
-                val expireTimeSecs = expireParam.toLongOrNull()
-                if (expireTimeSecs != null) {
-                    val currentTimeSecs = System.currentTimeMillis() / 1000
-                    // If the URL expires in more than 60 seconds, treat it as valid immediately!
-                    if (expireTimeSecs > currentTimeSecs + 60) {
-                        return@withContext true
-                    }
-                }
-            }
-
-            val request = Request.Builder()
-                .url(url)
-                .head()
-                .build()
-
-            val streamProxy = unshoo.ianshulyadav.pixelmusic.innertube.YouTube.streamProxy
-            val httpClient = if (streamProxy != null) {
-                OkHttpClient.Builder()
-                    .connectionPool(okhttp3.ConnectionPool(10, 5, java.util.concurrent.TimeUnit.MINUTES))
-                    .proxy(streamProxy)
-                    .build()
-            } else {
-                client
-            }
-            httpClient.newCall(request).execute().use { response ->
-                return@withContext response.isSuccessful
-            }
-        } catch (_: Exception) {
-            return@withContext false
+        // HOT PATH: never hit the network here. Cache revalidation must stay O(1).
+        // Network probes belong in validateStatus during first resolve only.
+        if (url.isBlank()) return@withContext false
+        if (!url.startsWith("http")) {
+            // Local file path
+            return@withContext java.io.File(url).exists()
         }
+        val expireParam = url.substringAfter("expire=", "").substringBefore("&")
+        if (expireParam.isNotEmpty()) {
+            val expireTimeSecs = expireParam.toLongOrNull()
+            if (expireTimeSecs != null) {
+                val currentTimeSecs = System.currentTimeMillis() / 1000
+                // Require at least 90s of remaining life so ExoPlayer can finish first buffer.
+                return@withContext expireTimeSecs > currentTimeSecs + 90
+            }
+        }
+        // No expire param (rare): treat as valid and let ExoPlayer / error recovery handle it.
+        // Doing a HEAD/range probe here was a major low-connectivity stall source.
+        return@withContext url.contains("googlevideo.com", ignoreCase = true) ||
+            url.contains("youtube.com", ignoreCase = true) ||
+            url.contains("ggpht.com", ignoreCase = true)
     }
 
     fun findObjectsWithKey(element: JsonElement, key: String, result: MutableList<JsonObject>) {
