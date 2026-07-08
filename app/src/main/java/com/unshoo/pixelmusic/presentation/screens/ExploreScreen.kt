@@ -63,6 +63,8 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.TrendingUp
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import java.util.Calendar
 import kotlin.math.absoluteValue
 
@@ -323,8 +325,9 @@ fun ExploreScreen(
                         ),
                         verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
-                        // 2. Category Filter Chips (All, Smart Mix, For You, New Releases, Charts, Recap)
+                        // 2. Category Filter Chips (All, Smart Mix, For You, Charts, Recap)
                         item(key = "explore_category_filters") {
+                            var showMoodRow by remember { mutableStateOf(false) }
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -332,30 +335,52 @@ fun ExploreScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState())
                                         .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    val categories = listOf("All", "Smart Mix", "For You", "New Releases", "Charts", "Recap")
-                                    categories.forEach { category ->
-                                        FilterChip(
-                                            selected = uiState.selectedFilter == category,
-                                            onClick = { exploreViewModel.setSelectedFilter(category) },
-                                            label = { Text(category) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                labelColor = MaterialTheme.colorScheme.onSurface
-                                            ),
-                                            shape = RoundedCornerShape(16.dp),
-                                            border = null
-                                        )
+                                    Row(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        val categories = listOf("All", "Smart Mix", "For You", "Charts", "Recap")
+                                        categories.forEach { category ->
+                                            FilterChip(
+                                                selected = uiState.selectedFilter == category,
+                                                onClick = { exploreViewModel.setSelectedFilter(category) },
+                                                label = { Text(category) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                    labelColor = MaterialTheme.colorScheme.onSurface
+                                                ),
+                                                shape = RoundedCornerShape(16.dp),
+                                                border = null
+                                            )
+                                        }
+                                    }
+                                    
+                                    // Mood chip dropdown arrow
+                                    if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") && uiState.moodChips.isNotEmpty()) {
+                                        androidx.compose.material3.IconButton(
+                                            onClick = { showMoodRow = !showMoodRow },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (showMoodRow) androidx.compose.material.icons.Icons.Rounded.KeyboardArrowUp else androidx.compose.material.icons.Icons.Rounded.KeyboardArrowDown,
+                                                contentDescription = "Toggle genres",
+                                                tint = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
                                     }
                                 }
 
-                                // Mood / Genre Chips (When All or For You is active)
-                                if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") && uiState.moodChips.isNotEmpty()) {
+                                // Mood / Genre Chips (When All or For You is active and arrow clicked)
+                                if (showMoodRow && (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") && uiState.moodChips.isNotEmpty()) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -378,7 +403,7 @@ fun ExploreScreen(
                                                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                                                     labelColor = MaterialTheme.colorScheme.onSurfaceVariant
                                                 ),
-                                                shape = RoundedCornerShape(12.dp),
+                                                shape = RoundedCornerShape(16.dp),
                                                 border = null
                                             )
                                         }
