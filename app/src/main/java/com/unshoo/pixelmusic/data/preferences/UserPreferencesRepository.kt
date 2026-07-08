@@ -94,7 +94,7 @@ enum class QuickPicks {
 }
 
 enum class QuickPicksDisplayMode {
-    CARD, CARD_CLASSIC, LIST
+    CARD, CARD_CLASSIC, LIST, UNCONTAINED
 }
 
 enum class SearchSource {

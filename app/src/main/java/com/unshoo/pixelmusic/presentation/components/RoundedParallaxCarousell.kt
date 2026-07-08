@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.node.LayoutModifierNode
 import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.node.invalidateMeasurement
+import androidx.compose.ui.platform.LocalContext
 import com.unshoo.pixelmusic.data.preferences.CarouselStyle
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -136,10 +137,22 @@ fun RoundedHorizontalMultiBrowseCarousel(
     itemKey: ((itemIndex: Int) -> Any)? = null,
     content: @Composable CarouselItemScope.(itemIndex: Int) -> Unit,
 ) {
+    val context = LocalContext.current
     val density = LocalDensity.current
     val carouselWidthPx = with(density) { carouselWidth.toPx() }
+    val isReducedMotion = remember(context) {
+        try {
+            android.provider.Settings.Global.getFloat(
+                context.contentResolver,
+                android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f
+            ) == 0f
+        } catch (e: Exception) {
+            false
+        }
+    }
 
-    val maxNonFocalItems = when (carouselStyle) {
+    val maxNonFocalItems = if (isReducedMotion) 0 else when (carouselStyle) {
         CarouselStyle.NO_PEEK -> 0
         CarouselStyle.ONE_PEEK -> 1
         CarouselStyle.TWO_PEEK -> 2
@@ -171,8 +184,9 @@ fun RoundedHorizontalMultiBrowseCarousel(
         orientation = Orientation.Horizontal,
         keylineList = { _, spacingPx ->
             val itemCount = state.pagerState.pageCountState.value.invoke()
-            when (carouselStyle) {
-                CarouselStyle.NO_PEEK -> multiBrowseKeylineList(
+            if (isReducedMotion) {
+                // If reduced motion is enabled, all items are sized identically (no peeks, no changes as they come into view)
+                multiBrowseKeylineList(
                     density = density,
                     carouselMainAxisSize = carouselWidthPx,
                     preferredItemSize = carouselWidthPx,
@@ -182,39 +196,52 @@ fun RoundedHorizontalMultiBrowseCarousel(
                     mediumCounts = intArrayOf(0),
                     smallCounts = intArrayOf(0)
                 )
-                CarouselStyle.ONE_PEEK -> multiBrowseKeylineList(
-                    density = density,
-                    carouselMainAxisSize = carouselWidthPx,
-                    preferredItemSize = carouselWidthPx * 0.8f,
-                    itemSpacing = spacingPx,
-                    itemCount = itemCount,
-                    alignment = CarouselAlignment.Start,
-                    largeCounts = intArrayOf(1),
-                    mediumCounts = intArrayOf(0),
-                    smallCounts = intArrayOf(1)
-                )
-                CarouselStyle.TWO_PEEK -> {
-                    // Manual keyline definition for [small, large, small]
-                    val largeSize = carouselWidthPx * 0.6f // Main item is 60% of width
-                    val smallSize = carouselWidthPx * 0.45f // Peek items are 45% of width
-                    keylineListOf(
+            } else {
+                when (carouselStyle) {
+                    CarouselStyle.NO_PEEK -> multiBrowseKeylineList(
+                        density = density,
                         carouselMainAxisSize = carouselWidthPx,
+                        preferredItemSize = carouselWidthPx,
                         itemSpacing = spacingPx,
-                        carouselAlignment = CarouselAlignment.Center
-                    ) {
-                        add(smallSize) // Previous peek
-                        add(largeSize) // Focused item
-                        add(smallSize) // Next peek
+                        itemCount = itemCount,
+                        largeCounts = intArrayOf(1),
+                        mediumCounts = intArrayOf(0),
+                        smallCounts = intArrayOf(0)
+                    )
+                    CarouselStyle.ONE_PEEK -> multiBrowseKeylineList(
+                        density = density,
+                        carouselMainAxisSize = carouselWidthPx,
+                        preferredItemSize = carouselWidthPx * 0.8f,
+                        itemSpacing = spacingPx,
+                        itemCount = itemCount,
+                        alignment = CarouselAlignment.Start,
+                        largeCounts = intArrayOf(1),
+                        mediumCounts = intArrayOf(0),
+                        smallCounts = intArrayOf(1)
+                    )
+                    CarouselStyle.TWO_PEEK -> {
+                        // Manual keyline definition for [small, large, small]
+                        val largeSize = carouselWidthPx * 0.6f // Main item is 60% of width
+                        val smallSize = carouselWidthPx * 0.45f // Peek items are 45% of width
+                        keylineListOf(
+                            carouselMainAxisSize = carouselWidthPx,
+                            itemSpacing = spacingPx,
+                            carouselAlignment = CarouselAlignment.Center
+                        ) {
+                            add(smallSize) // Previous peek
+                            add(largeSize) // Focused item
+                            add(smallSize) // Next peek
+                        }
                     }
+                    else -> multiBrowseKeylineList( // Default to one peek
+                        density = density,
+                        carouselMainAxisSize = carouselWidthPx,
+                        preferredItemSize = carouselWidthPx * 0.8f,
+                        itemSpacing = spacingPx,
+                        itemCount = itemCount,
+                        alignment = CarouselAlignment.Start
+                    )
                 }
-                else -> multiBrowseKeylineList( // Default to one peek
-                    density = density,
-                    carouselMainAxisSize = carouselWidthPx,
-                    preferredItemSize = carouselWidthPx * 0.8f,
-                    itemSpacing = spacingPx,
-                    itemCount = itemCount,
-                    alignment = CarouselAlignment.Start
-                )
             }
         },
         contentPadding = PaddingValues(0.dp),
@@ -248,6 +275,7 @@ private fun RoundedCarousel(
     userScrollEnabled: Boolean,
     itemCornerRadius: Dp,
     carouselStyle: String,
+    isReducedMotion: Boolean = false, // added parameter with default
     itemKey: ((itemIndex: Int) -> Any)? = null,
     content: @Composable CarouselItemScope.(itemIndex: Int) -> Unit,
 ) {
@@ -257,6 +285,18 @@ private fun RoundedCarousel(
         CarouselPageSize(keylineList, beforeContentPadding, afterContentPadding)
     }
     val snapPosition = KeylineSnapPosition(pageSize)
+    val context = LocalContext.current
+    val systemReducedMotion = remember(context) {
+        try {
+            android.provider.Settings.Global.getFloat(
+                context.contentResolver,
+                android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
+                1f
+            ) == 0f
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     HorizontalPager(
         state = state.pagerState,
@@ -289,6 +329,10 @@ private fun RoundedCarousel(
                 ): Outline {
                     // 1) Limitar la máscara al tamaño del layer (item)
                     val layerBounds = Rect(0f, 0f, size.width, size.height)
+                    // If reduced motion is active, return full-bleed outline bounds directly without morphing or mask clipping transitions
+                    if (systemReducedMotion) {
+                        return cachedShape.createOutline(size, layoutDirection, density)
+                    }
                     // intersecta con bounds y da un respiro sub-px para que no se vea “cortado”
                     val rect = carouselItemInfo.maskRect.intersect(layerBounds).inflate(0.5f)
 
@@ -326,7 +370,8 @@ private fun RoundedCarousel(
                     state = state,
                     strategy = { pageSize.strategy },
                     carouselItemDrawInfo = carouselItemInfo,
-                    clipShape = clipShape
+                    clipShape = clipShape,
+                    isReducedMotion = systemReducedMotion
                 )
         ) {
             scope.content(page)
@@ -443,12 +488,14 @@ private fun Modifier.carouselItem(
     strategy: () -> Strategy,
     carouselItemDrawInfo: CarouselItemDrawInfoImpl,
     clipShape: Shape,
+    isReducedMotion: Boolean = false,
 ): Modifier = this then CarouselItemModifierNodeElement(
     index = index,
     state = state,
     strategy = strategy,
     carouselItemDrawInfo = carouselItemDrawInfo,
-    clipShape = clipShape
+    clipShape = clipShape,
+    isReducedMotion = isReducedMotion
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -458,6 +505,7 @@ private data class CarouselItemModifierNodeElement(
     val strategy: () -> Strategy,
     val carouselItemDrawInfo: CarouselItemDrawInfoImpl,
     val clipShape: Shape,
+    val isReducedMotion: Boolean = false,
 ) : ModifierNodeElement<CarouselItemModifierNode>() {
     override fun create(): CarouselItemModifierNode {
         return CarouselItemModifierNode(
@@ -465,7 +513,8 @@ private data class CarouselItemModifierNodeElement(
             state = state,
             strategy = strategy,
             carouselItemDrawInfo = carouselItemDrawInfo,
-            clipShape = clipShape
+            clipShape = clipShape,
+            isReducedMotion = isReducedMotion
         )
     }
 
@@ -475,6 +524,7 @@ private data class CarouselItemModifierNodeElement(
         node.strategy = strategy
         node.carouselItemDrawInfo = carouselItemDrawInfo
         node.clipShape = clipShape
+        node.isReducedMotion = isReducedMotion
         node.invalidateMeasurement()
     }
 }
@@ -486,6 +536,7 @@ private class CarouselItemModifierNode(
     var strategy: () -> Strategy,
     var carouselItemDrawInfo: CarouselItemDrawInfoImpl,
     var clipShape: Shape,
+    var isReducedMotion: Boolean = false,
 ) : Modifier.Node(), LayoutModifierNode {
     override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
         val strategyResult = strategy()
@@ -516,6 +567,18 @@ private class CarouselItemModifierNode(
 
         return layout(placeable.width, placeable.height) {
             placeable.placeWithLayer(0, 0, zIndex = itemZIndex) {
+                if (isReducedMotion) {
+                    // Under reduced motion, do not apply any parallax translation or masking shifts
+                    carouselItemDrawInfo.sizeState = size.width.toFloat()
+                    carouselItemDrawInfo.minSizeState = size.width.toFloat()
+                    carouselItemDrawInfo.maxSizeState = size.width.toFloat()
+                    carouselItemDrawInfo.maskRectState = Rect(0f, 0f, size.width.toFloat(), size.height.toFloat())
+                    clip = true
+                    shape = clipShape
+                    translationX = 0f
+                    translationY = 0f
+                    return@placeWithLayer
+                }
                 // --- keylines e interpolación
                 val scrollOffset = calculateCurrentScrollOffset(state, strategyResult)
                 val maxScrollOffset = calculateMaxScrollOffset(state, strategyResult)

@@ -511,21 +511,22 @@ fun SettingsCategoryScreen(
                                     leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
                                 ThemeSelectorItem(
-                                    label = stringResource(R.string.settings_quick_picks_mode_title),
-                                    description = stringResource(R.string.settings_quick_picks_mode_desc),
-                                    options = mapOf(
-                                        com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.CARD.name to "Square Carousel",
-                                        com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.CARD_CLASSIC.name to "Classic Carousel",
-                                        com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.LIST.name to "List Grid"
-                                    ),
-                                    selectedKey = uiState.quickPicksDisplayMode.name,
-                                    onSelectionChanged = { key ->
-                                        settingsViewModel.setQuickPicksDisplayMode(
-                                            com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.valueOf(key)
-                                        )
-                                    },
-                                    leadingIcon = { Icon(Icons.Outlined.GridView, null, tint = MaterialTheme.colorScheme.secondary) }
-                                )
+                                     label = stringResource(R.string.settings_quick_picks_mode_title),
+                                     description = stringResource(R.string.settings_quick_picks_mode_desc),
+                                     options = mapOf(
+                                         com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.CARD.name to "Square Carousel",
+                                         com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.CARD_CLASSIC.name to "Classic Carousel",
+                                         com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.LIST.name to "List Grid",
+                                         com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.UNCONTAINED.name to "Uncontained Carousel"
+                                     ),
+                                     selectedKey = uiState.quickPicksDisplayMode.name,
+                                     onSelectionChanged = { key ->
+                                         settingsViewModel.setQuickPicksDisplayMode(
+                                             com.unshoo.pixelmusic.data.preferences.QuickPicksDisplayMode.valueOf(key)
+                                         )
+                                     },
+                                     leadingIcon = { Icon(Icons.Outlined.GridView, null, tint = MaterialTheme.colorScheme.secondary) }
+                                 )
                             }
                         }
                         SettingsCategory.LIBRARY -> {
