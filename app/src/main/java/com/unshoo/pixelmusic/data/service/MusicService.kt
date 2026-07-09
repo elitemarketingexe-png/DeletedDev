@@ -160,6 +160,8 @@ class MusicService : MediaLibraryService() {
     @Inject
     lateinit var engagementDao: com.unshoo.pixelmusic.data.database.EngagementDao
 
+    private lateinit var telemetryManager: com.unshoo.pixelmusic.data.remote.youtube.YouTubeTelemetryManager
+
     private var scrobbleManager: com.unshoo.pixelmusic.data.lastfm.ScrobbleManager? = null
 
     private var replayGainEnabled = false
@@ -200,6 +202,7 @@ class MusicService : MediaLibraryService() {
     private var observedCastSession: CastSession? = null
     private var activeCastStatsOccurrenceId: String? = null
     private var playbackSnapshotPersistJob: Job? = null
+    private var telemetryJob: Job? = null
     private var isRestoringPlaybackSnapshot = false
     private var isPlaybackUnloadInProgress = false
     private val audioManager by lazy {
@@ -410,6 +413,10 @@ class MusicService : MediaLibraryService() {
         }
 
         super.onCreate()
+        telemetryManager = com.unshoo.pixelmusic.data.remote.youtube.YouTubeTelemetryManager(
+            httpClient = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.client,
+            clientProvider = { listeningStatsTracker }
+        )
         listeningStatsTracker.initialize(appScope)
         scrobbleManager = com.unshoo.pixelmusic.data.lastfm.ScrobbleManager(scope = serviceScope)
         
@@ -1229,16 +1236,30 @@ class MusicService : MediaLibraryService() {
     private fun startNavidromePlaybackReporting() {}
     private fun stopNavidromePlaybackReporting() {}
 
-    private var telemetryJob: Job? = null
-
     private fun startTelemetryReporting() {
         telemetryJob?.cancel()
+        val player = mediaSession?.player ?: engine.masterPlayer
+        player.currentMediaItem?.let { item ->
+            val scheme = item.localConfiguration?.uri?.scheme
+            if (scheme == "youtube" || item.mediaId.length == 11) {
+                val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
+                telemetryManager.onSongChanged(item.mediaId, durationMs)
+                telemetryManager.onPlaybackStateChanged(true)
+            }
+        }
         telemetryJob = serviceScope.launch {
             while (isActive) {
                 val player = mediaSession?.player ?: engine.masterPlayer
                 if (player.isPlaying) {
                     val positionMs = player.currentPosition.coerceAtLeast(0L)
                     listeningStatsTracker.onProgress(positionMs, player.isPlaying)
+                    
+                    val item = player.currentMediaItem
+                    val scheme = item?.localConfiguration?.uri?.scheme
+                    if (item != null && (scheme == "youtube" || item.mediaId.length == 11)) {
+                        val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
+                        telemetryManager.updateProgress(positionMs, durationMs)
+                    }
                 }
                 delay(1000L)
             }
@@ -1250,6 +1271,8 @@ class MusicService : MediaLibraryService() {
         telemetryJob = null
         val player = mediaSession?.player ?: engine.masterPlayer
         listeningStatsTracker.onPlayStateChanged(false, player.currentPosition.coerceAtLeast(0L))
+        telemetryManager.onPlaybackStateChanged(false)
+        telemetryManager.stopTelemetry()
     }
 
     // Prevent infinite re-resolve loops on permanent stream failures.
@@ -2094,6 +2117,7 @@ class MusicService : MediaLibraryService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
 
     override fun onDestroy() {
+        telemetryManager.destroy()
         listeningStatsTracker.finalizeCurrentSession(forceSynchronousPersistence = true)
         reportNavidromePlayback("stopped")
         stopNavidromePlaybackReporting()

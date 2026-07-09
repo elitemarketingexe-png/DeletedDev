@@ -32,8 +32,8 @@ internal data class SheetThemeState(
     val albumColorScheme: ColorScheme,
     val miniPlayerScheme: ColorScheme,
     val isPreparingPlayback: Boolean,
-    val miniReadyAlpha: Float,
-    val miniAppearScale: Float,
+    val miniReadyAlpha: androidx.compose.runtime.State<Float>,
+    val miniAppearScale: androidx.compose.runtime.State<Float>,
     val playerAreaBackground: Color
 )
 
@@ -202,8 +202,8 @@ internal fun rememberSheetThemeState(
         }
     }
 
-    val miniReadyAlpha = miniAppearProgress.value
-    val miniAppearScale = lerp(0.985f, 1f, miniAppearProgress.value)
+    val miniReadyAlpha = miniAppearProgress.asState()
+    val miniAppearScale = derivedStateOf { lerp(0.985f, 1f, miniReadyAlpha.value) }
     val playerAreaBackground = miniPlayerScheme.primaryContainer
 
     // NOTE: miniAlpha and effectivePlayerAreaElevation are no longer computed here.

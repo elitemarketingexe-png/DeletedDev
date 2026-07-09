@@ -504,7 +504,7 @@ fun UnifiedPlayerSheetV2(
             ) {
                 0.dp
             } else {
-                (3f * miniReadyAlpha).dp
+                (3f * miniReadyAlpha.value).dp
             }
         }
     }
@@ -602,9 +602,9 @@ fun UnifiedPlayerSheetV2(
                                 translationX = offsetAnimatable.value
                                 // Immersive dismiss: tilt, fade, and scale-down as card is swiped
                                 rotationZ = dismissRotation.value
-                                alpha = miniReadyAlpha * dismissAlpha.value
-                                scaleX = dismissScale.value * miniAppearScale
-                                scaleY = visualOvershootScaleY.value * dismissScale.value * miniAppearScale
+                                alpha = miniReadyAlpha.value * dismissAlpha.value
+                                scaleX = dismissScale.value * miniAppearScale.value
+                                scaleY = visualOvershootScaleY.value * dismissScale.value * miniAppearScale.value
                                 // Pivot at bottom-center: card tilts as if held at its base
                                 transformOrigin = TransformOrigin(0.5f, 1f)
                             }

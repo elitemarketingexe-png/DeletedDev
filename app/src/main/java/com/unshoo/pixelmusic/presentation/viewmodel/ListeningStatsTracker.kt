@@ -47,7 +47,10 @@ class ListeningStatsTracker @Inject constructor(
     private val engagementDao: EngagementDao,
     private val musicDao: MusicDao,
     private val userPreferencesRepository: UserPreferencesRepository
-) {
+) : com.unshoo.pixelmusic.data.remote.youtube.PlaybackAuthStateProvider {
+    override fun getPlaybackAuthState(): unshoo.ianshulyadav.pixelmusic.innertube.PlaybackAuthState {
+        return unshoo.ianshulyadav.pixelmusic.innertube.YouTube.currentPlaybackAuthState()
+    }
     private var currentSession: ActiveSession? = null
     private var pendingVoluntarySongId: String? = null
     @Volatile private var telemetryCpn: String? = null
