@@ -17,6 +17,7 @@ import com.unshoo.pixelmusic.data.database.MusicDao
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
 
 class ListeningStatsTrackerTest {
 
@@ -25,6 +26,7 @@ class ListeningStatsTrackerTest {
     private val playbackStatsRepository: PlaybackStatsRepository = mockk(relaxed = true)
     private val engagementDao: EngagementDao = mockk(relaxed = true)
     private val musicDao: MusicDao = mockk(relaxed = true)
+    private val userPreferencesRepository: UserPreferencesRepository = mockk(relaxed = true)
 
     @BeforeEach
     fun setUp() {
@@ -43,7 +45,8 @@ class ListeningStatsTrackerTest {
             dailyMixManager = dailyMixManager,
             playbackStatsRepository = playbackStatsRepository,
             engagementDao = engagementDao,
-            musicDao = musicDao
+            musicDao = musicDao,
+            userPreferencesRepository = userPreferencesRepository
         )
         val song = song(
             songId = "looped-song",
@@ -88,7 +91,8 @@ class ListeningStatsTrackerTest {
             dailyMixManager = dailyMixManager,
             playbackStatsRepository = playbackStatsRepository,
             engagementDao = engagementDao,
-            musicDao = musicDao
+            musicDao = musicDao,
+            userPreferencesRepository = userPreferencesRepository
         )
         val song = song(songId = "song-1")
         val firstChunkMs = 7_000L

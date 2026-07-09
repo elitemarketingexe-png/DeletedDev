@@ -261,7 +261,7 @@ fun UnifiedPlayerSheetV2(
             translationY = currentSheetTranslationY,
             expansionFraction = playerContentExpansionFraction,
             mutex = sheetAnimationMutex,
-            defaultAnimationSpec = sheetAnimationSpec,
+            expandAnimationSpec = sheetAnimationSpec,
             expandedY = sheetExpandedTargetY
         )
     }
@@ -527,7 +527,7 @@ fun UnifiedPlayerSheetV2(
             ) {
                 0.dp
             } else {
-                (3f * miniReadyAlpha).dp
+                (3f * miniReadyAlpha.value).dp
             }
         }
     }
@@ -623,9 +623,9 @@ fun UnifiedPlayerSheetV2(
                             )
                             .graphicsLayer {
                                 translationX = offsetAnimatable.value
-                                scaleX = miniAppearScale
-                                scaleY = visualOvershootScaleY.value * miniAppearScale
-                                alpha = miniReadyAlpha
+                                scaleX = miniAppearScale.value
+                                scaleY = visualOvershootScaleY.value * miniAppearScale.value
+                                alpha = miniReadyAlpha.value
                                 transformOrigin = TransformOrigin(0.5f, 1f)
                             }
                             // Always apply Modifier.shadow with the dynamic elevation
