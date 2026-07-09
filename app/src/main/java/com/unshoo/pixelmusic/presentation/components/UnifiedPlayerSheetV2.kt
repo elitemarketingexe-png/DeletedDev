@@ -201,8 +201,7 @@ fun UnifiedPlayerSheetV2(
 
     val currentSheetContentState by playerViewModel.sheetState.collectAsStateWithLifecycle()
     val predictiveBackCollapseProgress by playerViewModel.predictiveBackCollapseFraction.collectAsStateWithLifecycle()
-    val predictiveBackSwipeEdgeState by playerViewModel.predictiveBackSwipeEdge.collectAsStateWithLifecycle()
-    val predictiveBackSwipeEdge = predictiveBackSwipeEdgeState.value
+    val predictiveBackSwipeEdge by playerViewModel.predictiveBackSwipeEdge.collectAsStateWithLifecycle()
     val prewarmFullPlayer = rememberPrewarmFullPlayer(infrequentPlayerState.currentSong?.id)
 
     val playerConfig by playerViewModel.playerConfigSlice.collectAsStateWithLifecycle()
@@ -515,8 +514,7 @@ fun UnifiedPlayerSheetV2(
     val miniPlayerScheme = sheetThemeState.miniPlayerScheme
     val isPreparingPlayback = sheetThemeState.isPreparingPlayback
     val miniReadyAlpha = sheetThemeState.miniReadyAlpha
-    val miniAppearScaleState = sheetThemeState.miniAppearScale
-    val miniAppearScale = miniAppearScaleState.value
+    val miniAppearScale = sheetThemeState.miniAppearScale
     val playerAreaBackground = sheetThemeState.playerAreaBackground
     // Elevation is only visible in the mini/collapsed state (expansion < 0.18).
     // miniReadyAlpha fades the shadow in during the initial song-appear animation.
