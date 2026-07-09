@@ -4,7 +4,10 @@ import android.widget.Toast
 import com.unshoo.pixelmusic.presentation.components.ExpressiveOfflineDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.MutatorMutex
 import androidx.compose.foundation.background
@@ -215,10 +218,6 @@ fun UnifiedPlayerSheetV2(
     val scope = rememberCoroutineScope()
 
     val offsetAnimatable = remember { Animatable(0f) }
-    // Dismiss micro-animation properties — all driven by MiniPlayerDismissGestureHandler
-    val dismissAlpha = remember { Animatable(1f) }
-    val dismissRotation = remember { Animatable(0f) }
-    val dismissScale = remember { Animatable(1f) }
     val screenWidthPx = remember(configuration, density) {
         with(density) { configuration.screenWidthDp.dp.toPx() }
     }
@@ -235,21 +234,17 @@ fun UnifiedPlayerSheetV2(
     }
     val miniPlayerContentHeightPx = remember { with(density) { MiniPlayerHeight.toPx() } }
 
-    val isSheetVisible by playerViewModel.isSheetVisible.collectAsStateWithLifecycle()
     val isCastConnecting by playerViewModel.isCastConnecting.collectAsStateWithLifecycle()
-    val showPlayerContentArea by remember(infrequentPlayerState.currentSong, isCastConnecting, isSheetVisible) {
-        derivedStateOf { infrequentPlayerState.currentSong != null || isCastConnecting || isSheetVisible }
+    val showPlayerContentArea by remember(infrequentPlayerState.currentSong, isCastConnecting) {
+        derivedStateOf { infrequentPlayerState.currentSong != null || isCastConnecting }
     }
 
     val playerContentExpansionFraction = playerViewModel.playerContentExpansionFraction
     val visualOvershootScaleY = remember { Animatable(1f) }
     val initialFullPlayerOffsetY = remember(density) { with(density) { 24.dp.toPx() } }
-    // Material 3 Emphasized Decelerate easing — no overshoot, no bounce, one clean arc.
-    val emphasizedDecelerate = remember { CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f) }
-    val sheetExpandAnimSpec = remember { tween<Float>(durationMillis = 450, easing = emphasizedDecelerate) }
-    val sheetCollapseAnimSpec = remember { tween<Float>(durationMillis = 350, easing = emphasizedDecelerate) }
-    // Use expand spec as the default (collapse overrides it in SheetMotionController)
-    val sheetAnimationSpec = sheetExpandAnimSpec
+    val sheetAnimationSpec = remember {
+        tween<Float>(durationMillis = ANIMATION_DURATION_MS, easing = FastOutSlowInEasing)
+    }
     val sheetAnimationMutex = remember { MutatorMutex() }
     val sheetExpandedTargetY = 0f
     val initialY =
@@ -260,15 +255,13 @@ fun UnifiedPlayerSheetV2(
         currentSheetTranslationY,
         playerContentExpansionFraction,
         sheetAnimationMutex,
-        sheetExpandAnimSpec,
-        sheetCollapseAnimSpec
+        sheetAnimationSpec
     ) {
         SheetMotionController(
             translationY = currentSheetTranslationY,
             expansionFraction = playerContentExpansionFraction,
             mutex = sheetAnimationMutex,
-            expandAnimationSpec = sheetExpandAnimSpec,
-            collapseAnimationSpec = sheetCollapseAnimSpec,
+            defaultAnimationSpec = sheetAnimationSpec,
             expandedY = sheetExpandedTargetY
         )
     }
@@ -286,6 +279,8 @@ fun UnifiedPlayerSheetV2(
         playerViewModel = playerViewModel
     )
 
+    // FullPlayerVisualState now holds lazy getters that read from the Animatable
+    // inside graphicsLayer (draw-phase), avoiding per-frame recomposition.
     val fullPlayerVisualState = rememberFullPlayerVisualState(
         expansionFraction = playerContentExpansionFraction,
         initialOffsetY = initialFullPlayerOffsetY
@@ -299,7 +294,7 @@ fun UnifiedPlayerSheetV2(
 
     suspend fun animatePlayerSheet(
         targetExpanded: Boolean,
-        animationSpec: androidx.compose.animation.core.AnimationSpec<Float>? = null,
+        animationSpec: androidx.compose.animation.core.AnimationSpec<Float> = sheetAnimationSpec,
         initialVelocity: Float = 0f
     ) {
         sheetMotionController.animateTo(
@@ -312,17 +307,51 @@ fun UnifiedPlayerSheetV2(
     }
 
     LaunchedEffect(sheetCollapsedTargetY, sheetMotionController) {
+        // Keep the mini player anchored to the latest collapsed target whenever
+        // the navbar height/visibility changes under it.
         sheetMotionController.syncToExpansion(sheetCollapsedTargetY)
     }
 
-    var previousSheetState by remember { mutableStateOf<PlayerSheetState?>(null) }
+    var previousSheetState by remember { mutableStateOf(currentSheetContentState) }
     LaunchedEffect(showPlayerContentArea, currentSheetContentState) {
-        if (currentSheetContentState == previousSheetState && previousSheetState != null) return@LaunchedEffect
-        previousSheetState = currentSheetContentState
         val targetExpanded = showPlayerContentArea && currentSheetContentState == PlayerSheetState.EXPANDED
-        // Scale stays exactly 1f — no secondary bounce pulse.
-        visualOvershootScaleY.snapTo(1f)
+        val shouldBounceCollapse =
+            showPlayerContentArea &&
+                previousSheetState == PlayerSheetState.EXPANDED &&
+                currentSheetContentState == PlayerSheetState.COLLAPSED
+
+        previousSheetState = currentSheetContentState
         animatePlayerSheet(targetExpanded = targetExpanded)
+
+        if (showPlayerContentArea) {
+            scope.launch {
+                visualOvershootScaleY.snapTo(1f)
+                if (targetExpanded) {
+                    visualOvershootScaleY.animateTo(
+                        targetValue = 1f,
+                        animationSpec = keyframes {
+                            durationMillis = 50
+                            1.0f at 0
+                            1.05f at 125
+                            1.0f at 250
+                        }
+                    )
+                } else if (shouldBounceCollapse) {
+                    visualOvershootScaleY.snapTo(0.96f)
+                    visualOvershootScaleY.animateTo(
+                        targetValue = 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow
+                        )
+                    )
+                } else {
+                    visualOvershootScaleY.snapTo(1f)
+                }
+            }
+        } else {
+            scope.launch { visualOvershootScaleY.snapTo(1f) }
+        }
     }
 
     val sheetVisualState = rememberSheetVisualState(
@@ -407,9 +436,6 @@ fun UnifiedPlayerSheetV2(
         density = density,
         hapticFeedback = hapticFeedback,
         offsetAnimatable = offsetAnimatable,
-        dismissAlpha = dismissAlpha,
-        dismissRotation = dismissRotation,
-        dismissScale = dismissScale,
         screenWidthPx = screenWidthPx,
         onDismissPlaylistAndShowUndo = { playerViewModel.dismissPlaylistAndShowUndo() },
         onDismissStarted = { playerViewModel.setMiniPlayerDismissing(true) }
@@ -475,9 +501,6 @@ fun UnifiedPlayerSheetV2(
     val themedAlbumArtUri by playerViewModel.currentThemedAlbumArtUri.collectAsStateWithLifecycle()
     val isDarkTheme = LocalPixelMusicDarkTheme.current
     val currentSong = infrequentPlayerState.currentSong
-    
-    val colorPalette by playerViewModel.colorPalette.collectAsStateWithLifecycle()
-
     val sheetThemeState = rememberSheetThemeState(
         activePlayerSchemePair = activePlayerSchemePair,
         isDarkTheme = isDarkTheme,
@@ -485,8 +508,7 @@ fun UnifiedPlayerSheetV2(
         currentSong = currentSong,
         themedAlbumArtUri = themedAlbumArtUri,
         preparingSongId = preparingSongId,
-        systemColorScheme = MaterialTheme.colorScheme,
-        colorPalette = colorPalette
+        systemColorScheme = MaterialTheme.colorScheme
     )
     val albumColorScheme = sheetThemeState.albumColorScheme
     val miniPlayerScheme = sheetThemeState.miniPlayerScheme
@@ -505,7 +527,7 @@ fun UnifiedPlayerSheetV2(
             ) {
                 0.dp
             } else {
-                (3f * miniReadyAlpha.value).dp
+                (3f * miniReadyAlpha).dp
             }
         }
     }
@@ -601,12 +623,9 @@ fun UnifiedPlayerSheetV2(
                             )
                             .graphicsLayer {
                                 translationX = offsetAnimatable.value
-                                // Immersive dismiss: tilt, fade, and scale-down as card is swiped
-                                rotationZ = dismissRotation.value
-                                alpha = miniReadyAlpha.value * dismissAlpha.value
-                                scaleX = dismissScale.value * miniAppearScale.value
-                                scaleY = visualOvershootScaleY.value * dismissScale.value * miniAppearScale.value
-                                // Pivot at bottom-center: card tilts as if held at its base
+                                scaleX = miniAppearScale
+                                scaleY = visualOvershootScaleY.value * miniAppearScale
+                                alpha = miniReadyAlpha
                                 transformOrigin = TransformOrigin(0.5f, 1f)
                             }
                             // Always apply Modifier.shadow with the dynamic elevation
