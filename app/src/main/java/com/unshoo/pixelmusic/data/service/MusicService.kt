@@ -160,7 +160,11 @@ class MusicService : MediaLibraryService() {
     @Inject
     lateinit var engagementDao: com.unshoo.pixelmusic.data.database.EngagementDao
 
+    // FIXED: Proper auth provider for telemetry
     private lateinit var telemetryManager: com.unshoo.pixelmusic.data.remote.youtube.YouTubeTelemetryManager
+
+    // Telemetry state tracking
+    private var lastTelemetryVideoId: String? = null
 
     private var scrobbleManager: com.unshoo.pixelmusic.data.lastfm.ScrobbleManager? = null
 
@@ -413,10 +417,10 @@ class MusicService : MediaLibraryService() {
         }
 
         super.onCreate()
-        telemetryManager = com.unshoo.pixelmusic.data.remote.youtube.YouTubeTelemetryManager(
-            httpClient = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.client,
-            clientProvider = { listeningStatsTracker }
-        )
+
+        // Initialize telemetry with direct Innertube mapping (no constructor parameters needed now)
+        telemetryManager = com.unshoo.pixelmusic.data.remote.youtube.YouTubeTelemetryManager()
+
         listeningStatsTracker.initialize(appScope)
         scrobbleManager = com.unshoo.pixelmusic.data.lastfm.ScrobbleManager(scope = serviceScope)
         
@@ -1236,29 +1240,47 @@ class MusicService : MediaLibraryService() {
     private fun startNavidromePlaybackReporting() {}
     private fun stopNavidromePlaybackReporting() {}
 
+    // ==================== FIXED TELEMETRY HELPERS ====================
+
     private fun startTelemetryReporting() {
         telemetryJob?.cancel()
         val player = mediaSession?.player ?: engine.masterPlayer
+
+        // FIXED: Always attempt telemetry for YouTube content (11-char video IDs)
         player.currentMediaItem?.let { item ->
-            val scheme = item.localConfiguration?.uri?.scheme
-            if (scheme == "youtube" || item.mediaId.length == 11) {
+            val mediaId = item.mediaId
+            val isYouTubeContent = mediaId.length == 11 ||
+                                   item.localConfiguration?.uri?.toString()?.contains("googlevideo") == true ||
+                                   item.localConfiguration?.uri?.scheme == "youtube"
+
+            if (isYouTubeContent) {
                 val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
-                telemetryManager.onSongChanged(item.mediaId, durationMs)
+                if (lastTelemetryVideoId != mediaId) {
+                    telemetryManager.onSongChanged(mediaId, durationMs)
+                    lastTelemetryVideoId = mediaId
+                }
                 telemetryManager.onPlaybackStateChanged(true)
             }
         }
+
         telemetryJob = serviceScope.launch {
             while (isActive) {
                 val player = mediaSession?.player ?: engine.masterPlayer
                 if (player.isPlaying) {
                     val positionMs = player.currentPosition.coerceAtLeast(0L)
                     listeningStatsTracker.onProgress(positionMs, player.isPlaying)
-                    
+
+                    // FIXED: Unconditional YouTube content check
                     val item = player.currentMediaItem
-                    val scheme = item?.localConfiguration?.uri?.scheme
-                    if (item != null && (scheme == "youtube" || item.mediaId.length == 11)) {
-                        val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
-                        telemetryManager.updateProgress(positionMs, durationMs)
+                    if (item != null) {
+                        val mediaId = item.mediaId
+                        val isYouTube = mediaId.length == 11 ||
+                                        item.localConfiguration?.uri?.toString()?.contains("googlevideo") == true
+
+                        if (isYouTube) {
+                            val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
+                            telemetryManager.updateProgress(positionMs, durationMs)
+                        }
                     }
                 }
                 delay(1000L)
@@ -1266,13 +1288,16 @@ class MusicService : MediaLibraryService() {
         }
     }
 
-    private fun stopTelemetryReporting() {
+    private fun stopTelemetryReporting(isPause: Boolean = false) {
         telemetryJob?.cancel()
         telemetryJob = null
         val player = mediaSession?.player ?: engine.masterPlayer
         listeningStatsTracker.onPlayStateChanged(false, player.currentPosition.coerceAtLeast(0L))
         telemetryManager.onPlaybackStateChanged(false)
-        telemetryManager.stopTelemetry()
+        if (!isPause) {
+            telemetryManager.stopTelemetry()
+            lastTelemetryVideoId = null
+        }
     }
 
     // Prevent infinite re-resolve loops on permanent stream failures.
@@ -1312,7 +1337,7 @@ class MusicService : MediaLibraryService() {
                 val state = if (player.playbackState == Player.STATE_ENDED) "stopped" else "paused"
                 reportNavidromePlayback(state)
                 stopNavidromePlaybackReporting()
-                stopTelemetryReporting()
+                stopTelemetryReporting(isPause = true)
             }
 
             // Re-apply the last known RG volume immediately when resuming playback.
@@ -1355,6 +1380,8 @@ class MusicService : MediaLibraryService() {
             val player = mediaSession?.player ?: engine.masterPlayer
             if (playbackState == Player.STATE_ENDED) {
                 listeningStatsTracker.finalizeCurrentSession()
+                telemetryManager.stopTelemetry()
+                lastTelemetryVideoId = null
                 val mediaItem = player.currentMediaItem
 
                 endOfTrackTimerSongId = null
@@ -1480,6 +1507,13 @@ class MusicService : MediaLibraryService() {
             requestWidgetFullUpdate(force = true)
             mediaSession?.let { refreshMediaSessionUi(it) }
             schedulePlaybackSnapshotPersist()
+
+            // BUG 4 FIX: Ensure new telemetry session starts on track transition (vital for gapless auto-transitions)
+            lastTelemetryVideoId = null
+            telemetryManager.stopTelemetry()
+            if (player.isPlaying) {
+                startTelemetryReporting()
+            }
         }
 
         override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
