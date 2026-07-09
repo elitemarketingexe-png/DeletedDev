@@ -235,9 +235,10 @@ fun UnifiedPlayerSheetV2(
     }
     val miniPlayerContentHeightPx = remember { with(density) { MiniPlayerHeight.toPx() } }
 
+    val isSheetVisible by playerViewModel.isSheetVisible.collectAsStateWithLifecycle()
     val isCastConnecting by playerViewModel.isCastConnecting.collectAsStateWithLifecycle()
-    val showPlayerContentArea by remember(infrequentPlayerState.currentSong, isCastConnecting) {
-        derivedStateOf { infrequentPlayerState.currentSong != null || isCastConnecting }
+    val showPlayerContentArea by remember(infrequentPlayerState.currentSong, isCastConnecting, isSheetVisible) {
+        derivedStateOf { infrequentPlayerState.currentSong != null || isCastConnecting || isSheetVisible }
     }
 
     val playerContentExpansionFraction = playerViewModel.playerContentExpansionFraction

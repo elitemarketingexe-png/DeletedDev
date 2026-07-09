@@ -528,28 +528,7 @@ fun ExploreScreen(
                             }
                         }
 
-                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "New Releases") &&
-                            uiState.newReleaseAlbums.isNotEmpty()
-                        ) {
-                            item(key = "new_releases_header") {
-                                SectionHeader(title = "New Releases")
-                            }
-                            item(key = "new_releases_carousel") {
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    items(items = uiState.newReleaseAlbums, key = { album -> "new_release_${album.browseId}" }) { album ->
-                                        AlbumCarouselItem(
-                                            album = album,
-                                            onClick = {
-                                                navController.navigateSafely(Screen.AlbumDetail.createRoute(album.browseId))
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
+
 
                         if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") &&
                             quickPicks.isNotEmpty()
@@ -635,6 +614,35 @@ fun ExploreScreen(
                         if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") && cardShelfSections.isNotEmpty()) {
                             item(key = "mixed_for_you_section") {
                                 MixedForYouSection(cardShelfSections, playerViewModel, navController, uiState.localSongs)
+                            }
+                        }
+
+                        // Move New Releases here (4th row) - shown under New Releases filter or main All/For You filters
+                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "New Releases" || uiState.selectedFilter == "For You") &&
+                            uiState.newReleaseAlbums.isNotEmpty()
+                        ) {
+                            item(key = "new_releases_header") {
+                                SectionHeader(
+                                    title = "New Releases",
+                                    onActionClick = {
+                                        exploreViewModel.setSelectedFilter("New Releases")
+                                    }
+                                )
+                            }
+                            item(key = "new_releases_carousel") {
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    items(items = uiState.newReleaseAlbums, key = { album -> "new_release_${album.browseId}" }) { album ->
+                                        AlbumCarouselItem(
+                                            album = album,
+                                            onClick = {
+                                                navController.navigateSafely(Screen.AlbumDetail.createRoute(album.browseId))
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
 

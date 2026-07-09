@@ -570,6 +570,7 @@ class PlayerViewModel @Inject constructor(
     private val _sheetState = MutableStateFlow(PlayerSheetState.COLLAPSED)
     val sheetState: StateFlow<PlayerSheetState> = _sheetState.asStateFlow()
     private val _isSheetVisible = MutableStateFlow(false)
+    val isSheetVisible: StateFlow<Boolean> = _isSheetVisible.asStateFlow()
     private val _bottomBarHeight = MutableStateFlow(0)
     val bottomBarHeight: StateFlow<Int> = _bottomBarHeight.asStateFlow()
     private val _predictiveBackCollapseFraction = MutableStateFlow(0f)
@@ -4830,14 +4831,15 @@ class PlayerViewModel @Inject constructor(
                                     kotlinx.coroutines.withTimeoutOrNull(5_000L) {
                                         dualPlayerEngine.preResolveForPlayback(startItem)
                                     } ?: run {
-                                        // Timeout: retry quality-aware resolve once more (HIGH stays high).
-                                        // Only fall back to lowest if that also fails.
+                                        // Timeout fallback: query user preference and resolve accordingly
                                         val uri = startItem.localConfiguration?.uri
                                         if (uri?.scheme == "youtube") {
                                             val videoId = uri.toString().removePrefix("youtube://")
                                             val ytSong = com.unshoo.pixelmusic.data.model.youtube.Song(
                                                 youtubeId = videoId
                                             )
+                                            
+                                            // Dynamic stream resolution optimized for user preference
                                             val url = try {
                                                 com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
                                                     .getSongPlayerUrl(context, ytSong, allowLocal = true)

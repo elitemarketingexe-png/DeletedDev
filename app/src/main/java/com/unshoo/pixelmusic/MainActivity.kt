@@ -1030,9 +1030,12 @@ class MainActivity : ComponentActivity() {
                         }
 
                         val showPlayerContentInitially by remember {
-                            playerViewModel.stablePlayerState
-                                .map { it.currentSong?.id != null }
-                                .distinctUntilChanged()
+                            kotlinx.coroutines.flow.combine(
+                                playerViewModel.stablePlayerState.map { it.currentSong?.id != null },
+                                playerViewModel.isSheetVisible
+                            ) { hasSong, isVisible ->
+                                hasSong || isVisible
+                            }.distinctUntilChanged()
                         }.collectAsStateWithLifecycle(initialValue = false)
                         val routesWithHiddenMiniPlayer = remember { setOf(Screen.NavBarCrRad.route) }
                         val shouldHideMiniPlayer by remember(currentRoute) {
