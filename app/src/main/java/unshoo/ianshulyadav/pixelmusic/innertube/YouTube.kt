@@ -469,7 +469,7 @@ object YouTube {
             }
             seenContinuations.add(continuation)
             requestCount++
-            
+
             response = innerTube.browse(
                 client = WEB_REMIX,
                 continuation = continuation,
@@ -1018,14 +1018,14 @@ object YouTube {
 
         val gridItems = response.continuationContents?.sectionListContinuation?.contents?.firstOrNull()
             ?.gridRenderer?.items
-        
+
         if (gridItems == null) {
             return@runCatching LibraryPage(
                 items = emptyList(),
                 continuation = null
             )
         }
-        
+
         val items = gridItems.mapNotNull {
             it.musicTwoRowItemRenderer?.let { renderer ->
                 LibraryPage.fromMusicTwoRowItemRenderer(renderer)
@@ -1067,7 +1067,7 @@ object YouTube {
                 continuation = continuation,
                 forceAnonymous = true
             ).body<BrowseResponse>()
-        
+
             var sections = parseChartsSections(response)
             if (sections.isEmpty() && continuation == null) {
                 val fallbackResponse = innerTube.browse(
@@ -1079,7 +1079,7 @@ object YouTube {
                 ).body<BrowseResponse>()
                 sections = parseChartsSections(fallbackResponse)
             }
-        
+
             ChartsPage(
                 sections = sections,
                 continuation = response.continuationContents?.sectionListContinuation?.continuations?.getContinuation()
@@ -1101,9 +1101,9 @@ object YouTube {
                         ?: return@forEach
                     val items = renderer.contents.mapNotNull { item ->
                         when {
-                            item.musicResponsiveListItemRenderer != null -> 
+                            item.musicResponsiveListItemRenderer != null ->
                                 convertToChartItem(item.musicResponsiveListItemRenderer)
-                            item.musicTwoRowItemRenderer != null -> 
+                            item.musicTwoRowItemRenderer != null ->
                                 convertMusicTwoRowItem(item.musicTwoRowItemRenderer)
                             else -> null
                         }
@@ -1495,10 +1495,7 @@ object YouTube {
             )]
         }.joinToString("")
 
-        val playbackUrl = playbackTracking.replace(
-            "https://s.youtube.com",
-            "https://music.youtube.com",
-        )
+        val playbackUrl = playbackTracking
 
         val botGuardTokens = if (authState.webClientPoTokenEnabled && !videoId.isNullOrBlank()) {
             val sessionId = authState.visitorData ?: authState.dataSyncId ?: authState.sessionId
