@@ -1497,23 +1497,11 @@ object YouTube {
 
         val playbackUrl = playbackTracking
 
-        val botGuardTokens = if (authState.webClientPoTokenEnabled && !videoId.isNullOrBlank()) {
-            val sessionId = authState.visitorData ?: authState.dataSyncId ?: authState.sessionId
-            if (!sessionId.isNullOrBlank()) BotGuardTokenGenerator.mintToken(videoId, sessionId) else null
-        } else {
-            null
-        }
-        val requestAuthState = if (botGuardTokens != null) {
-            authState.copy(poTokenPlayer = botGuardTokens.playerToken, poTokenGvs = botGuardTokens.sessionToken)
-        } else {
-            authState
-        }
         innerTube.registerPlayback(
             url = playbackUrl,
             playlistId = playlistId,
             cpn = cpn,
-            poToken = botGuardTokens?.sessionToken ?: resolveGvsPoToken(requestAuthState),
-            authState = requestAuthState,
+            authState = authState,
         )
     }
 
