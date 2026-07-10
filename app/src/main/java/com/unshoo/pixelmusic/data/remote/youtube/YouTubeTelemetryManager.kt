@@ -38,7 +38,7 @@ class YouTubeTelemetryManager {
             runCatching {
                 // 1. Fetch the player response to get the correct signed tracking URL
                 // We try multiple clients because some may not return the playbackTracking URL
-                val clientsToTry = listOf(YouTubeClient.WEB_REMIX, YouTubeClient.WEB, YouTubeClient.ANDROID_MUSIC)
+                val clientsToTry = listOf(YouTubeClient.WEB_REMIX, YouTubeClient.WEB, YouTubeClient.MOBILE)
                 var playbackUrl: String? = null
                 var successfulClient: YouTubeClient? = null
 
