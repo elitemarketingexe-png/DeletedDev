@@ -47,7 +47,7 @@ class YouTubeTelemetryManager {
                     .getOrNull()
 
                 for (client in clientsToTry) {
-                    Log.d(TAG, "Trying to fetch tracking URL with client: ${client.name}")
+                    Log.d(TAG, "Trying to fetch tracking URL with client: ${client.clientName}")
                     val playerResult = YouTube.player(
                         videoId = videoId,
                         playlistId = null,
@@ -71,7 +71,7 @@ class YouTubeTelemetryManager {
                     return@runCatching
                 }
 
-                Log.d(TAG, "Found tracking URL using ${successfulClient?.name} for $videoId")
+                Log.d(TAG, "Found tracking URL using ${successfulClient?.clientName} for $videoId")
 
                 // 3. Register playback (The "Metrolist" approach: single one-shot ping)
                 YouTube.registerPlayback(

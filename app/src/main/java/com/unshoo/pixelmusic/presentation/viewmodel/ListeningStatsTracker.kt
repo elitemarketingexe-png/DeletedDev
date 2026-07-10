@@ -321,7 +321,7 @@ class ListeningStatsTracker @Inject constructor(
                         "${finalTrackingUrl}${separator}ver=2&c=WEB_REMIX&cver=1.20260531.05.00" +
                             "&cplayer=UNIPLAYER&cpn=$cpn&rt=$rtSec&docid=$ytId"
 
-                    unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(startUrl)
+                    // Removed sendTelemetryPing call to avoid bot detection (handled by YouTubeTelemetryManager)
                     isPlaybackStartReported = true
 
                     // Full registerPlayback path (InnerTube-authenticated) when we have a real tracking URL.
@@ -371,17 +371,8 @@ class ListeningStatsTracker @Inject constructor(
         isPaused: Boolean
     ) {
         runCatching {
-            val cachedWatchUrl = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.watchtimeTrackingCache[videoId]?.replace("https://s.youtube.com", "https://music.youtube.com")
-                ?: "https://music.youtube.com/api/stats/watchtime?ns=yt&el=detailpage&docid=$videoId"
-            
-            val currentSession = currentSession
-            val lengthSec = if (currentSession != null && currentSession.totalDurationMs > 0) currentSession.totalDurationMs / 1000 else 0L
-            val rtSec = (System.currentTimeMillis() - sessionStartTimeMs) / 1000
-            val state = if (isPaused) "paused" else if (et >= lengthSec * 0.95 && lengthSec > 0) "ended" else "playing"
-            val separator = if (cachedWatchUrl.contains("?")) "&" else "?"
-
-            val fullUrl = "$cachedWatchUrl${separator}cpn=$cpn&state=$state&st=$st&et=$et&cmt=$et&rt=$rtSec&lact=1&len=$lengthSec&ver=2&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER&afmt=251&muted=0&volume=100"
-            unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(fullUrl)
+            // Heartbeat pings removed to avoid bot detection.
+            // Basic history is now handled via one-shot ping in YouTubeTelemetryManager.
         }
     }
 
@@ -723,10 +714,7 @@ class ListeningStatsTracker @Inject constructor(
         if (ytId != null) {
             persistenceScope.launch(Dispatchers.IO) {
                 runCatching {
-                    val cpn = (1..16).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".random() }.joinToString("")
-                    val lengthSec = listened / 1000
-                    val pingUrl = "https://music.youtube.com/api/stats/watchtime?ns=yt&el=detailpage&docid=$ytId&ver=2&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER&cpn=$cpn&state=ended&st=0&et=$lengthSec&cmt=$lengthSec&rt=$lengthSec&lact=1&len=$lengthSec"
-                    unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(pingUrl)
+                    // End-of-session heartbeats removed to avoid bot detection.
                 }
             }
         }
