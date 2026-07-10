@@ -50,11 +50,6 @@ class ListeningStatsTracker @Inject constructor(
 ) {
     private var currentSession: ActiveSession? = null
     private var pendingVoluntarySongId: String? = null
-    @Volatile private var telemetryCpn: String? = null
-    @Volatile private var telemetryLastReportedTimeMs: Long = 0L
-    @Volatile private var telemetrySessionStartTimeMs: Long = 0L
-    @Volatile private var isPlaybackStartReported = false
-    @Volatile private var isWatchCompleted = false
     private var scope: CoroutineScope? = null
     private val persistenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _playbackHistory = MutableStateFlow<List<PlaybackStatsRepository.PlaybackHistoryEntry>>(emptyList())
@@ -253,126 +248,13 @@ class ListeningStatsTracker @Inject constructor(
 
         persistenceScope.launch(Dispatchers.IO) {
             runCatching {
-                val ytId = resolveYtId(safeSongId)
-                if (ytId != null) {
-                    val cpn = (1..16).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".random() }.joinToString("")
-                    telemetryCpn = cpn
-                    telemetryLastReportedTimeMs = 0L
-                    telemetrySessionStartTimeMs = System.currentTimeMillis()
-                    isPlaybackStartReported = false
-                    isWatchCompleted = false
-
-                    // SpatialFlow parity: resolve tracking URLs quickly, then:
-                    //  1) send stats/playback start ping (with auth headers via sendTelemetryPing)
-                    //  2) call YouTube.registerPlayback when we have a real tracking base URL
-                    // Both are needed for the currently playing song to appear in YT Music history.
-                    var trackingUrl: String? =
-                        com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[ytId]
-                    var watchtimeUrl: String? =
-                        com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.watchtimeTrackingCache[ytId]
-                    if (trackingUrl == null) {
-                        // Wait up to ~1.2s for stream resolve to populate tracking cache.
-                        repeat(12) {
-                            kotlinx.coroutines.delay(100L)
-                            trackingUrl =
-                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[ytId]
-                            watchtimeUrl =
-                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.watchtimeTrackingCache[ytId]
-                            if (trackingUrl != null) return@repeat
-                        }
-                    }
-
-                    // If still missing, fetch a lightweight WEB_REMIX player response just for tracking URLs
-                    // (same fallback SpatialFlow / registerYoutubePlaybackHistory uses).
-                    if (trackingUrl.isNullOrBlank()) {
-                        runCatching {
-                            val signatureTimestamp = unshoo.ianshulyadav.pixelmusic.innertube.NewPipeUtils
-                                .getSignatureTimestamp(ytId)
-                                .getOrNull()
-                            val playerRes = unshoo.ianshulyadav.pixelmusic.innertube.YouTube.player(
-                                videoId = ytId,
-                                playlistId = null,
-                                client = unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.WEB_REMIX,
-                                signatureTimestamp = signatureTimestamp,
-                                setLogin = true
-                            ).getOrNull()
-                            trackingUrl = playerRes?.playbackTracking?.videostatsPlaybackUrl?.baseUrl
-                            watchtimeUrl = playerRes?.playbackTracking?.videostatsWatchtimeUrl?.baseUrl
-                            if (!trackingUrl.isNullOrBlank()) {
-                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
-                                    .playbackTrackingCache[ytId] = trackingUrl!!
-                            }
-                            if (!watchtimeUrl.isNullOrBlank()) {
-                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
-                                    .watchtimeTrackingCache[ytId] = watchtimeUrl!!
-                            }
-                        }
-                    }
-
-                    val finalTrackingUrl = (trackingUrl ?: "")
-                        .replace("https://s.youtube.com", "https://music.youtube.com")
-                        .ifBlank {
-                            "https://music.youtube.com/api/stats/playback?ns=yt&el=detailpage&docid=$ytId"
-                        }
-
-                    val separator = if (finalTrackingUrl.contains("?")) "&" else "?"
-                    val rtSec = (System.currentTimeMillis() - telemetrySessionStartTimeMs) / 1000
-                    val startUrl =
-                        "${finalTrackingUrl}${separator}ver=2&c=WEB_REMIX&cver=1.20260531.05.00" +
-                            "&cplayer=UNIPLAYER&cpn=$cpn&rt=$rtSec&docid=$ytId"
-
-                    // Removed sendTelemetryPing call to avoid bot detection (handled by YouTubeTelemetryManager)
-                    isPlaybackStartReported = true
-
-                    // Full registerPlayback path (InnerTube-authenticated) when we have a real tracking URL.
-                    if (!trackingUrl.isNullOrBlank()) {
-                        runCatching {
-                            unshoo.ianshulyadav.pixelmusic.innertube.YouTube.registerPlayback(
-                                playlistId = null,
-                                playbackTracking = trackingUrl!!,
-                                videoId = ytId
-                            )
-                        }.onSuccess {
-                            timber.log.Timber.d("YT history registerPlayback OK for %s", ytId)
-                        }.onFailure {
-                            timber.log.Timber.w(it, "YT history registerPlayback failed for %s", ytId)
-                        }
-                    }
-
-                    // Immediate first watchtime heartbeat at t≈1s (SpatialFlow does this at 1s).
-                    kotlinx.coroutines.delay(1_000L)
-                    if (telemetryCpn == cpn && currentSession?.songId == safeSongId) {
-                        sendWatchtimePingInternal(
-                            videoId = ytId,
-                            st = 0,
-                            et = 1,
-                            cpn = cpn,
-                            sessionStartTimeMs = telemetrySessionStartTimeMs,
-                            isPaused = false
-                        )
-                        telemetryLastReportedTimeMs = 1_000L
-                    }
-                }
+                // Telemetry handled by YouTubeTelemetryManager in MusicService
             }.onFailure {
                 timber.log.Timber.w(it, "YT telemetry start failed")
             }
         }
         if (pendingVoluntarySongId == safeSongId) {
             pendingVoluntarySongId = null
-        }
-    }
-
-    private suspend fun sendWatchtimePingInternal(
-        videoId: String,
-        st: Long,
-        et: Long,
-        cpn: String,
-        sessionStartTimeMs: Long,
-        isPaused: Boolean
-    ) {
-        runCatching {
-            // Heartbeat pings removed to avoid bot detection.
-            // Basic history is now handled via one-shot ping in YouTubeTelemetryManager.
         }
     }
 
@@ -385,25 +267,6 @@ class ListeningStatsTracker @Inject constructor(
         session.lastRealtimeMs = nowRealtime
         session.lastKnownPositionMs = positionMs.coerceAtLeast(0L)
         session.lastUpdateEpochMs = System.currentTimeMillis()
-
-        val songId = session.songId
-        val cpn = telemetryCpn
-        if (cpn != null) {
-            val startTimeMs = telemetrySessionStartTimeMs
-            val lastReportedSec = telemetryLastReportedTimeMs / 1000
-            val positionSec = positionMs / 1000
-            if (positionSec > lastReportedSec) {
-                persistenceScope.launch(Dispatchers.IO) {
-                    val ytId = resolveYtId(songId)
-                    if (ytId != null) {
-                        sendWatchtimePingInternal(ytId, lastReportedSec, positionSec, cpn, startTimeMs, !isPlaying)
-                    }
-                }
-            }
-            if (!isPlaying) {
-                telemetryCpn = null
-            }
-        }
     }
 
     @Synchronized
@@ -415,53 +278,6 @@ class ListeningStatsTracker @Inject constructor(
         session.lastRealtimeMs = nowRealtime
         session.lastKnownPositionMs = positionMs.coerceAtLeast(0L)
         session.lastUpdateEpochMs = System.currentTimeMillis()
-
-        val songId = session.songId
-        if (isPlaying) {
-            val durationMs = session.totalDurationMs
-            val positionSec = positionMs / 1000
-            val lastReportedSec = telemetryLastReportedTimeMs / 1000
-            val cpn = telemetryCpn ?: return
-            val startTimeMs = telemetrySessionStartTimeMs
-
-            var pingSt: Long? = null
-            var pingEt: Long? = null
-
-            if (Math.abs(positionMs - telemetryLastReportedTimeMs) > 2000L) {
-                val prevPos = lastReportedSec
-                val preSeekPos = positionSec
-                if (preSeekPos > prevPos) {
-                    pingSt = prevPos
-                    pingEt = preSeekPos
-                }
-                telemetryLastReportedTimeMs = positionMs
-            } else if (lastReportedSec == 0L && positionSec >= 1L) {
-                pingSt = 0L
-                pingEt = positionSec
-                telemetryLastReportedTimeMs = positionMs
-            } else if (positionSec - lastReportedSec >= 30L) {
-                pingSt = lastReportedSec
-                pingEt = positionSec
-                telemetryLastReportedTimeMs = positionMs
-            } else if (durationMs > 0L && !isWatchCompleted) {
-                val completionRatio = positionMs.toFloat() / durationMs.toFloat()
-                if (completionRatio >= 0.96f) {
-                    pingSt = lastReportedSec
-                    pingEt = positionSec
-                    telemetryLastReportedTimeMs = positionMs
-                    isWatchCompleted = true
-                }
-            }
-
-            if (pingSt != null && pingEt != null) {
-                persistenceScope.launch(Dispatchers.IO) {
-                    val ytId = resolveYtId(songId)
-                    if (ytId != null) {
-                        sendWatchtimePingInternal(ytId, pingSt, pingEt, cpn, startTimeMs, false)
-                    }
-                }
-            }
-        }
     }
 
     fun ensureSession(
@@ -560,21 +376,6 @@ class ListeningStatsTracker @Inject constructor(
         val listened = session.accumulatedListeningMs.coerceAtLeast(0L)
 
         val songId = session.songId
-        val cpn = telemetryCpn
-        if (cpn != null) {
-            val startTimeMs = telemetrySessionStartTimeMs
-            val lastReportedSec = telemetryLastReportedTimeMs / 1000
-            val positionSec = session.lastKnownPositionMs / 1000
-            if (positionSec > lastReportedSec) {
-                persistenceScope.launch(Dispatchers.IO) {
-                    val ytId = resolveYtId(songId)
-                    if (ytId != null) {
-                        sendWatchtimePingInternal(ytId, lastReportedSec, positionSec, cpn, startTimeMs, true)
-                    }
-                }
-            }
-            telemetryCpn = null
-        }
         if (listened >= MIN_SESSION_LISTEN_MS) {
             val rawEndTimestamp = when {
                 session.isPlaying -> nowEpoch

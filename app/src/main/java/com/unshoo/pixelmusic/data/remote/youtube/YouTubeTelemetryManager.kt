@@ -23,7 +23,7 @@ class YouTubeTelemetryManager {
      * Triggered when a new song starts playing.
      * Sends a single 'start playback' ping to YouTube to register the song in history.
      */
-    fun onSongChanged(videoId: String, durationMs: Long) {
+    suspend fun onSongChanged(videoId: String, durationMs: Long, playbackUrl: String? = null) {
         if (!isTelemetryEnabled) return
 
         // Auth check: only send if user is logged in
@@ -36,46 +36,17 @@ class YouTubeTelemetryManager {
 
         coroutineScope.launch(Dispatchers.IO) {
             runCatching {
-                // 1. Fetch the player response to get the correct signed tracking URL
-                // We try multiple clients because some may not return the playbackTracking URL
-                val clientsToTry = listOf(YouTubeClient.WEB_REMIX, YouTubeClient.WEB, YouTubeClient.MOBILE)
-                var playbackUrl: String? = null
-                var successfulClient: YouTubeClient? = null
+                // Use the provided playbackUrl if available, otherwise fallback to cache
+                var finalUrl = playbackUrl ?: com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[videoId]
 
-                val signatureTimestamp = unshoo.ianshulyadav.pixelmusic.innertube.NewPipeUtils
-                    .getSignatureTimestamp(videoId)
-                    .getOrNull()
-
-                for (client in clientsToTry) {
-                    Log.d(TAG, "Trying to fetch tracking URL with client: ${client.clientName}")
-                    val playerResult = YouTube.player(
-                        videoId = videoId,
-                        playlistId = null,
-                        client = client,
-                        signatureTimestamp = signatureTimestamp,
-                        setLogin = true
-                    ).getOrNull()
-
-                    // Try playback URL first, then watchtime URL as fallback
-                    playbackUrl = playerResult?.playbackTracking?.videostatsPlaybackUrl?.baseUrl
-                        ?: playerResult?.playbackTracking?.videostatsWatchtimeUrl?.baseUrl
-
-                    if (playbackUrl != null) {
-                        successfulClient = client
-                        break
-                    }
-                }
-
-                if (playbackUrl == null) {
-                    Log.w(TAG, "No playback tracking URL returned for $videoId after trying all clients — sync will fail")
+                if (finalUrl == null) {
+                    Log.w(TAG, "No playback tracking URL provided or cached for $videoId — sync will fail")
                     return@runCatching
                 }
 
-                Log.d(TAG, "Found tracking URL using ${successfulClient?.clientName} for $videoId")
-
-                // 3. Register playback (The "Metrolist" approach: single one-shot ping)
+                // Register playback (The "Metrolist" approach: single one-shot ping)
                 YouTube.registerPlayback(
-                    playbackTracking = playbackUrl,
+                    playbackTracking = finalUrl,
                     videoId = videoId
                 )
 

@@ -56,6 +56,13 @@ import com.unshoo.pixelmusic.data.preferences.PlayerStreamClient
 import java.util.concurrent.ConcurrentHashMap
 
 
+data class YoutubeStreamResult(
+    val url: String,
+    val mimeType: String?,
+    val bitrate: Int?,
+    val playbackTrackingUrl: String?
+)
+
 object YoutubeHelper {
     private val backgroundScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.SupervisorJob() + Dispatchers.IO
@@ -742,9 +749,9 @@ object YoutubeHelper {
             }
         }
 
-        val newUri = result.first
-        val mimeType = result.second
-        val bitrate = result.third
+        val newUri = result.url
+        val mimeType = result.mimeType
+        val bitrate = result.bitrate
 
         streamUrlLruCache.put(targetCacheKey, newUri)
         mimeType?.let { streamMimeTypeLruCache.put(targetCacheKey, it) }
@@ -784,13 +791,13 @@ object YoutubeHelper {
                     lowQuality = false,
                     maxBitrateKbps = maxBitrateKbps
                 )
-                streamUrlLruCache.put(cacheKey, result.first)
-                result.second?.let { streamMimeTypeLruCache.put(cacheKey, it) }
-                result.third?.let { streamBitrateLruCache.put(cacheKey, it) }
+                streamUrlLruCache.put(cacheKey, result.url)
+                result.mimeType?.let { streamMimeTypeLruCache.put(cacheKey, it) }
+                result.bitrate?.let { streamBitrateLruCache.put(cacheKey, it) }
                 if (maxBitrateKbps == 0 || maxBitrateKbps >= 256) {
-                    streamUrlLruCache.put("${videoId}_high", result.first)
-                    result.second?.let { streamMimeTypeLruCache.put("${videoId}_high", it) }
-                    result.third?.let { streamBitrateLruCache.put("${videoId}_high", it) }
+                    streamUrlLruCache.put("${videoId}_high", result.url)
+                    result.mimeType?.let { streamMimeTypeLruCache.put("${videoId}_high", it) }
+                    result.bitrate?.let { streamBitrateLruCache.put("${videoId}_high", it) }
                 }
                 UmihiHelper.printd("$videoId : Background quality upgrade cached ($cacheKey)")
             } catch (e: Exception) {
@@ -833,9 +840,9 @@ object YoutubeHelper {
         }
 
         val lowResult = getSongUrlFromYoutube(context, song, retries = 1, lowQuality = true)
-        val lowUrl = lowResult.first
-        val mimeType = lowResult.second
-        val bitrate = lowResult.third
+        val lowUrl = lowResult.url
+        val mimeType = lowResult.mimeType
+        val bitrate = lowResult.bitrate
         streamUrlLruCache.put("${videoId}_low", lowUrl)
         mimeType?.let { streamMimeTypeLruCache.put("${videoId}_low", it) }
         bitrate?.let { streamBitrateLruCache.put("${videoId}_low", it) }
@@ -871,9 +878,9 @@ object YoutubeHelper {
         }
 
         val highResult = getSongUrlFromYoutube(context, song, lowQuality = false, maxBitrateKbps = maxBitrate)
-        val highUrl = highResult.first
-        val mimeType = highResult.second
-        val bitrate = highResult.third
+        val highUrl = highResult.url
+        val mimeType = highResult.mimeType
+        val bitrate = highResult.bitrate
         streamUrlLruCache.put(cacheKey, highUrl)
         mimeType?.let { streamMimeTypeLruCache.put(cacheKey, it) }
         bitrate?.let { streamBitrateLruCache.put(cacheKey, it) }
@@ -931,9 +938,9 @@ object YoutubeHelper {
         }
 
         val urlResult = getSongUrlFromYoutube(context, song, lowQuality = false, maxBitrateKbps = maxBitrateKbps)
-        val url = urlResult.first
-        val mimeType = urlResult.second
-        val bitrate = urlResult.third
+        val url = urlResult.url
+        val mimeType = urlResult.mimeType
+        val bitrate = urlResult.bitrate
         streamUrlLruCache.put(cacheKey, url)
         mimeType?.let { streamMimeTypeLruCache.put(cacheKey, it) }
         bitrate?.let { streamBitrateLruCache.put(cacheKey, it) }
@@ -1268,7 +1275,7 @@ object YoutubeHelper {
         retries: Int = Constants.YoutubeApi.RETRY_COUNT,
         lowQuality: Boolean = false,
         maxBitrateKbps: Int = 0
-    ): Triple<String, String?, Int?> {
+    ): YoutubeStreamResult {
         val videoId = song.youtubeId
 
         val entryPoint = EntryPointAccessors.fromApplication(context.applicationContext, YoutubeHelperEntryPoint::class.java)
@@ -1409,15 +1416,16 @@ object YoutubeHelper {
                     }
                 }
 
-                if (resolvedUrl != null) {
-                    playerResponse.playbackTracking?.videostatsPlaybackUrl?.baseUrl?.let { baseUrl ->
-                        playbackTrackingCache[videoId] = baseUrl
-                    }
-                    playerResponse.playbackTracking?.videostatsWatchtimeUrl?.baseUrl?.let { baseUrl ->
-                        watchtimeTrackingCache[videoId] = baseUrl
-                    }
-                    return Triple(resolvedUrl, resolvedMimeType, resolvedBitrate)
-                }
+        if (resolvedUrl != null) {
+            val trackingUrl = playerResponse.playbackTracking?.videostatsPlaybackUrl?.baseUrl
+            trackingUrl?.let { baseUrl ->
+                playbackTrackingCache[videoId] = baseUrl
+            }
+            playerResponse.playbackTracking?.videostatsWatchtimeUrl?.baseUrl?.let { baseUrl ->
+                watchtimeTrackingCache[videoId] = baseUrl
+            }
+            return YoutubeStreamResult(resolvedUrl, resolvedMimeType, resolvedBitrate, trackingUrl)
+        }
 
             } catch (e: Exception) {
                 UmihiHelper.printe("Error with client ${clientObj.clientName}: ${e.message}")
@@ -1494,7 +1502,7 @@ object YoutubeHelper {
                         suffix.contains("webm") || name.contains("webm") -> "audio/webm"
                         else -> null
                     }
-                    Triple(selectedStream.content, mime, selectedStream.averageBitrate.toInt())
+                    YoutubeStreamResult(selectedStream.content, mime, selectedStream.averageBitrate.toInt(), null)
                 }
                 return streamUrl
             } catch (e: Exception) {
