@@ -37,25 +37,41 @@ class YouTubeTelemetryManager {
         coroutineScope.launch(Dispatchers.IO) {
             runCatching {
                 // 1. Fetch the player response to get the correct signed tracking URL
+                // We try multiple clients because some may not return the playbackTracking URL
+                val clientsToTry = listOf(YouTubeClient.WEB_REMIX, YouTubeClient.WEB, YouTubeClient.ANDROID_MUSIC)
+                var playbackUrl: String? = null
+                var successfulClient: YouTubeClient? = null
+
                 val signatureTimestamp = unshoo.ianshulyadav.pixelmusic.innertube.NewPipeUtils
                     .getSignatureTimestamp(videoId)
                     .getOrNull()
 
-                val playerResult = YouTube.player(
-                    videoId = videoId,
-                    playlistId = null,
-                    client = YouTubeClient.WEB_REMIX,
-                    signatureTimestamp = signatureTimestamp,
-                    setLogin = true
-                ).getOrNull()
+                for (client in clientsToTry) {
+                    Log.d(TAG, "Trying to fetch tracking URL with client: ${client.name}")
+                    val playerResult = YouTube.player(
+                        videoId = videoId,
+                        playlistId = null,
+                        client = client,
+                        signatureTimestamp = signatureTimestamp,
+                        setLogin = true
+                    ).getOrNull()
 
-                // 2. Extract the playback tracking URL
-                val playbackUrl = playerResult?.playbackTracking?.videostatsPlaybackUrl?.baseUrl
+                    // Try playback URL first, then watchtime URL as fallback
+                    playbackUrl = playerResult?.playbackTracking?.videostatsPlaybackUrl?.baseUrl
+                        ?: playerResult?.playbackTracking?.videostatsWatchtimeUrl?.baseUrl
+
+                    if (playbackUrl != null) {
+                        successfulClient = client
+                        break
+                    }
+                }
 
                 if (playbackUrl == null) {
-                    Log.w(TAG, "No playback tracking URL returned for $videoId — sync may fail")
+                    Log.w(TAG, "No playback tracking URL returned for $videoId after trying all clients — sync will fail")
                     return@runCatching
                 }
+
+                Log.d(TAG, "Found tracking URL using ${successfulClient?.name} for $videoId")
 
                 // 3. Register playback (The "Metrolist" approach: single one-shot ping)
                 YouTube.registerPlayback(
