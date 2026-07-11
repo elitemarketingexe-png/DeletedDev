@@ -54,6 +54,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import timber.log.Timber
 import java.io.File
+import android.os.Bundle
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -86,8 +87,11 @@ class DualPlayerEngine @Inject constructor(
     private val exoCache: com.unshoo.pixelmusic.data.remote.youtube.ExoCache,
     private val userPreferencesRepository: UserPreferencesRepository
 ) {
-    private companion object {
+    companion object {
+        const val EXTERNAL_EXTRA_PLAYBACK_TRACKING_URL = "EXTERNAL_EXTRA_PLAYBACK_TRACKING_URL"
         private const val AUDIO_OFFLOAD_BUFFERING_FALLBACK_MS = 4_000L
+
+
         private const val MAX_AUXILIARY_TIMELINE_ITEMS = 200
         private const val STREAM_RESOLVE_TIMEOUT_MS = 8_000L
         private const val STREAM_RESOLVE_TIMEOUT_LOW_CONNECTIVITY_MS = 5_000L
@@ -1136,6 +1140,18 @@ class DualPlayerEngine @Inject constructor(
         val builder = mediaItem.buildUpon().setUri(resolvedUri)
         if (scheme == "youtube") {
             val videoId = uri.toString().removePrefix("youtube://")
+            
+            // Inject playback tracking URL into extras for YouTubeTelemetryManager
+            val trackingUrl = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.playbackTrackingCache[videoId]
+            if (trackingUrl != null) {
+                val metadata = mediaItem.mediaMetadata.buildUpon()
+                    .setExtras(Bundle().apply {
+                        putString(EXTERNAL_EXTRA_PLAYBACK_TRACKING_URL, trackingUrl)
+                    })
+                    .build()
+                builder.setMediaMetadata(metadata)
+            }
+
             val cachedMime = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamMimeTypeLruCache.let { cache ->
                 cache.get("${videoId}_high")
                     ?: cache.get("${videoId}_low")

@@ -1255,8 +1255,12 @@ class MusicService : MediaLibraryService() {
 
             if (isYouTubeContent) {
                 val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
+                val trackingUrl = item.mediaMetadata.extras?.getString(DualPlayerEngine.EXTERNAL_EXTRA_PLAYBACK_TRACKING_URL)
+                
                 if (lastTelemetryVideoId != mediaId) {
-                    telemetryManager.onSongChanged(mediaId, durationMs)
+                    serviceScope.launch {
+                        telemetryManager.onSongChanged(mediaId, durationMs, trackingUrl)
+                    }
                     lastTelemetryVideoId = mediaId
                 }
                 telemetryManager.onPlaybackStateChanged(true)

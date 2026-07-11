@@ -469,7 +469,7 @@ object YouTube {
             }
             seenContinuations.add(continuation)
             requestCount++
-            
+
             response = innerTube.browse(
                 client = WEB_REMIX,
                 continuation = continuation,
@@ -1018,14 +1018,14 @@ object YouTube {
 
         val gridItems = response.continuationContents?.sectionListContinuation?.contents?.firstOrNull()
             ?.gridRenderer?.items
-        
+
         if (gridItems == null) {
             return@runCatching LibraryPage(
                 items = emptyList(),
                 continuation = null
             )
         }
-        
+
         val items = gridItems.mapNotNull {
             it.musicTwoRowItemRenderer?.let { renderer ->
                 LibraryPage.fromMusicTwoRowItemRenderer(renderer)
@@ -1067,7 +1067,7 @@ object YouTube {
                 continuation = continuation,
                 forceAnonymous = true
             ).body<BrowseResponse>()
-        
+
             var sections = parseChartsSections(response)
             if (sections.isEmpty() && continuation == null) {
                 val fallbackResponse = innerTube.browse(
@@ -1079,7 +1079,7 @@ object YouTube {
                 ).body<BrowseResponse>()
                 sections = parseChartsSections(fallbackResponse)
             }
-        
+
             ChartsPage(
                 sections = sections,
                 continuation = response.continuationContents?.sectionListContinuation?.continuations?.getContinuation()
@@ -1101,9 +1101,9 @@ object YouTube {
                         ?: return@forEach
                     val items = renderer.contents.mapNotNull { item ->
                         when {
-                            item.musicResponsiveListItemRenderer != null -> 
+                            item.musicResponsiveListItemRenderer != null ->
                                 convertToChartItem(item.musicResponsiveListItemRenderer)
-                            item.musicTwoRowItemRenderer != null -> 
+                            item.musicTwoRowItemRenderer != null ->
                                 convertMusicTwoRowItem(item.musicTwoRowItemRenderer)
                             else -> null
                         }
@@ -1280,74 +1280,6 @@ object YouTube {
         )
     }
 
-    /**
-     * Send a YouTube Music stats/playback or stats/watchtime ping.
-     * SpatialFlow parity: must include Cookie + SAPISIDHASH Authorization + WEB_REMIX
-     * Origin/Referer or YT Music will silently ignore history registration.
-     */
-    fun sendTelemetryPing(url: String) {
-        try {
-            if (url.isBlank()) return
-            // Always force music.youtube.com so history lands on YT Music, not main YT.
-            val forcedUrl = url.replace("https://s.youtube.com", "https://music.youtube.com")
-            val auth = currentPlaybackAuthState()
-            val cookieValue = auth.cookie.orEmpty()
-            if (cookieValue.isBlank()) {
-                // Guest sessions cannot write YT Music history; skip quietly.
-                return
-            }
-
-            val origin = "https://music.youtube.com"
-            val cookieMap = runCatching {
-                unshoo.ianshulyadav.pixelmusic.innertube.utils.parseCookieString(cookieValue)
-            }.getOrDefault(emptyMap())
-
-            val builder = okhttp3.Request.Builder()
-                .url(forcedUrl)
-                .get()
-                .header("Cookie", cookieValue)
-                .header("User-Agent", YouTubeClient.WEB_REMIX.userAgent)
-                .header("Origin", origin)
-                .header("Referer", "$origin/")
-                .header("X-Goog-Visitor-Id", auth.visitorData.orEmpty())
-                .header("Accept", "*/*")
-                .header("Accept-Language", "en-US,en;q=0.9")
-
-            // SAPISIDHASH is required for authenticated history writes (SpatialFlow InnerTubeClient).
-            val sapisid = cookieMap["SAPISID"] ?: cookieMap["__Secure-3PAPISID"]
-            if (!sapisid.isNullOrBlank()) {
-                val currentTime = System.currentTimeMillis() / 1000
-                val sapisidHash = unshoo.ianshulyadav.pixelmusic.innertube.utils.sha1(
-                    "$currentTime $sapisid $origin"
-                )
-                builder.header("Authorization", "SAPISIDHASH ${currentTime}_$sapisidHash")
-            }
-
-            val client = okhttp3.OkHttpClient.Builder()
-                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-                .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                .retryOnConnectionFailure(true)
-                .build()
-
-            client.newCall(builder.build()).execute().use { response ->
-                if (!response.isSuccessful) {
-                    android.util.Log.w(
-                        "YouTubeTelemetry",
-                        "Telemetry ping HTTP ${response.code} for ${forcedUrl.take(120)}"
-                    )
-                } else {
-                    android.util.Log.d(
-                        "YouTubeTelemetry",
-                        "Telemetry ping OK (${response.code}) ${forcedUrl.take(100)}"
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("YouTubeTelemetry", "Telemetry ping failed: ${e.message}")
-        }
-    }
-
     suspend fun likeVideo(videoId: String, like: Boolean) = runCatching {
         if (like)
             innerTube.likeVideo(WEB_REMIX, videoId)
@@ -1495,28 +1427,13 @@ object YouTube {
             )]
         }.joinToString("")
 
-        val playbackUrl = playbackTracking.replace(
-            "https://s.youtube.com",
-            "https://music.youtube.com",
-        )
+        val playbackUrl = playbackTracking
 
-        val botGuardTokens = if (authState.webClientPoTokenEnabled && !videoId.isNullOrBlank()) {
-            val sessionId = authState.visitorData ?: authState.dataSyncId ?: authState.sessionId
-            if (!sessionId.isNullOrBlank()) BotGuardTokenGenerator.mintToken(videoId, sessionId) else null
-        } else {
-            null
-        }
-        val requestAuthState = if (botGuardTokens != null) {
-            authState.copy(poTokenPlayer = botGuardTokens.playerToken, poTokenGvs = botGuardTokens.sessionToken)
-        } else {
-            authState
-        }
         innerTube.registerPlayback(
             url = playbackUrl,
             playlistId = playlistId,
             cpn = cpn,
-            poToken = botGuardTokens?.sessionToken ?: resolveGvsPoToken(requestAuthState),
-            authState = requestAuthState,
+            authState = authState,
         )
     }
 

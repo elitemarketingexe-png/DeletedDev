@@ -235,7 +235,7 @@ class InnerTube {
             }
             if (setLogin && client.loginSupported) {
                 authState.cookie?.let { cookie ->
-                    append("cookie", cookie)
+                    append("Cookie", cookie)
                     if ("SAPISID" !in cookieMap) return@let
                     val currentTime = System.currentTimeMillis() / 1000
                     val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} $requestOrigin")
