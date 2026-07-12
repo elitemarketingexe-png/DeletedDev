@@ -235,9 +235,9 @@ class DualPlayerEngine @Inject constructor(
             // reads for the same URI always return the same cached URL.
             // The lock for any truly stale entries will expire naturally when those
             // video-IDs are no longer the active item.
-            val incomingUriStr = mediaItem?.localConfiguration?.uri?.toString()
+            val incomingUri = mediaItem?.localConfiguration?.uri
             activePlaybackResolvedUris.keys
-                .filter { it != incomingUriStr }
+                .filter { it != incomingUri?.toString() && activePlaybackResolvedUris[it] != incomingUri }
                 .forEach { activePlaybackResolvedUris.remove(it) }
             cancelAudioOffloadFallback()
             
