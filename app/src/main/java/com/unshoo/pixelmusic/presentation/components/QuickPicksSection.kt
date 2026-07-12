@@ -90,6 +90,7 @@ fun QuickPicksSection(
     onSeeAllClick: (() -> Unit)? = null,
     currentSongId: String? = null,
     displayMode: QuickPicksDisplayMode = QuickPicksDisplayMode.LIST,
+    cardSize: Dp = 140.dp,
     modifier: Modifier = Modifier
 ) {
     if (songs.isEmpty()) return
@@ -168,8 +169,8 @@ fun QuickPicksSection(
                         isPlaying = song.id == currentSongId,
                         onClick = { onSongClick(song) },
                         modifier = Modifier
-                            .width(140.dp)
-                            .height(140.dp)
+                            .width(cardSize)
+                            .height(cardSize)
                             .graphicsLayer {
                                 val layoutInfo = lazyListState.layoutInfo
                                 val visibleItems = layoutInfo.visibleItemsInfo
@@ -177,10 +178,8 @@ fun QuickPicksSection(
                                 if (itemInfo != null) {
                                     val focalPoint = layoutInfo.viewportStartOffset + 16.dp.toPx()
                                     val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
-                                    
-                                    val maxDistance = 148.dp.toPx()
+                                    val maxDistance = (cardSize + 8.dp).toPx()
                                     val fraction = (distanceFromStart / maxDistance).coerceIn(0f, 1f)
-                                    
                                     val scale = 0.86f + (1f - 0.86f) * (1f - fraction)
                                     scaleX = scale
                                     scaleY = scale
@@ -237,13 +236,13 @@ fun QuickPicksSection(
                 items(limitSongs, key = { it.id }) { song ->
                     Column(
                         modifier = Modifier
-                            .width(150.dp)
+                            .width(cardSize)
                             .clickable { onSongClick(song) }
                     ) {
-                        val cardShape = remember { AbsoluteSmoothCornerShape(24.dp, 60) }
+                        val cardShape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
                         Card(
                             modifier = Modifier
-                                .size(150.dp)
+                                .size(cardSize)
                                 .graphicsLayer {
                                     if (isReducedMotion) {
                                         scaleX = 1f
@@ -256,10 +255,8 @@ fun QuickPicksSection(
                                         if (itemInfo != null) {
                                             val focalPoint = layoutInfo.viewportStartOffset + 16.dp.toPx()
                                             val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
-                                            
-                                            val maxDistance = 158.dp.toPx()
+                                            val maxDistance = (cardSize + 8.dp).toPx()
                                             val fraction = (distanceFromStart / maxDistance).coerceIn(0f, 1f)
-                                            
                                             val scale = 0.9f + (1f - 0.9f) * (1f - fraction)
                                             scaleX = scale
                                             scaleY = scale
@@ -303,12 +300,12 @@ fun QuickPicksSection(
                             }
                         }
                         
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(7.dp))
                         
                         // Metadata details below card
                         Text(
                             text = song.title,
-                            style = MaterialTheme.typography.titleMedium.copy(
+                            style = MaterialTheme.typography.bodySmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = GoogleSansRounded,
                                 color = if (song.id == currentSongId) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -320,7 +317,7 @@ fun QuickPicksSection(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = song.artist,
-                            style = MaterialTheme.typography.bodyMedium.copy(
+                            style = MaterialTheme.typography.labelSmall.copy(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
                             maxLines = 1,

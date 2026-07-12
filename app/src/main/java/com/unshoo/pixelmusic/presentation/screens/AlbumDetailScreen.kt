@@ -217,7 +217,7 @@ fun AlbumDetailScreen(
 
         when {
             uiState.isLoading && uiState.album == null -> {
-                com.unshoo.pixelmusic.presentation.components.PlaylistSkeletonDetail()
+                com.unshoo.pixelmusic.presentation.components.AlbumSkeletonDetail()
             }
 
             uiState.error != null && uiState.album == null -> {

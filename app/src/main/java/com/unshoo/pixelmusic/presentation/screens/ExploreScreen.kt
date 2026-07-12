@@ -543,7 +543,8 @@ fun ExploreScreen(
                                         navController.navigateSafely(Screen.QuickPicksAll.route)
                                     },
                                     currentSongId = currentSongId,
-                                    displayMode = quickPicksDisplayMode
+                                    displayMode = quickPicksDisplayMode,
+                                    cardSize = 120.dp
                                 )
                             }
                         }
@@ -858,21 +859,21 @@ fun SongCardItem(
     val shape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
     Column(
         modifier = Modifier
-            .width(140.dp)
+            .width(120.dp)
             .clickable(onClick = onClick)
     ) {
         SmartImage(
             model = song.albumArtUriString,
             contentDescription = song.title,
             modifier = Modifier
-                .size(140.dp)
+                .size(120.dp)
                 .clip(shape),
             contentScale = ContentScale.Crop
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = song.title,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
@@ -880,7 +881,7 @@ fun SongCardItem(
         )
         Text(
             text = song.artist,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -983,8 +984,8 @@ fun LibraryPlaylistCard(
     
     Card(
         modifier = Modifier
-            .width(290.dp)
-            .height(130.dp)
+            .width(260.dp)
+            .height(120.dp)
             .clip(shape)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = blendedBgColor),
@@ -1012,14 +1013,14 @@ fun LibraryPlaylistCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(106.dp)
-                        .clip(AbsoluteSmoothCornerShape(16.dp, 80))
+                        .size(96.dp)
+                        .clip(AbsoluteSmoothCornerShape(14.dp, 80))
                 ) {
                     PlaylistCover(
                         playlist = playlist,
                         playlistSongs = playlistSongs ?: emptyList(),
                         modifier = Modifier.fillMaxSize(),
-                        size = 106.dp
+                        size = 96.dp
                     )
                     
                     Box(
@@ -1127,8 +1128,8 @@ fun LibraryAlbumCard(
 
     Card(
         modifier = Modifier
-            .width(290.dp)
-            .height(130.dp)
+            .width(260.dp)
+            .height(120.dp)
             .clip(shape)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = blendedBgColor),
@@ -1158,8 +1159,8 @@ fun LibraryAlbumCard(
                     model = album.thumbnail,
                     contentDescription = album.title,
                     modifier = Modifier
-                        .size(106.dp)
-                        .clip(AbsoluteSmoothCornerShape(16.dp, 80)),
+                        .size(96.dp)
+                        .clip(AbsoluteSmoothCornerShape(14.dp, 80)),
                     contentScale = ContentScale.Crop
                 )
 
@@ -1228,21 +1229,21 @@ fun RecentMixCardItem(
 
     Column(
         modifier = Modifier
-            .width(140.dp)
+            .width(120.dp)
             .clickable(onClick = onClick)
     ) {
         PlaylistCover(
             playlist = playlist,
             playlistSongs = playlistSongs ?: emptyList(),
             modifier = Modifier
-                .size(140.dp)
+                .size(120.dp)
                 .clip(shape),
-            size = 140.dp
+            size = 120.dp
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = playlist.name,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1250,7 +1251,7 @@ fun RecentMixCardItem(
         )
         Text(
             text = "Smart Mix",
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1377,21 +1378,21 @@ fun AlbumCarouselItem(
 
     Column(
         modifier = Modifier
-            .width(140.dp)
+            .width(120.dp)
             .clickable(onClick = onClick)
     ) {
         SmartImage(
             model = album.thumbnail,
             contentDescription = album.title,
             modifier = Modifier
-                .size(140.dp)
+                .size(120.dp)
                 .clip(shape),
             contentScale = ContentScale.Crop
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = album.title,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1399,7 +1400,7 @@ fun AlbumCarouselItem(
         )
         Text(
             text = album.artists?.joinToString { it.name } ?: "",
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1416,14 +1417,14 @@ fun ArtistCardItem(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(120.dp)
+            .width(100.dp)
             .clickable(onClick = onClick)
     ) {
         SmartImage(
             model = artist.thumbnail,
             contentDescription = artist.title,
             modifier = Modifier
-                .size(100.dp)
+                .size(80.dp)
                 .clip(CircleShape),
             contentScale = ContentScale.Crop
         )
@@ -1467,21 +1468,21 @@ fun PlaylistCardItem(
     val shape = RoundedCornerShape(16.dp)
     Column(
         modifier = Modifier
-            .width(140.dp)
+            .width(120.dp)
             .clickable(onClick = onClick)
     ) {
         SmartImage(
             model = playlist.thumbnail,
             contentDescription = playlist.title,
             modifier = Modifier
-                .size(140.dp)
+                .size(120.dp)
                 .clip(shape),
             contentScale = ContentScale.Crop
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = playlist.title,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1489,7 +1490,7 @@ fun PlaylistCardItem(
         )
         Text(
             text = playlist.author?.name ?: "",
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1550,8 +1551,8 @@ fun SimilarArtistBentoCard(
 
     Card(
         modifier = Modifier
-            .width(160.dp)
-            .height(230.dp),
+            .width(140.dp)
+            .height(200.dp),
         shape = cardShape,
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = animatedBgColor),
@@ -1567,7 +1568,7 @@ fun SimilarArtistBentoCard(
             // Circular artist photo
             Box(
                 modifier = Modifier
-                    .size(100.dp)
+                    .size(84.dp)
                     .clip(CircleShape)
             ) {
                 if (!artistThumbnail.isNullOrBlank()) {

@@ -76,15 +76,28 @@ data class SearchSummaryPage(
                             renderer.title.runs
                                 ?.firstOrNull()
                                 ?.text ?: return null,
-                        artists =
-                            subtitle?.getOrNull(1)?.oddElements()?.map {
+                        artists = run {
+                            // Guard against the card-shelf subtitle having no artist segment:
+                            // subtitle structure is [Type, Artist(s), Album, Duration].
+                            // When the structure is shorter (e.g. [Type, Duration]) the segment
+                            // at index 1 is a time string — we must not treat it as an artist name.
+                            val candidateSegment = subtitle?.getOrNull(1)
+                            val candidateArtists = candidateSegment?.oddElements()?.map {
                                 Artist(
                                     name = it.text,
                                     id = it.navigationEndpoint?.browseEndpoint?.browseId,
                                 )
-                            } ?: return null,
+                            }
+                            // If every candidate artist name parses as a duration, it is not an
+                            // artist — return null to fall through to the ?: return null guard.
+                            if (candidateArtists != null &&
+                                candidateArtists.all { it.name.parseTime() != null }) {
+                                return null  // skip this card — no usable artist info
+                            }
+                            candidateArtists ?: return null
+                        },
                         album =
-                            subtitle.getOrNull(2)?.firstOrNull()?.takeIf { it.navigationEndpoint?.browseEndpoint != null }?.let {
+                            subtitle?.getOrNull(2)?.firstOrNull()?.takeIf { it.navigationEndpoint?.browseEndpoint != null }?.let {
                                 Album(
                                     name = it.text,
                                     id = it.navigationEndpoint?.browseEndpoint?.browseId!!,
@@ -92,7 +105,7 @@ data class SearchSummaryPage(
                             },
                         duration =
                             subtitle
-                                .lastOrNull()
+                                ?.lastOrNull()
                                 ?.firstOrNull()
                                 ?.text
                                 ?.parseTime(),
