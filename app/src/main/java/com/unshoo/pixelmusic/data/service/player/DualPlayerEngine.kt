@@ -916,10 +916,10 @@ class DualPlayerEngine @Inject constructor(
         val isRecentlyUnstable = connectivityStateHolder.isNetworkRecentlyUnstable.value
         data class BufferProfile(val minMs: Int, val maxMs: Int, val forPlaybackMs: Int, val afterRebufferMs: Int)
         val profile = when {
-            isRecentlyUnstable -> BufferProfile(30_000, 60_000, 400, 2_000)
-            bandwidthKbps < 1_000 -> BufferProfile(20_000, 45_000, 250, 1_500)
-            bandwidthKbps < 5_000 -> BufferProfile(15_000, 40_000, 150, 1_000)
-            else -> BufferProfile(10_000, 30_000, 100, 600)
+            isRecentlyUnstable -> BufferProfile(30_000, 60_000, 3_000, 5_000)
+            bandwidthKbps < 1_000 -> BufferProfile(25_000, 50_000, 2_500, 4_000)
+            bandwidthKbps < 5_000 -> BufferProfile(20_000, 45_000, 1_800, 3_000)
+            else -> BufferProfile(15_000, 35_000, 1_200, 2_000)
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(profile.minMs, profile.maxMs, profile.forPlaybackMs, profile.afterRebufferMs)

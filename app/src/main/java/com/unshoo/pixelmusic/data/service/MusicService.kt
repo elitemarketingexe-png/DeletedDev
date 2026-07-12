@@ -1620,11 +1620,11 @@ class MusicService : MediaLibraryService() {
                             val index = master.currentMediaItemIndex
                             if (index != androidx.media3.common.C.INDEX_UNSET) {
                                 master.replaceMediaItem(index, resolved)
+                                master.seekTo(index, position)
                             } else {
                                 master.setMediaItem(resolved, position)
                             }
                             master.prepare()
-                            master.seekTo(position)
                             master.playWhenReady = true
                             master.play()
                         }
