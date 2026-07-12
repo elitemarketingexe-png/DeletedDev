@@ -1984,14 +1984,14 @@ fun QueuePlaylistSongItem(
         label = "cornerRadiusAnimation"
     )
 
-    val itemShape = RoundedCornerShape(cornerRadius)
+    val itemShape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
 
     val albumCornerRadius by animateDpAsState(
         targetValue = if (isCurrentSong) 60.dp else 8.dp,
         label = "cornerRadiusAnimation"
     )
 
-    val albumShape = RoundedCornerShape(albumCornerRadius)
+    val albumShape = remember(albumCornerRadius) { RoundedCornerShape(albumCornerRadius) }
 
     val elevation by animateDpAsState(
         targetValue = if (isDragging) 4.dp else 1.dp,
