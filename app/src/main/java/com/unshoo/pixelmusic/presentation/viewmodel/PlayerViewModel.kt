@@ -2105,14 +2105,17 @@ class PlayerViewModel @Inject constructor(
                 searchStateHolder.searchResults,
                 searchStateHolder.selectedSearchFilter,
                 searchStateHolder.searchHistory,
-            ) { results, filter, history ->
-                Triple(results, filter, history)
-            }.collect { (results, filter, history) ->
+                searchStateHolder.isSearching,
+            ) { results, filter, history, isSearching ->
+                arrayOf(results, filter, history, isSearching)
+            }.collect { array ->
+                @Suppress("UNCHECKED_CAST")
                 _playerUiState.update {
                     it.copy(
-                        searchResults = results,
-                        selectedSearchFilter = filter,
-                        searchHistory = history,
+                        searchResults = array[0] as kotlinx.collections.immutable.ImmutableList<com.unshoo.pixelmusic.data.model.SearchResultItem>,
+                        selectedSearchFilter = array[1] as com.unshoo.pixelmusic.data.model.SearchFilterType,
+                        searchHistory = array[2] as kotlinx.collections.immutable.ImmutableList<com.unshoo.pixelmusic.data.model.SearchHistoryItem>,
+                        isSearching = array[3] as Boolean
                     )
                 }
             }

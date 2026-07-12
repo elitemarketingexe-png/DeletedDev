@@ -175,6 +175,23 @@ fun SearchScreen(
             }
             .distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = SearchUiSlice())
+    val isSearching by remember(playerViewModel) {
+        playerViewModel.playerUiState
+            .map { it.isSearching }
+            .distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = false)
+    val coolSearchMessages = remember {
+        listOf(
+            "Searching the infinite music universe...",
+            "Scanning frequencies for your sound...",
+            "Digging up the next masterpiece...",
+            "Curating the perfect soundtrack...",
+            "Tuning into the music space..."
+        )
+    }
+    val currentSearchMessage = remember(isSearching) {
+        if (isSearching) coolSearchMessages.random() else ""
+    }
     val currentFilter = searchUiState.selectedSearchFilter
     val genres by playerViewModel.genres.collectAsStateWithLifecycle()
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
@@ -459,32 +476,38 @@ fun SearchScreen(
                             SearchFilterChip(SearchFilterType.ARTISTS, currentFilter, playerViewModel)
                             SearchFilterChip(SearchFilterType.PLAYLISTS, currentFilter, playerViewModel)
                         }
-                        Crossfade(
-                            targetState = searchResults.isEmpty(),
-                            animationSpec = tween(durationMillis = 190),
-                            label = "search_results_fade"
-                        ) { isEmpty ->
-                            if (isEmpty) {
-                                EmptySearchResults(
-                                    searchQuery = searchQuery,
-                                    colorScheme = colorScheme
-                                )
-                            } else {
-                                SearchResultsList(
-                                    results = searchResults,
-                                    searchQuery = searchQuery,
-                                    playerViewModel = playerViewModel,
-                                    currentFilter = currentFilter,
-                                    onItemSelected = {
-                                        if (searchQuery.isNotBlank()) {
-                                            playerViewModel.onSearchQuerySubmitted(searchQuery)
-                                        }
-                                    },
-                                    currentPlayingSongId = stablePlayerState.currentSong?.id,
-                                    isPlaying = stablePlayerState.isPlaying,
-                                    onSongMoreOptionsClick = handleSongMoreOptionsClick,
-                                    navController = navController
-                                )
+                        if (isSearching) {
+                            com.unshoo.pixelmusic.presentation.components.SearchSkeletonList(
+                                message = currentSearchMessage
+                            )
+                        } else {
+                            Crossfade(
+                                targetState = searchResults.isEmpty(),
+                                animationSpec = tween(durationMillis = 190),
+                                label = "search_results_fade"
+                            ) { isEmpty ->
+                                if (isEmpty) {
+                                    EmptySearchResults(
+                                        searchQuery = searchQuery,
+                                        colorScheme = colorScheme
+                                    )
+                                } else {
+                                    SearchResultsList(
+                                        results = searchResults,
+                                        searchQuery = searchQuery,
+                                        playerViewModel = playerViewModel,
+                                        currentFilter = currentFilter,
+                                        onItemSelected = {
+                                            if (searchQuery.isNotBlank()) {
+                                                playerViewModel.onSearchQuerySubmitted(searchQuery)
+                                            }
+                                        },
+                                        currentPlayingSongId = stablePlayerState.currentSong?.id,
+                                        isPlaying = stablePlayerState.isPlaying,
+                                        onSongMoreOptionsClick = handleSongMoreOptionsClick,
+                                        navController = navController
+                                    )
+                                }
                             }
                         }
                     }

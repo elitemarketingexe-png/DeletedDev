@@ -242,12 +242,12 @@ fun ExploreScreen(
                     .background(backgroundBrush)
             ) {
                 if (uiState.isLoading && uiState.homePageSections.isEmpty() && uiState.newReleaseAlbums.isEmpty() && uiState.chartsPage == null) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                    }
+                    com.unshoo.pixelmusic.presentation.components.ExploreSkeletonGrid(
+                        paddingValues = PaddingValues(
+                            top = innerPadding.calculateTopPadding(),
+                            bottom = paddingValuesParent.calculateBottomPadding() + 24.dp + (if (currentSongId != null) com.unshoo.pixelmusic.presentation.components.MiniPlayerHeight else 0.dp)
+                        )
+                    )
                 } else if (uiState.error != null && uiState.homePageSections.isEmpty()) {
                     Column(
                         modifier = Modifier
