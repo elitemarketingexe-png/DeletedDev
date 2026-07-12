@@ -48,10 +48,23 @@ class CastStateHolder @Inject constructor(
                     _sessionManager = manager
                     manager
                 } else {
+                    // BUGFIX (freeze after long idle): unbounded runBlocking(Dispatchers.Main)
+                    // called from a background thread. If CastContext.getSharedInstance() ever
+                    // stalls on the main thread (e.g. Play Services needing to reconnect after
+                    // the device has been idle/Doze for a long time), the calling background
+                    // thread would block forever waiting for it, with no way to recover. Bounding
+                    // it means the worst case is "Cast briefly unavailable", not a permanent hang.
+                    // BUGFIX (task-specific timeouts): given more headroom than the DB/network
+                    // timeouts elsewhere - Play Services genuinely can take longer to reconnect
+                    // after a long idle period than a local write or a single HTTP ping should
+                    // ever take, and Cast is a non-essential, opt-in feature, so it's fine to
+                    // wait a bit longer for it rather than giving up prematurely.
                     kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Main) {
-                        val manager = CastContext.getSharedInstance(context).sessionManager
-                        _sessionManager = manager
-                        manager
+                        kotlinx.coroutines.withTimeoutOrNull(6_000L) {
+                            val manager = CastContext.getSharedInstance(context).sessionManager
+                            _sessionManager = manager
+                            manager
+                        }
                     }
                 }
             } catch (e: Exception) {

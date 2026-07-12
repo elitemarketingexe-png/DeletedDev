@@ -1285,16 +1285,21 @@ object YouTube {
      * SpatialFlow parity: must include Cookie + SAPISIDHASH Authorization + WEB_REMIX
      * Origin/Referer or YT Music will silently ignore history registration.
      */
-    fun sendTelemetryPing(url: String) {
+    // BUGFIX (telemetry health monitoring): previously returned Unit - success/failure was only
+    // ever logged internally here and invisible to every caller, so nothing in the app could
+    // detect "history sync has been silently failing for a while" and react. Existing callers
+    // that ignore the return value keep compiling and behaving exactly as before; this is purely
+    // additive for the callers that now want it (YouTubeTelemetryManager).
+    fun sendTelemetryPing(url: String): Boolean {
         try {
-            if (url.isBlank()) return
+            if (url.isBlank()) return false
             // Always force music.youtube.com so history lands on YT Music, not main YT.
             val forcedUrl = url.replace("https://s.youtube.com", "https://music.youtube.com")
             val auth = currentPlaybackAuthState()
             val cookieValue = auth.cookie.orEmpty()
             if (cookieValue.isBlank()) {
                 // Guest sessions cannot write YT Music history; skip quietly.
-                return
+                return false
             }
 
             val origin = "https://music.youtube.com"
@@ -1331,20 +1336,23 @@ object YouTube {
                 .build()
 
             client.newCall(builder.build()).execute().use { response ->
-                if (!response.isSuccessful) {
+                return if (!response.isSuccessful) {
                     android.util.Log.w(
                         "YouTubeTelemetry",
                         "Telemetry ping HTTP ${response.code} for ${forcedUrl.take(120)}"
                     )
+                    false
                 } else {
                     android.util.Log.d(
                         "YouTubeTelemetry",
                         "Telemetry ping OK (${response.code}) ${forcedUrl.take(100)}"
                     )
+                    true
                 }
             }
         } catch (e: Exception) {
             android.util.Log.w("YouTubeTelemetry", "Telemetry ping failed: ${e.message}")
+            return false
         }
     }
 

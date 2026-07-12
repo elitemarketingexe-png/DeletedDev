@@ -900,16 +900,25 @@ class DualPlayerEngine @Inject constructor(
         val extractorsFactory = DefaultExtractorsFactory()
             .setMp4ExtractorFlags(Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
 
-        // SpatialFlow-style "extreme reactivity" load control:
-        // start after ~150–250ms of audio so low-bitrate streams play instantly on weak links.
-        val isMetered = connectivityStateHolder.isMeteredNetwork.value
+        // BUGFIX (adaptive buffering): previously just metered-vs-unmetered, which treats a fast
+        // 5G connection the same as a barely-there one just because both are "mobile data". Now
+        // tiered by the OS's real link-speed estimate, with an additional "recently unstable"
+        // override driven by actual rebuffer events reported by this player (see
+        // reportPlaybackStall() below) - live ground truth beats a link-speed guess. A fast link
+        // gets a short startup buffer for a quick start; a weak or currently-unstable one gets a
+        // longer one, trading a bit of startup time for fewer mid-song stalls, matching "prefer
+        // uninstalled playback over saving a few hundred ms at startup".
+        val bandwidthKbps = connectivityStateHolder.linkDownstreamBandwidthKbps.value
+        val isRecentlyUnstable = connectivityStateHolder.isNetworkRecentlyUnstable.value
+        data class BufferProfile(val minMs: Int, val maxMs: Int, val forPlaybackMs: Int, val afterRebufferMs: Int)
+        val profile = when {
+            isRecentlyUnstable -> BufferProfile(30_000, 60_000, 400, 2_000)
+            bandwidthKbps < 1_000 -> BufferProfile(20_000, 45_000, 250, 1_500)
+            bandwidthKbps < 5_000 -> BufferProfile(15_000, 40_000, 150, 1_000)
+            else -> BufferProfile(10_000, 30_000, 100, 600)
+        }
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                /* minBufferMs                      = */ if (isMetered) 15_000 else 30_000,
-                /* maxBufferMs                      = */ if (isMetered) 40_000 else 60_000,
-                /* bufferForPlaybackMs              = */ 150,   // Instant start (SpatialFlow uses 250; we go lower for LOW streams)
-                /* bufferForPlaybackAfterRebufferMs = */ if (isMetered) 1_000 else 1_500
-            )
+            .setBufferDurationsMs(profile.minMs, profile.maxMs, profile.forPlaybackMs, profile.afterRebufferMs)
             .setPrioritizeTimeOverSizeThresholds(true)
             .setBackBuffer(15_000, /* retainBackBufferFromKeyframe = */ true)
             .build()
@@ -918,6 +927,36 @@ class DualPlayerEngine @Inject constructor(
             .setMediaSourceFactory(DefaultMediaSourceFactory(resolvingFactory, extractorsFactory))
             .setLoadControl(loadControl)
             .build().apply {
+                // BUGFIX (adaptive buffering): feed real rebuffer events back into
+                // ConnectivityStateHolder so the *next* buffer-profile decision above (next
+                // track, or next time this player is rebuilt) can react to it. A true mid-stream
+                // LoadControl swap would need a custom LoadControl implementation - a larger,
+                // separate change - so this closes the loop at track/rebuild boundaries instead,
+                // which is where DefaultLoadControl's buffer targets can actually be changed.
+                var hasStartedThisItem = false
+                addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        when (playbackState) {
+                            Player.STATE_READY -> {
+                                if (hasStartedThisItem) {
+                                    connectivityStateHolder.reportStablePlayback()
+                                }
+                                hasStartedThisItem = true
+                            }
+                            Player.STATE_BUFFERING -> {
+                                // Only a genuine rebuffer (mid-playback stall), not the initial
+                                // buffer-up before a track's first STATE_READY.
+                                if (hasStartedThisItem) {
+                                    connectivityStateHolder.reportPlaybackStall()
+                                }
+                            }
+                        }
+                    }
+
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        hasStartedThisItem = false
+                    }
+                })
             setAudioAttributes(audioAttributes, false)
             applyAudioOffload(this)
             setHandleAudioBecomingNoisy(true)

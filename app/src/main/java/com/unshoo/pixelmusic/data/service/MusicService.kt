@@ -1242,24 +1242,71 @@ class MusicService : MediaLibraryService() {
 
     // ==================== FIXED TELEMETRY HELPERS ====================
 
+    /**
+     * BUGFIX: PixelMusic's unified YouTube media IDs are "youtube_<11-char-video-id>"
+     * (see MusicRepositoryImpl / PlaylistViewModel, which build Song.id as
+     * "youtube_${youtubeId}"). MediaItemBuilder.build() sets mediaId = song.id directly, so
+     * item.mediaId for almost every YouTube song is 19 characters, NOT the bare 11-char video
+     * ID YouTube's /player and /api/stats endpoints require as `docid`.
+     *
+     * The old code only stripped nothing at all: it passed item.mediaId straight through to
+     * YouTubeTelemetryManager, so a real ping looked like docid=youtube_dQw4w9WgXcQ instead of
+     * docid=dQw4w9WgXcQ. That is not a valid YouTube video ID, so InnerTube's /player lookup for
+     * tracking URLs silently fails and the fallback ping YouTube receives is rejected too -
+     * explaining "history updates once out of 100 songs" (the rare hit being whatever path
+     * happened to hand back a bare, unprefixed ID).
+     *
+     * item.mediaId survives MediaItem.buildUpon().setUri(...) (used when the youtube:// URI is
+     * swapped for a resolved googlevideo.com stream URL during instant playback), so mediaId is
+     * always the reliable source of truth here - we never try to parse a video ID out of the
+     * CDN stream URL itself.
+     */
+    private fun canonicalYoutubeVideoId(item: androidx.media3.common.MediaItem): String? {
+        val mediaId = item.mediaId
+        val rawId = when {
+            mediaId.startsWith("youtube_") -> mediaId.removePrefix("youtube_")
+            isLikelyYoutubeVideoId(mediaId) -> mediaId
+            else -> {
+                val uri = item.localConfiguration?.uri
+                if (uri?.scheme == "youtube") {
+                    uri.toString().substringAfter("youtube://").substringBefore('?')
+                } else {
+                    null
+                }
+            }
+        }
+        return rawId?.takeIf { isLikelyYoutubeVideoId(it) }
+    }
+
+    /** YouTube video IDs are always exactly 11 URL-safe base64 characters. */
+    private fun isLikelyYoutubeVideoId(candidate: String): Boolean =
+        candidate.length == 11 && candidate.all { it.isLetterOrDigit() || it == '-' || it == '_' }
+
+    /** True if this item is YouTube content at all (used to gate telemetry independent of ID format). */
+    private fun isYoutubeMediaItem(item: androidx.media3.common.MediaItem): Boolean =
+        item.mediaId.startsWith("youtube_") ||
+            isLikelyYoutubeVideoId(item.mediaId) ||
+            item.localConfiguration?.uri?.scheme == "youtube" ||
+            item.localConfiguration?.uri?.toString()?.contains("googlevideo") == true
+
     private fun startTelemetryReporting() {
         telemetryJob?.cancel()
         val player = mediaSession?.player ?: engine.masterPlayer
 
-        // FIXED: Always attempt telemetry for YouTube content (11-char video IDs)
         player.currentMediaItem?.let { item ->
-            val mediaId = item.mediaId
-            val isYouTubeContent = mediaId.length == 11 ||
-                                   item.localConfiguration?.uri?.toString()?.contains("googlevideo") == true ||
-                                   item.localConfiguration?.uri?.scheme == "youtube"
-
-            if (isYouTubeContent) {
-                val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
-                if (lastTelemetryVideoId != mediaId) {
-                    telemetryManager.onSongChanged(mediaId, durationMs)
-                    lastTelemetryVideoId = mediaId
+            if (isYoutubeMediaItem(item)) {
+                // BUGFIX: use the canonical 11-char video ID, not item.mediaId, as the docid.
+                val videoId = canonicalYoutubeVideoId(item)
+                if (videoId == null) {
+                    Timber.tag(TAG).w("YouTube item with no extractable video ID: mediaId=%s", item.mediaId)
+                } else {
+                    val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
+                    if (lastTelemetryVideoId != videoId) {
+                        telemetryManager.onSongChanged(videoId, durationMs)
+                        lastTelemetryVideoId = videoId
+                    }
+                    telemetryManager.onPlaybackStateChanged(true)
                 }
-                telemetryManager.onPlaybackStateChanged(true)
             }
         }
 
@@ -1270,14 +1317,11 @@ class MusicService : MediaLibraryService() {
                     val positionMs = player.currentPosition.coerceAtLeast(0L)
                     listeningStatsTracker.onProgress(positionMs, player.isPlaying)
 
-                    // FIXED: Unconditional YouTube content check
                     val item = player.currentMediaItem
-                    if (item != null) {
-                        val mediaId = item.mediaId
-                        val isYouTube = mediaId.length == 11 ||
-                                        item.localConfiguration?.uri?.toString()?.contains("googlevideo") == true
-
-                        if (isYouTube) {
+                    if (item != null && isYoutubeMediaItem(item)) {
+                        // BUGFIX: same canonical extraction for the progress/heartbeat loop.
+                        val videoId = canonicalYoutubeVideoId(item)
+                        if (videoId != null) {
                             val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
                             telemetryManager.updateProgress(positionMs, durationMs)
                         }
@@ -3469,9 +3513,18 @@ class MusicService : MediaLibraryService() {
     }
 
     private fun writePlaybackSnapshotBlocking(snapshot: PlaybackQueueSnapshot?) {
+        // BUGFIX (freeze after long idle): this used to be an unbounded runBlocking, called from
+        // the main thread during service teardown (onTaskRemoved/onDestroy). If the DataStore
+        // write ever stalled - e.g. right after the process/disk resumes from a long idle period
+        // - the main thread would hang forever with no way to recover short of a force-stop.
+        // withTimeoutOrNull() bounds the worst case instead of leaving it open-ended.
+        // BUGFIX (task-specific timeouts): 2s, matching ListeningStatsTracker's DB timeout - a
+        // healthy local write is fast; DB timeouts should be the shortest tier in this app.
         runCatching {
             runBlocking(Dispatchers.IO) {
-                userPreferencesRepository.setPlaybackQueueSnapshot(snapshot)
+                kotlinx.coroutines.withTimeoutOrNull(2_000L) {
+                    userPreferencesRepository.setPlaybackQueueSnapshot(snapshot)
+                } ?: Timber.tag(TAG).w("Playback snapshot write timed out during unload")
             }
         }.onFailure { e ->
             Timber.tag(TAG).w(e, "Failed to persist playback snapshot during unload")

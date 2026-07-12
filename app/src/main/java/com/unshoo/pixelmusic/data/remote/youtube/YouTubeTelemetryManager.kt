@@ -34,6 +34,47 @@ class YouTubeTelemetryManager {
     @Volatile private var cpn: String = ""
     @Volatile private var sessionStartTimeMs: Long = 0
 
+    // BUGFIX (telemetry health monitoring): track consecutive ping failures for the CURRENT
+    // song's session so a run of silent failures (e.g. a stale/expired cookie, a transient
+    // network blip) doesn't quietly disable history sync for the rest of a long listening
+    // session with no recovery attempt.
+    @Volatile private var consecutiveFailureCount: Int = 0
+    private companion object {
+        const val TAG_HEALTH = "YouTubeTelemetryHealth"
+        const val MAX_CONSECUTIVE_FAILURES = 3
+    }
+
+    /**
+     * Records the outcome of a telemetry ping. After MAX_CONSECUTIVE_FAILURES in a row for the
+     * same song, re-fetches fresh tracking URLs for it - the most likely reason a previously-
+     * working session starts failing repeatedly is that the signed tracking URLs expired or the
+     * session's cpn/state went stale, not that the network is down (a real outage would also
+     * fail the recovery fetch, which is fine - it just tries again next failure).
+     */
+    private fun recordPingResult(success: Boolean, videoId: String) {
+        if (success) {
+            if (consecutiveFailureCount > 0) {
+                Log.d(TAG_HEALTH, "Telemetry recovered for $videoId after $consecutiveFailureCount failure(s)")
+            }
+            consecutiveFailureCount = 0
+            return
+        }
+
+        consecutiveFailureCount += 1
+        Log.w(TAG_HEALTH, "Telemetry ping failed for $videoId (consecutive=$consecutiveFailureCount)")
+
+        if (consecutiveFailureCount >= MAX_CONSECUTIVE_FAILURES && currentVideoId == videoId) {
+            Log.w(TAG_HEALTH, "Recreating telemetry session for $videoId after $consecutiveFailureCount consecutive failures")
+            consecutiveFailureCount = 0
+            val durationMs = currentDurationMs
+            // Force a fresh session: clear currentVideoId first so onSongChanged() doesn't
+            // early-return on the "same video" check, then re-run the same fetch+start flow
+            // used for a genuine song change, picking up new tracking URLs and a new cpn.
+            currentVideoId = null
+            onSongChanged(videoId, durationMs)
+        }
+    }
+
     fun onSongChanged(videoId: String, durationMs: Long) {
         // BUG 1 FIX: guard at very top, before any state mutation or stopTelemetry() call
         if (!isTelemetryEnabled) return
@@ -81,12 +122,31 @@ class YouTubeTelemetryManager {
 
                 val startUrl = activePlaybackUrl
                     ?: "https://music.youtube.com/api/stats/playback?ns=yt&el=detailpage&docid=$videoId&ver=2&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER"
-                reportPlaybackStart(startUrl)
+                reportPlaybackStart(startUrl, videoId)
+
+                // BUGFIX (sync completion): PlayerViewModel and ListeningStatsTracker used to
+                // each independently call YouTube.registerPlayback() (which mints a BotGuard
+                // PoToken for accounts that require one) as a THIRD, uncoordinated writer. Both
+                // of those call sites are now disabled so this manager is the single owner of
+                // all remote YouTube telemetry - but that means it needs to keep doing this call
+                // itself, or accounts that need a PoToken would silently lose history sync
+                // entirely rather than just losing the redundant duplicate writes.
+                activePlaybackUrl?.let { trackingUrl ->
+                    runCatching {
+                        YouTube.registerPlayback(
+                            playlistId = null,
+                            playbackTracking = trackingUrl,
+                            videoId = videoId
+                        )
+                    }.onFailure { ex ->
+                        Log.w(TAG, "registerPlayback failed for $videoId: ${ex.message}")
+                    }
+                }
             }.onFailure { ex ->
                 Log.e(TAG, "Failed to fetch playerResult for $videoId: ${ex.message}", ex)
                 // Fallback URL so at least a basic history ping fires
                 val startUrl = "https://music.youtube.com/api/stats/playback?ns=yt&el=detailpage&docid=$videoId&ver=2&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER"
-                reportPlaybackStart(startUrl)
+                reportPlaybackStart(startUrl, videoId)
             }
         }
     }
@@ -158,7 +218,19 @@ class YouTubeTelemetryManager {
      * Sends the initial playback ping via [YouTube.sendTelemetryPing], which handles
      * all auth headers (Cookie, SAPISIDHASH, X-Goog-Visitor-Id) internally.
      */
-    private fun reportPlaybackStart(playbackUrl: String) {
+    /**
+     * BUGFIX (task-specific timeout strategy): a single transient network blip shouldn't count
+     * as a real failure toward the consecutive-failure/recovery counter in recordPingResult().
+     * One retry after a short delay absorbs momentary hiccups; only a failure that survives the
+     * retry gets recorded as a genuine failure.
+     */
+    private fun sendTelemetryPingWithRetry(url: String): Boolean {
+        if (YouTube.sendTelemetryPing(url)) return true
+        Thread.sleep(400L)
+        return YouTube.sendTelemetryPing(url)
+    }
+
+    private fun reportPlaybackStart(playbackUrl: String, videoId: String) {
         val currentCpn = cpn
         val rtSec = (System.currentTimeMillis() - sessionStartTimeMs) / 1000
 
@@ -167,7 +239,8 @@ class YouTubeTelemetryManager {
             var fullUrl = "$playbackUrl${separator}cpn=$currentCpn&rt=$rtSec"
             if (!fullUrl.contains("ver=")) fullUrl += "&ver=2"
             if (!fullUrl.contains("c=")) fullUrl += "&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER"
-            YouTube.sendTelemetryPing(fullUrl)
+            val success = sendTelemetryPingWithRetry(fullUrl)
+            recordPingResult(success, videoId)
         }
     }
 
@@ -199,7 +272,8 @@ class YouTubeTelemetryManager {
         if (!fullUrl.contains("c=")) fullUrl += "&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER"
         if (!fullUrl.contains("afmt=")) fullUrl += "&afmt=251&muted=0&volume=100"
 
-        YouTube.sendTelemetryPing(fullUrl)
+        val success = sendTelemetryPingWithRetry(fullUrl)
+        recordPingResult(success, videoId)
     }
 
     fun stopTelemetry() {

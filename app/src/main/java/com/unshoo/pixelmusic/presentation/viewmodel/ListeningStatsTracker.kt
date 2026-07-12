@@ -321,11 +321,13 @@ class ListeningStatsTracker @Inject constructor(
                         "${finalTrackingUrl}${separator}ver=2&c=WEB_REMIX&cver=1.20260531.05.00" +
                             "&cplayer=UNIPLAYER&cpn=$cpn&rt=$rtSec&docid=$ytId"
 
-                    unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(startUrl)
+                    if (SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY) {
+                        unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(startUrl)
+                    }
                     isPlaybackStartReported = true
 
                     // Full registerPlayback path (InnerTube-authenticated) when we have a real tracking URL.
-                    if (!trackingUrl.isNullOrBlank()) {
+                    if (SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY && !trackingUrl.isNullOrBlank()) {
                         runCatching {
                             unshoo.ianshulyadav.pixelmusic.innertube.YouTube.registerPlayback(
                                 playlistId = null,
@@ -381,7 +383,9 @@ class ListeningStatsTracker @Inject constructor(
             val separator = if (cachedWatchUrl.contains("?")) "&" else "?"
 
             val fullUrl = "$cachedWatchUrl${separator}cpn=$cpn&state=$state&st=$st&et=$et&cmt=$et&rt=$rtSec&lact=1&len=$lengthSec&ver=2&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER&afmt=251&muted=0&volume=100"
-            unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(fullUrl)
+            if (SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY) {
+                unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(fullUrl)
+            }
         }
     }
 
@@ -648,18 +652,31 @@ class ListeningStatsTracker @Inject constructor(
         album: String? = null
     ) {
         if (forceSynchronous) {
+            // BUGFIX (freeze after long idle): this runs inside finalizeCurrentSession(), which
+            // is @Synchronized - so runBlocking here held ListeningStatsTracker's monitor for as
+            // long as persistPlaybackInternal() took, with NO upper bound. finalizeCurrentSession
+            // is called from MusicService.onDestroy()/onTaskRemoved() on the main thread; if the
+            // DB/DataStore write ever stalled (e.g. right after a long idle period, when the
+            // process/disk is coming back from a suspended state), the main thread - and with it
+            // every other @Synchronized method on this tracker that anything else needed to call
+            // - would hang indefinitely. That matches "app completely freezes, has to be force-
+            // cleared from recents": swiping away doesn't actually kill a hung foreground-service
+            // process. withTimeoutOrNull() guarantees this can never block longer than
+            // FORCE_PERSIST_TIMEOUT_MS, so the monitor is always released within a bounded time.
             kotlinx.coroutines.runBlocking {
                 runCatching {
-                    persistPlaybackInternal(
-                        songId = songId,
-                        listened = listened,
-                        timestamp = timestamp,
-                        title = title,
-                        artist = artist,
-                        thumbnail = thumbnail,
-                        genre = genre,
-                        album = album
-                    )
+                    kotlinx.coroutines.withTimeoutOrNull(FORCE_PERSIST_TIMEOUT_MS) {
+                        persistPlaybackInternal(
+                            songId = songId,
+                            listened = listened,
+                            timestamp = timestamp,
+                            title = title,
+                            artist = artist,
+                            thumbnail = thumbnail,
+                            genre = genre,
+                            album = album
+                        )
+                    } ?: Timber.w("Synchronous listening-session persist timed out after %dms for song=%s", FORCE_PERSIST_TIMEOUT_MS, songId)
                 }.onFailure { throwable ->
                     Timber.e(throwable, "Failed to persist listening session synchronously for song=%s", songId)
                 }
@@ -720,7 +737,7 @@ class ListeningStatsTracker @Inject constructor(
                 } else null
             } else null
         }
-        if (ytId != null) {
+        if (ytId != null && SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY) {
             persistenceScope.launch(Dispatchers.IO) {
                 runCatching {
                     val cpn = (1..16).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".random() }.joinToString("")
@@ -798,6 +815,33 @@ class ListeningStatsTracker @Inject constructor(
         private const val MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS = 500
         /** Number of plays before a YouTube song is auto-downloaded for offline use. */
         private const val AUTO_CACHE_PLAY_COUNT_THRESHOLD = 3
+
+        /**
+         * BUGFIX (duplicate/conflicting telemetry writers): ListeningStatsTracker used to run a
+         * full second implementation of YouTube playback-start/watchtime pinging (its own CPN,
+         * its own timers, its own registerPlayback call) completely independently of
+         * MusicService's YouTubeTelemetryManager. Having two - really three, PlayerViewModel had
+         * a third - uncoordinated writers each report "playback started"/"watchtime" for the
+         * same video with different CPNs around the same time is a major contributor to
+         * unreliable/out-of-order YT Music history sync.
+         *
+         * MusicService's telemetry manager is now the single authoritative remote writer (it
+         * observes the actual MediaSession player and a canonical, correctly-extracted video ID).
+         * This flag gates ONLY the outbound network calls below (sendTelemetryPing /
+         * registerPlayback); all the surrounding session/timing bookkeeping in this class is left
+         * untouched since local features (Recently Played, listening-time stats, Daily Mix
+         * engagement scoring) still depend on it.
+         */
+        private const val SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY = false
+
+        // BUGFIX (freeze after long idle): upper bound for the synchronous, monitor-holding
+        // persistence path in persistPlayback(forceSynchronous = true). See the call site for
+        // the full explanation.
+        // BUGFIX (task-specific timeouts): shortened from 4s. A healthy DB/DataStore write
+        // completes in milliseconds; a DB timeout should be the shortest of the three timeout
+        // categories in this app (DB < network < Chromecast), since there's no legitimate reason
+        // for a local write to take seconds unless something is genuinely stuck.
+        private const val FORCE_PERSIST_TIMEOUT_MS = 2_000L
     }
 }
 

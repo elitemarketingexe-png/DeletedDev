@@ -849,6 +849,12 @@ class PlayerViewModel @Inject constructor(
     private var directPlaybackJob: Job? = null
     private var directPlaybackToken: Long = 0L
     private var pendingQueueSegmentsJob: Job? = null
+    // BUGFIX (stale-resolution race): tracks the inner "resolve stream URL -> setMediaItems"
+    // coroutine started from internalPlaySongs(). Before this field existed, that coroutine was
+    // launched as an untracked, independent viewModelScope.launch - cancelling directPlaybackJob
+    // (e.g. on the next tap) did NOT cancel it, so a slow tap A could resolve after a faster tap B
+    // and overwrite B's queue/player state with A's.
+    private var directPlaybackApplyJob: Job? = null
 
     fun requestLocateCurrentSong() {
         val currentSong = stablePlayerState.value.currentSong ?: return
@@ -992,6 +998,11 @@ class PlayerViewModel @Inject constructor(
         directPlaybackToken += 1L
         directPlaybackJob?.cancel()
         directPlaybackJob = null
+        // BUGFIX: also kill any in-flight "resolve -> setMediaItems" apply from a previous tap.
+        // Cancelling directPlaybackJob alone never reached this coroutine because it is launched
+        // independently (see internalPlaySongs()).
+        directPlaybackApplyJob?.cancel()
+        directPlaybackApplyJob = null
         pendingQueueSegmentsJob?.cancel()
         pendingQueueSegmentsJob = null
         return directPlaybackToken
@@ -1007,6 +1018,8 @@ class PlayerViewModel @Inject constructor(
         directPlaybackToken += 1L
         directPlaybackJob?.cancel()
         directPlaybackJob = null
+        directPlaybackApplyJob?.cancel()
+        directPlaybackApplyJob = null
     }
 
     private fun throwIfDirectPlaybackRequestIsStale(requestToken: Long) {
@@ -1014,6 +1027,11 @@ class PlayerViewModel @Inject constructor(
             throw CancellationException("Stale direct playback request")
         }
     }
+
+    // BUGFIX: non-throwing variant safe to call from Dispatchers.Main.immediate right before
+    // touching the player, inside the previously-untracked resolve/apply coroutine.
+    private fun isDirectPlaybackRequestStale(requestToken: Long): Boolean =
+        requestToken != directPlaybackToken
 
     private suspend fun resolvePlaybackQueueFromSortedIds(sortedIds: List<Long>): List<Song> {
         if (sortedIds.isEmpty()) return emptyList()
@@ -2307,7 +2325,26 @@ class PlayerViewModel @Inject constructor(
         if (currentController == null || !currentController.isConnected) {
             Log.i("PlayerViewModel", "MediaController is null or disconnected. Triggering reconnect.")
             connectMediaController()
+            return
         }
+
+        // BUGFIX (Full Player freezes after long background idle, notification stays fine):
+        // MediaController.isConnected staying true does NOT guarantee the ViewModel-side UI
+        // state (_stablePlayerState, current position, queue) is still in sync with it. The
+        // notification is built server-side directly from MusicService's own player/session, so
+        // it's unaffected by anything on this side - but the Full Player only reflects whatever
+        // was last pushed into these StateFlows. If a Player.Listener callback was ever missed,
+        // or a downstream distinctUntilChanged() suppressed an update while the screen wasn't
+        // being actively collected, the Full Player is left showing a stale snapshot with no
+        // trigger to correct itself, even though the controller is technically fine. Rather than
+        // relying purely on passive listener callbacks to eventually catch up,
+        // setupMediaControllerListeners() re-derives every piece of Full Player state directly
+        // from the live controller and is safe to call again on an already-connected controller
+        // (it removes/re-adds its own listener and every value it sets is freshly read here, not
+        // incrementally patched) - so forcing it on every foreground return guarantees the Full
+        // Player always reflects the actual MediaSession the moment the user looks at it again.
+        Log.d("PlayerViewModel", "MediaController still connected; forcing a full state resync for Full Player")
+        setupMediaControllerListeners()
     }
 
 
@@ -4424,7 +4461,7 @@ class PlayerViewModel @Inject constructor(
             throwIfDirectPlaybackRequestIsStale(requestToken)
 
             // Send the final list (shuffled or not) to the player engine
-            internalPlaySongs(finalSongsToPlay, validStartSong, queueName, playlistId)
+            internalPlaySongs(finalSongsToPlay, validStartSong, queueName, playlistId, requestToken)
             if (requestToken == directPlaybackToken) {
                 directPlaybackJob = null
             }
@@ -4461,7 +4498,7 @@ class PlayerViewModel @Inject constructor(
                 playbackStateHolder.updateStablePlayerState { it.copy(isShuffleEnabled = true) }
                 launch { userPreferencesRepository.setShuffleOn(true) }
 
-                internalPlaySongs(shuffledQueue, startSong, queueName, playlistId)
+                internalPlaySongs(shuffledQueue, startSong, queueName, playlistId, requestToken)
                 if (requestToken == directPlaybackToken) {
                     directPlaybackJob = null
                 }
@@ -4697,7 +4734,17 @@ class PlayerViewModel @Inject constructor(
 
 
 
-    private suspend fun internalPlaySongs(songsToPlay: List<Song>, startSong: Song, queueName: String = "None", playlistId: String? = null) {
+    private suspend fun internalPlaySongs(
+        songsToPlay: List<Song>,
+        startSong: Song,
+        queueName: String = "None",
+        playlistId: String? = null,
+        // BUGFIX: identifies which tap/request this call belongs to, so the async resolve+apply
+        // work below can detect if it has been superseded by a newer request before it mutates
+        // the player. Callers that don't already have a token mint one via beginDirectPlaybackRequest()
+        // so every entry point into this function is covered, not just playSongs()/playSongsShuffled().
+        requestToken: Long = beginDirectPlaybackRequest()
+    ) {
         if (songsToPlay.isEmpty()) {
             clearPreparingSongIfMatching()
             return
@@ -4814,7 +4861,7 @@ class PlayerViewModel @Inject constructor(
                     // FREEZE FIX: pre-resolve youtube/telegram/gdrive URIs off the ExoPlayer
                     // load thread BEFORE prepare/play. Without this, ResolvingDataSource used
                     // to runBlocking network work and froze the miniplayer/UI on song taps.
-                    viewModelScope.launch {
+                    directPlaybackApplyJob = viewModelScope.launch {
                         // INSTANT PLAY on low connectivity (SpatialFlow pattern):
                         // Resolve ONLY the tapped track to a real http(s)/file URL first
                         // (always LOW bitrate for fastest first-byte), then inject into ExoPlayer.
@@ -4876,6 +4923,24 @@ class PlayerViewModel @Inject constructor(
 
                         if (resolvedStart != null) {
                             items[startIndex] = resolvedStart
+                        }
+
+                        // BUGFIX (stale-resolution race): if a newer tap has superseded this
+                        // request while we were resolving the stream URL above, stop here.
+                        // Previously this coroutine was untracked and always ran to completion,
+                        // so a slow tap A could finish resolving after a faster tap B and
+                        // silently overwrite B's already-playing queue/player state with A's -
+                        // this is the root cause of "wrong song plays" under rapid tapping or
+                        // weak network. beginDirectPlaybackRequest() bumps directPlaybackToken
+                        // for every new tap, so a mismatch here means we've been superseded.
+                        if (isDirectPlaybackRequestStale(requestToken)) {
+                            Timber.d(
+                                "Discarding stale direct-playback apply (requestToken=%d, current=%d, songId=%s)",
+                                requestToken,
+                                directPlaybackToken,
+                                effectiveStartSong.id
+                            )
+                            return@launch
                         }
 
                         withContext(Dispatchers.Main.immediate) {
@@ -5033,6 +5098,23 @@ class PlayerViewModel @Inject constructor(
 
 // buildMediaMetadataForSong moved to MediaItemBuilder
 
+    /**
+     * BUGFIX (duplicate/conflicting telemetry writers): this used to independently call
+     * YouTube.registerPlayback(...) here, AND MusicService's YouTubeTelemetryManager did its own
+     * competing registration, AND ListeningStatsTracker did a THIRD independent one - three
+     * uncoordinated writers each firing their own CPN/session for the same video at slightly
+     * different times, which is exactly the kind of out-of-order or conflicting write YouTube's
+     * history backend is unreliable in the face of.
+     *
+     * MusicService.startTelemetryReporting() is now the single authoritative remote writer: it
+     * observes the actual MediaSession player (the real source of truth for what's currently
+     * playing) and uses a canonical, correctly-stripped video ID (see
+     * MusicService.canonicalYoutubeVideoId - the old "youtube_<id>" mediaId was previously sent
+     * to YouTube unstripped, which is why history only updated ~once per 100 songs). This
+     * function is kept only to trigger a local merged-history refresh so the in-app "Recently
+     * Played" UI reflects the new song promptly; it deliberately no longer performs any remote
+     * registerPlayback/telemetry network calls itself, to avoid re-introducing the race.
+     */
     private fun registerYoutubePlaybackHistoryIfNeeded(mediaItem: MediaItem) {
         val song = resolveSongFromMediaItem(mediaItem)
         val videoId = song?.youtubeId
@@ -5042,50 +5124,16 @@ class PlayerViewModel @Inject constructor(
                 ?.substringAfter("youtube://")
             ?: return
 
-        if (videoId.isBlank() || videoId == lastRegisteredVideoId || videoId == pendingYoutubeHistoryVideoId) return
+        if (videoId.isBlank() || videoId == lastRegisteredVideoId) return
+        lastRegisteredVideoId = videoId
+        pendingYoutubeHistoryVideoId = null
 
-        val playlistId = mediaItem.mediaMetadata.extras?.getString("playlistId")
-        pendingYoutubeHistoryVideoId = videoId
+        // Local-only: keep the merged/optimistic "Recently Played" UI fresh. The actual remote
+        // YouTube Music history write is now owned exclusively by MusicService's telemetry
+        // manager, which is driven by the real player rather than a UI-side click/transition.
         youtubePlaybackHistoryJob?.cancel()
         youtubePlaybackHistoryJob = viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // SpatialFlow parity: register the currently playing song with YT Music
-                // immediately on launch (not after 30s). Confirmation follows after a short
-                // continuous listen window so accidental skips do not flood history.
-                val instantRegistered = registerYoutubePlaybackHistory(videoId, playlistId)
-                if (instantRegistered) {
-                    lastRegisteredVideoId = videoId
-                    Timber.d("Instant YT history sync registered for %s", videoId)
-                }
-
-                // Also ensure ListeningStatsTracker merged history + optimistic head stay hot.
-                listeningStatsTracker.refreshMergedYoutubeHistory()
-
-                // Confirmation after ~5s of continuous play (SpatialFlow pings watchtime early).
-                delay(5_000L)
-                val stillPlayingSameVideo = withContext(Dispatchers.Main.immediate) {
-                    val controller = mediaController
-                    val currentItem = controller?.currentMediaItem
-                    val currentSong = currentItem?.let { resolveSongFromMediaItem(it) }
-                    val currentVideoId = currentSong?.youtubeId
-                        ?: currentItem?.mediaId?.takeIf { it.startsWith("youtube_") }?.substringAfter("youtube_")
-                        ?: currentItem?.localConfiguration?.uri?.toString()
-                            ?.takeIf { it.startsWith("youtube://") }
-                            ?.substringAfter("youtube://")
-                    controller?.isPlaying == true && currentVideoId == videoId
-                }
-                if (!stillPlayingSameVideo) return@launch
-
-                val confirmed = registerYoutubePlaybackHistory(videoId, playlistId)
-                if (confirmed) {
-                    lastRegisteredVideoId = videoId
-                    Timber.d("Confirmed YT history sync for %s", videoId)
-                }
-            } finally {
-                if (pendingYoutubeHistoryVideoId == videoId) {
-                    pendingYoutubeHistoryVideoId = null
-                }
-            }
+            runCatching { listeningStatsTracker.refreshMergedYoutubeHistory() }
         }
     }
 
@@ -6326,6 +6374,8 @@ class PlayerViewModel @Inject constructor(
             androidx.media3.session.MediaController.releaseFuture(it)
         }
         super.onCleared()
+        directPlaybackJob?.cancel()
+        directPlaybackApplyJob?.cancel()
         remoteQueueLoadJob?.cancel()
         castSongUiSyncJob?.cancel()
         stopProgressUpdates()

@@ -51,6 +51,11 @@ data class BluetoothAudioDeviceState(
 class ConnectivityStateHolder @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    companion object {
+        // Conservative default (~ decent 3G) used until the OS reports a real capability.
+        const val DEFAULT_BANDWIDTH_KBPS = 1_500
+    }
+
     // WiFi State
     private val _isWifiEnabled = MutableStateFlow(false)
     val isWifiEnabled: StateFlow<Boolean> = _isWifiEnabled.asStateFlow()
@@ -68,6 +73,34 @@ class ConnectivityStateHolder @Inject constructor(
     // Defaults to true (metered/mobile data) as a safe assumption until we know otherwise
     private val _isMeteredNetwork = MutableStateFlow(true)
     val isMeteredNetwork: StateFlow<Boolean> = _isMeteredNetwork.asStateFlow()
+
+    // BUGFIX (adaptive buffering): a real link-speed estimate from the OS, not just a metered/
+    // unmetered boolean, so playback buffering can be tiered by actual connection quality
+    // instead of a flat "mobile data = conservative" assumption (a fast 5G connection and a slow
+    // one both counted as "metered" before). NetworkCapabilities.getLinkDownstreamBandwidthKbps()
+    // is a link-technology estimate (not live measured throughput), but it's a real, zero-cost
+    // signal already available from every capability update this class already listens for.
+    private val _linkDownstreamBandwidthKbps = MutableStateFlow(DEFAULT_BANDWIDTH_KBPS)
+    val linkDownstreamBandwidthKbps: StateFlow<Int> = _linkDownstreamBandwidthKbps.asStateFlow()
+
+    // BUGFIX (adaptive buffering): live feedback from the player itself. Rebuffer events during
+    // playback are ground truth that the current buffering strategy isn't keeping up, regardless
+    // of what the link-speed estimate says. DualPlayerEngine reports rebuffers here; the next
+    // buffer-config decision (next track / player rebuild) reads it and buffers more generously
+    // until playback has been stable for a while.
+    private val _recentRebufferCount = MutableStateFlow(0)
+    private val _isNetworkRecentlyUnstable = MutableStateFlow(false)
+    val isNetworkRecentlyUnstable: StateFlow<Boolean> = _isNetworkRecentlyUnstable.asStateFlow()
+
+    fun reportPlaybackStall() {
+        _recentRebufferCount.value += 1
+        _isNetworkRecentlyUnstable.value = _recentRebufferCount.value >= 2
+    }
+
+    fun reportStablePlayback() {
+        _recentRebufferCount.value = 0
+        _isNetworkRecentlyUnstable.value = false
+    }
 
     // Bluetooth State
     private val _isBluetoothEnabled = MutableStateFlow(false)
@@ -145,6 +178,10 @@ class ConnectivityStateHolder @Inject constructor(
         _isMeteredNetwork.value = capabilities?.hasCapability(
             NetworkCapabilities.NET_CAPABILITY_NOT_METERED
         ) != true
+        if (capabilities != null) {
+            _linkDownstreamBandwidthKbps.value = capabilities.linkDownstreamBandwidthKbps
+                .takeIf { it > 0 } ?: DEFAULT_BANDWIDTH_KBPS
+        }
 
         updateBluetoothEnabledState()
 
@@ -173,6 +210,12 @@ class ConnectivityStateHolder @Inject constructor(
                 _isMeteredNetwork.value = !networkCapabilities.hasCapability(
                     NetworkCapabilities.NET_CAPABILITY_NOT_METERED
                 )
+                _linkDownstreamBandwidthKbps.value = networkCapabilities.linkDownstreamBandwidthKbps
+                    .takeIf { it > 0 } ?: DEFAULT_BANDWIDTH_KBPS
+                // A capability change usually means a real network change (e.g. Wi-Fi <-> mobile) -
+                // give the new network a clean slate rather than carrying over stall history from
+                // whatever connection was active before.
+                reportStablePlayback()
                 
                 if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
                     _isWifiEnabled.value = true
@@ -192,6 +235,9 @@ class ConnectivityStateHolder @Inject constructor(
                 _isMeteredNetwork.value = caps?.hasCapability(
                     NetworkCapabilities.NET_CAPABILITY_NOT_METERED
                 ) != true
+                _linkDownstreamBandwidthKbps.value = caps?.linkDownstreamBandwidthKbps
+                    ?.takeIf { it > 0 } ?: DEFAULT_BANDWIDTH_KBPS
+                reportStablePlayback()
             }
             
             private fun checkConnectivity() {
