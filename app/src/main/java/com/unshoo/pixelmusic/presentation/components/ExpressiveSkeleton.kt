@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.PI
@@ -40,7 +41,7 @@ class MorphingExpressiveShape(private val phase: Float) : Shape {
         val path = Path()
         val centerX = size.width / 2f
         val centerY = size.height / 2f
-        val baseRadius = minOf(size.width, size.height) / 2f
+        val baseRadius = (minOf(size.width, size.height) / 2f) * 0.82f
         val numPoints = 100
         val angleStep = (2 * PI / numPoints).toFloat()
         val rotationAngle = phase * (PI.toFloat() / 2f)
@@ -94,8 +95,8 @@ fun rememberShimmerBrush(): Brush {
         label = "shimmer_translation"
     )
     val colors = MaterialTheme.colorScheme
-    val baseColor = colors.surfaceVariant
-    val highlightColor = colors.onSurface.copy(alpha = 0.12f)
+    val baseColor = colors.onSurface.copy(alpha = 0.08f)
+    val highlightColor = colors.onSurface.copy(alpha = 0.22f)
     return Brush.linearGradient(
         colors = listOf(baseColor, highlightColor, baseColor),
         start = Offset(translateAnim.value, 0f),
@@ -161,7 +162,7 @@ fun ExploreSkeletonGrid(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = paddingValues,
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 1. Category Filter Chips
         item(key = "skel_explore_chips") {
@@ -191,12 +192,12 @@ fun ExploreSkeletonGrid(
                     .fillMaxWidth()
                     .height(80.dp)
                     .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(AbsoluteSmoothCornerShape(24.dp, 60))
                     .background(shimmerBrush)
             )
         }
 
-        // 3. Quick Picks section — matches SongCardItem (120dp square + text below)
+        // 3. Quick Picks section — matches SongCardItem (140dp square + text below)
         item(key = "skel_explore_quick_picks") {
             Column(modifier = Modifier.fillMaxWidth()) {
                 // Section header
@@ -223,7 +224,7 @@ fun ExploreSkeletonGrid(
                     )
                 }
                 Spacer(modifier = Modifier.height(10.dp))
-                // Quick Picks row — 120dp cards matching actual SongCardItem/QuickPickPortraitCard
+                // Quick Picks row — 140dp cards matching actual SongCardItem/QuickPickPortraitCard
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -231,12 +232,10 @@ fun ExploreSkeletonGrid(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     repeat(4) {
-                        Column(modifier = Modifier.width(120.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(120.dp)
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(shimmerBrush)
+                        Column(modifier = Modifier.width(140.dp)) {
+                            ShapeShiftingPlaceholder(
+                                modifier = Modifier.size(140.dp),
+                                shimmerBrush = shimmerBrush
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Box(
@@ -293,21 +292,19 @@ fun ExploreSkeletonGrid(
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     repeat(2) {
-                        // 260×120 card with inner art (96dp) + text column
+                        // 260×100 card with inner art (80dp) + text column
                         Row(
                             modifier = Modifier
                                 .width(260.dp)
-                                .height(120.dp)
-                                .clip(RoundedCornerShape(22.dp))
+                                .height(100.dp)
+                                .clip(AbsoluteSmoothCornerShape(24.dp, 80))
                                 .background(shimmerBrush)
                                 .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(96.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.35f))
+                            ShapeShiftingPlaceholder(
+                                modifier = Modifier.size(80.dp),
+                                shimmerBrush = shimmerBrush
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(
@@ -489,7 +486,8 @@ fun PlaylistSkeletonDetail(
             // Back button circle overlay (top-left)
             Box(
                 modifier = Modifier
-                    .padding(start = 16.dp, top = 48.dp)
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, top = 8.dp)
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
@@ -576,16 +574,12 @@ fun PlaylistSkeletonDetail(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .padding(horizontal = 13.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(shimmerBrush)
+                    ShapeShiftingPlaceholder(
+                        modifier = Modifier.size(50.dp),
+                        shimmerBrush = shimmerBrush
                     )
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -644,7 +638,8 @@ fun AlbumSkeletonDetail(
         ) {
             Box(
                 modifier = Modifier
-                    .padding(start = 16.dp, top = 48.dp)
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, top = 8.dp)
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
@@ -711,17 +706,13 @@ fun AlbumSkeletonDetail(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .padding(horizontal = 13.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Album art thumbnail
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(shimmerBrush)
+                    ShapeShiftingPlaceholder(
+                        modifier = Modifier.size(50.dp),
+                        shimmerBrush = shimmerBrush
                     )
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {

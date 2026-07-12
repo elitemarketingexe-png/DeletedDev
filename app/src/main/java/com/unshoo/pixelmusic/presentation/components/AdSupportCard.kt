@@ -66,15 +66,15 @@ fun AdSupportCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Star Icon with circle background
             Surface(
                 shape = CircleShape,
                 color = circleBackgroundColor,
-                modifier = Modifier.size(44.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
@@ -84,7 +84,7 @@ fun AdSupportCard(
                         imageVector = Icons.Rounded.StarBorder,
                         contentDescription = null,
                         tint = iconColor,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -96,17 +96,17 @@ fun AdSupportCard(
                 Text(
                     text = "Support PixelMusic❤️",
                     color = textColor,
-                    fontSize = 16.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     softWrap = false
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(1.dp))
                 Text(
                     text = "Love the app? Tap to watch a quick ad & support its development!",
                     color = textColor.copy(alpha = 0.8f),
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
                     fontWeight = FontWeight.Normal
                 )
             }
@@ -116,7 +116,7 @@ fun AdSupportCard(
                 imageVector = Icons.Rounded.PlayArrow,
                 contentDescription = "Watch Ad",
                 tint = iconColor,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }

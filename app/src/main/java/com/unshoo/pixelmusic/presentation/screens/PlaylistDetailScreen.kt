@@ -496,22 +496,27 @@ fun PlaylistDetailScreen(
                 0f
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        this.translationX = translationX
-                        if (predictiveBackProgress > 0.001f) {
-                            val radius = with(density) { lerp(0.dp, 28.dp, predictiveBackProgress).toPx() }
-                            shape = RoundedCornerShape(radius)
-                            clip = true
-                        }
-                    }
-                    .background(MaterialTheme.colorScheme.background)
-                    .nestedScroll(nestedScrollConnection)
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !showLoading,
+                enter = androidx.compose.animation.fadeIn(animationSpec = tween(300)),
+                exit = androidx.compose.animation.fadeOut(animationSpec = tween(300))
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            this.translationX = translationX
+                            if (predictiveBackProgress > 0.001f) {
+                                val radius = with(density) { lerp(0.dp, 28.dp, predictiveBackProgress).toPx() }
+                                shape = RoundedCornerShape(radius)
+                                clip = true
+                            }
+                        }
+                        .background(MaterialTheme.colorScheme.background)
+                        .nestedScroll(nestedScrollConnection)
+                ) {
                 val currentTopBarHeightDp = with(density) { topBarHeight.value.toDp() }
 
                 CollapsingPlaylistTopBar(
@@ -898,6 +903,7 @@ fun PlaylistDetailScreen(
                                 )
                         )
                     }
+                }
                 }
             }
         }

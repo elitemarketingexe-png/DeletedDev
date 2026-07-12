@@ -323,7 +323,7 @@ fun ExploreScreen(
                             top = innerPadding.calculateTopPadding(),
                             bottom = paddingValuesParent.calculateBottomPadding() + 24.dp + bottomPadding
                         ),
-                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // 2. Category Filter Chips (All, Smart Mix, For You, Charts, Recap)
                         item(key = "explore_category_filters") {
@@ -544,7 +544,7 @@ fun ExploreScreen(
                                     },
                                     currentSongId = currentSongId,
                                     displayMode = quickPicksDisplayMode,
-                                    cardSize = 120.dp
+                                    cardSize = 140.dp
                                 )
                             }
                         }

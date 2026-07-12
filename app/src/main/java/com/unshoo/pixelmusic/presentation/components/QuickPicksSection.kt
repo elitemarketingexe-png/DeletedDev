@@ -305,7 +305,7 @@ fun QuickPicksSection(
                         // Metadata details below card
                         Text(
                             text = song.title,
-                            style = MaterialTheme.typography.bodySmall.copy(
+                            style = MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = GoogleSansRounded,
                                 color = if (song.id == currentSongId) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -317,7 +317,7 @@ fun QuickPicksSection(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = song.artist,
-                            style = MaterialTheme.typography.labelSmall.copy(
+                            style = MaterialTheme.typography.bodySmall.copy(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
                             maxLines = 1,
@@ -498,10 +498,10 @@ private fun QuickPickPortraitCard(
                 ) {
                     Text(
                         text = song.title,
-                        style = MaterialTheme.typography.bodyMedium.copy(
+                        style = MaterialTheme.typography.bodyLarge.copy(
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            fontSize = 15.sp
                         ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -509,9 +509,9 @@ private fun QuickPickPortraitCard(
                     )
                     Text(
                         text = song.artist,
-                        style = MaterialTheme.typography.labelSmall.copy(
+                        style = MaterialTheme.typography.bodySmall.copy(
                             color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         ),
                         maxLines = 1,
