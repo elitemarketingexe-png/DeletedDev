@@ -446,10 +446,12 @@ fun PlaylistSkeletonDetail(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(modifier = Modifier.height(24.dp))
-        // 1. Cover Art Placeholder
-        ShapeShiftingPlaceholder(
-            modifier = Modifier.size(180.dp),
-            shimmerBrush = shimmerBrush
+        // 1. Cover Art Placeholder (Polished Rounded Square matching the actual playlist screen layout)
+        Box(
+            modifier = Modifier
+                .size(200.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(shimmerBrush)
         )
         Spacer(modifier = Modifier.height(24.dp))
         
@@ -495,14 +497,18 @@ fun PlaylistSkeletonDetail(
         }
         Spacer(modifier = Modifier.height(24.dp))
         
-        // 5. Songs List Placeholders
+        // 5. Songs List Placeholders (styled as rounded card containers matching QueuePlaylistSongItem)
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             items(5) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                        .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
@@ -529,6 +535,12 @@ fun PlaylistSkeletonDetail(
                                 .background(shimmerBrush)
                         )
                     }
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(shimmerBrush)
+                    )
                 }
             }
         }
