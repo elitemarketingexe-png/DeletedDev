@@ -1502,69 +1502,7 @@ class MusicService : MediaLibraryService() {
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            handleMediaItemTransition(mediaItem, reason)
-        }
-
-        private fun handleMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            val player = mediaSession?.player ?: engine.masterPlayer
-            syncLocalListeningStatsFromPlayer(player, forceNewSession = true)
-            grantArtworkPermissionsForCurrentSong(mediaItem)
-            
-            val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) {
-                player.duration
-            } else {
-                mediaItem?.mediaMetadata?.extras?.getLong(MediaItemBuilder.EXTERNAL_EXTRA_DURATION, 0L) ?: 0L
-            }
-            scrobbleManager?.onPlayerStateChanged(player.isPlaying, mediaItem, durationMs)
-            
-            if (isNavidromeMediaItem(mediaItem)) {
-                reportNavidromePlayback("starting")
-                if (engine.masterPlayer.isPlaying) {
-                    startNavidromePlaybackReporting()
-                }
-            } else {
-                stopNavidromePlaybackReporting()
-            }
-
-            val eotTargetSongId = endOfTrackTimerSongId
-            if (!eotTargetSongId.isNullOrBlank()) {
-                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                    val previousSongId = engine.masterPlayer.run {
-                        if (previousMediaItemIndex != C.INDEX_UNSET) {
-                            runCatching { getMediaItemAt(previousMediaItemIndex).mediaId }.getOrNull()
-                        } else {
-                            null
-                        }
-                    }
-                    if (previousSongId == eotTargetSongId) {
-                        endOfTrackTimerSongId = null
-                        engine.masterPlayer.seekTo(0L)
-                        engine.masterPlayer.pause()
-                        Timber.tag(TAG).d("Paused playback at end of track from Wear timer")
-                    }
-                } else if (mediaItem?.mediaId != eotTargetSongId) {
-                    endOfTrackTimerSongId = null
-                    Timber.tag(TAG).d("Cleared end-of-track timer after manual track change")
-                }
-            }
-            applyReplayGain(mediaSession?.player?.currentMediaItem)
-            // Pre-fetch RG for the track after this one so it's cached when needed
-            val nextIndex = engine.masterPlayer.nextMediaItemIndex
-            if (nextIndex != androidx.media3.common.C.INDEX_UNSET) {
-                runCatching { prefetchReplayGain(engine.masterPlayer.getMediaItemAt(nextIndex)) }
-            }
-            // BUG 3 FIX: Force an immediate widget update (not debounced) on track transition
-            // so album art and song info appear without the 300-800ms blank period.
-            requestWidgetFullUpdate(force = true)
-            mediaSession?.let { refreshMediaSessionUi(it) }
-            schedulePlaybackSnapshotPersist()
-
-            // BUG 4 FIX: Ensure new telemetry session starts on track transition (vital for gapless auto-transitions)
-            lastTelemetryVideoId = null
-            telemetryManager.stopTelemetry()
-            if (player.isPlaying) {
-                startTelemetryReporting()
-            }
+            this@MusicService.handleMediaItemTransition(mediaItem, reason)
         }
 
         override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
@@ -1708,6 +1646,68 @@ class MusicService : MediaLibraryService() {
                     }
                 }
             }
+        }
+    }
+
+    private fun handleMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        val player = mediaSession?.player ?: engine.masterPlayer
+        syncLocalListeningStatsFromPlayer(player, forceNewSession = true)
+        grantArtworkPermissionsForCurrentSong(mediaItem)
+        
+        val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) {
+            player.duration
+        } else {
+            mediaItem?.mediaMetadata?.extras?.getLong(MediaItemBuilder.EXTERNAL_EXTRA_DURATION, 0L) ?: 0L
+        }
+        scrobbleManager?.onPlayerStateChanged(player.isPlaying, mediaItem, durationMs)
+        
+        if (isNavidromeMediaItem(mediaItem)) {
+            reportNavidromePlayback("starting")
+            if (engine.masterPlayer.isPlaying) {
+                startNavidromePlaybackReporting()
+            }
+        } else {
+            stopNavidromePlaybackReporting()
+        }
+
+        val eotTargetSongId = endOfTrackTimerSongId
+        if (!eotTargetSongId.isNullOrBlank()) {
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                val previousSongId = engine.masterPlayer.run {
+                    if (previousMediaItemIndex != C.INDEX_UNSET) {
+                        runCatching { getMediaItemAt(previousMediaItemIndex).mediaId }.getOrNull()
+                    } else {
+                        null
+                    }
+                }
+                if (previousSongId == eotTargetSongId) {
+                    endOfTrackTimerSongId = null
+                    engine.masterPlayer.seekTo(0L)
+                    engine.masterPlayer.pause()
+                    Timber.tag(TAG).d("Paused playback at end of track from Wear timer")
+                }
+            } else if (mediaItem?.mediaId != eotTargetSongId) {
+                endOfTrackTimerSongId = null
+                Timber.tag(TAG).d("Cleared end-of-track timer after manual track change")
+            }
+        }
+        applyReplayGain(mediaSession?.player?.currentMediaItem)
+        // Pre-fetch RG for the track after this one so it's cached when needed
+        val nextIndex = engine.masterPlayer.nextMediaItemIndex
+        if (nextIndex != androidx.media3.common.C.INDEX_UNSET) {
+            runCatching { prefetchReplayGain(engine.masterPlayer.getMediaItemAt(nextIndex)) }
+        }
+        // BUG 3 FIX: Force an immediate widget update (not debounced) on track transition
+        // so album art and song info appear without the 300-800ms blank period.
+        requestWidgetFullUpdate(force = true)
+        mediaSession?.let { refreshMediaSessionUi(it) }
+        schedulePlaybackSnapshotPersist()
+
+        // BUG 4 FIX: Ensure new telemetry session starts on track transition (vital for gapless auto-transitions)
+        lastTelemetryVideoId = null
+        telemetryManager.stopTelemetry()
+        if (player.isPlaying) {
+            startTelemetryReporting()
         }
     }
 
