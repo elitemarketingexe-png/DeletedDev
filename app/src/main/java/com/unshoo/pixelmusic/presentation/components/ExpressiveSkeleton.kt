@@ -152,7 +152,7 @@ fun ExploreSkeletonGrid(
         contentPadding = paddingValues,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Mood / filter chips skeleton row
+        // 1. Category Filter Chips (All, Smart Mix, For You, etc.)
         item {
             Row(
                 modifier = Modifier
@@ -160,10 +160,16 @@ fun ExploreSkeletonGrid(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                repeat(4) {
+                repeat(4) { index ->
+                    val chipWidth = when (index) {
+                        0 -> 50.dp
+                        1 -> 90.dp
+                        2 -> 75.dp
+                        else -> 80.dp
+                    }
                     Box(
                         modifier = Modifier
-                            .width(80.dp)
+                            .width(chipWidth)
                             .height(32.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(shimmerBrush)
@@ -171,19 +177,44 @@ fun ExploreSkeletonGrid(
                 }
             }
         }
+
+        // 2. Support PixelMusic Ad Support Card Banner
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(90.dp)
+                    .padding(horizontal = 16.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(shimmerBrush)
+            )
+        }
         
-        // 3 horizontal shelves
-        items(3) { shelfIndex ->
+        // 3. Quick Picks Section
+        item {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // Shelf Title Placeholder
-                Box(
+                // Header (Quick Picks + arrow button placeholder)
+                Row(
                     modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .width(160.dp)
-                        .height(20.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(shimmerBrush)
-                )
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(130.dp)
+                            .height(24.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(shimmerBrush)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(shimmerBrush)
+                    )
+                }
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
@@ -191,24 +222,157 @@ fun ExploreSkeletonGrid(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(5) { itemIndex ->
+                    items(4) {
                         Column(modifier = Modifier.width(140.dp)) {
-                            // Morphing shape placeholder
-                            ShapeShiftingPlaceholder(
-                                modifier = Modifier.size(140.dp),
-                                shimmerBrush = shimmerBrush
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            // Title line placeholder
+                            // Rounded-corner album art card (24.dp smooth corners)
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.8f)
+                                    .size(140.dp)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(shimmerBrush)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            // Title line
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
                                     .height(14.dp)
                                     .clip(RoundedCornerShape(4.dp))
                                     .background(shimmerBrush)
                             )
                             Spacer(modifier = Modifier.height(6.dp))
-                            // Subtitle line placeholder
+                            // Subtitle line
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.6f)
+                                    .height(12.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(shimmerBrush)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Your Library Section
+        item {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Header (Your Library + See All placeholder)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(140.dp)
+                            .height(24.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(shimmerBrush)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(60.dp)
+                            .height(18.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(shimmerBrush)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(2) {
+                        // 290.dp x 130.dp Library Playlist/Album cards
+                        Row(
+                            modifier = Modifier
+                                .width(290.dp)
+                                .height(130.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(shimmerBrush)
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Cover art inside library card
+                            Box(
+                                modifier = Modifier
+                                    .size(106.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(brush = shimmerBrush, alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(
+                                modifier = Modifier.fillMaxHeight(),
+                                verticalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(120.dp)
+                                            .height(14.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(brush = shimmerBrush, alpha = 0.5f)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .width(70.dp)
+                                            .height(12.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(brush = shimmerBrush, alpha = 0.5f)
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .width(55.dp)
+                                        .height(18.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(brush = shimmerBrush, alpha = 0.5f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Mixed For You / Suggestion Section
+        item {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .width(160.dp)
+                        .height(24.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(shimmerBrush)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(3) {
+                        Column(modifier = Modifier.width(140.dp)) {
+                            // Shape-shifting / Morphing Expressive M3 Starbursts
+                            ShapeShiftingPlaceholder(
+                                modifier = Modifier.size(140.dp),
+                                shimmerBrush = shimmerBrush
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .height(14.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(shimmerBrush)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth(0.5f)
