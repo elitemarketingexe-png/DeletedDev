@@ -98,6 +98,8 @@ object BotGuardTokenGenerator {
             }
         }
 
+    private val preWarmStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+
     // ── public API ───────────────────────────────────────────────────
 
     /** Call once from `Application.onCreate()`. */
@@ -117,14 +119,18 @@ object BotGuardTokenGenerator {
         val ctx = appContext ?: return
         if (permanentlyBroken) return
         if (engineReady) return
+        if (!preWarmStarted.compareAndSet(false, true)) return
 
+        val startTime = android.os.SystemClock.elapsedRealtime()
         try {
             withTimeout(COLD_START_TIMEOUT_MS) {
                 ensureEngineReady(ctx, sessionId)
             }
-            Timber.tag(TAG).d("Pre-warm complete")
+            val elapsed = android.os.SystemClock.elapsedRealtime() - startTime
+            Timber.tag(TAG).i("Pre-warm complete in ${elapsed}ms")
         } catch (e: Exception) {
-            Timber.tag(TAG).w(e, "Pre-warm failed (non-fatal)")
+            Timber.tag(TAG).w(e, "Pre-warm failed (non-fatal) after ${android.os.SystemClock.elapsedRealtime() - startTime}ms")
+            preWarmStarted.set(false)
         }
     }
 
@@ -156,6 +162,7 @@ object BotGuardTokenGenerator {
             }
         }
 
+        val startTime = android.os.SystemClock.elapsedRealtime()
         val isFirstCall = !engineReady
         val timeout = if (isFirstCall) COLD_START_TIMEOUT_MS else WARM_TIMEOUT_MS
 
@@ -166,6 +173,8 @@ object BotGuardTokenGenerator {
                 mutex.withLock {
                     playerTokenCache[videoId] = result.playerToken
                 }
+                val elapsed = android.os.SystemClock.elapsedRealtime() - startTime
+                Timber.tag(TAG).i("Minted token for $videoId in ${elapsed}ms (firstCall=$isFirstCall)")
                 result
             }
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
