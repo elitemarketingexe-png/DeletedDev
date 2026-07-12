@@ -777,7 +777,7 @@ fun QueueBottomSheet(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(
                                 start = 0.dp,
-                                end = if (listState.canScrollForward || listState.canScrollBackward) 26.dp else 0.dp,
+                                end = 16.dp,
                                 bottom = MiniPlayerHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 32.dp
                             )
                         ) {
