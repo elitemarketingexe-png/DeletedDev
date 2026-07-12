@@ -245,30 +245,10 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
                 val isLowRam = (getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)
                     ?.isLowRamDevice == true
                 if (!isLowRam) {
-                    // Prefer the real session id (visitorData/dataSyncId) so the warmed session
-                    // token is actually reusable by the first real mintToken() call, but don't
-                    // block prewarming indefinitely on auth/network being slow to load - the
-                    // WebView bootstrap itself (the expensive part) is still worth doing early
-                    // even with a throwaway id.
-                    // BUGFIX (never duplicate initialization work): BotGuardTokenGenerator keys
-                    // its cached engine by sessionId (see mintTokenInternal: `engineSessionId !=
-                    // sessionId` forces a full close()+recreate(), not a cheap re-mint). A
-                    // throwaway random UUID here would prewarm an engine that the first REAL
-                    // mintToken() call then immediately discards and rebuilds from scratch - pure
-                    // wasted work, worse than not prewarming at all. So: wait longer for the real
-                    // visitorData/dataSyncId, and if it genuinely never arrives this launch, skip
-                    // prewarming rather than warm the wrong session - mintToken() still works
-                    // fine cold on first real use, exactly as before this change.
-                    val sessionId = kotlinx.coroutines.withTimeoutOrNull(5_000L) {
-                        unshoo.ianshulyadav.pixelmusic.innertube.YouTube.authStateFlow
-                            .first { !it.sessionId.isNullOrBlank() }
-                            .sessionId
-                    }
-                    if (sessionId != null) {
-                        BotGuardTokenGenerator.preWarm(sessionId)
-                    } else {
-                        Timber.d("BotGuard pre-warm skipped: no session id available yet this launch")
-                    }
+                    // Pre-warm the WebView bootstrap immediately on startup.
+                    // If the first playback uses a different sessionId, it will
+                    // cheaply re-mint the session token on the same warm engine.
+                    BotGuardTokenGenerator.preWarm("default")
                 }
             } catch (e: Exception) {
                 Timber.w(e, "BotGuard pre-warm failed (non-fatal, will fall back to lazy cold-start)")

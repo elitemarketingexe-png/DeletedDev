@@ -233,7 +233,6 @@ object BotGuardTokenGenerator {
             val needsNew = forceNewEngine
                 || engine == null
                 || engine!!.isExpired
-                || engineSessionId != sessionId
 
             if (needsNew) {
                 withContext(Dispatchers.Main) {
@@ -243,6 +242,9 @@ object BotGuardTokenGenerator {
                 engineSessionId = sessionId
                 cachedSessionToken = engine!!.mint(sessionId)
                 engineReady = true
+            } else if (engineSessionId != sessionId) {
+                engineSessionId = sessionId
+                cachedSessionToken = engine!!.mint(sessionId)
             }
 
             Triple(engine!!, cachedSessionToken!!, needsNew)
