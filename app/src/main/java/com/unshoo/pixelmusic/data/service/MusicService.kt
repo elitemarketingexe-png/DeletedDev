@@ -310,6 +310,9 @@ class MusicService : MediaLibraryService() {
             player.addListener(playerListener)
             AutoQueueManager.updatePlayer(player)
             QueuePreloadManager.updatePlayer(player)
+
+            // Explicitly sync the new player's track transition state
+            handleMediaItemTransition(player.currentMediaItem, Player.MEDIA_ITEM_TRANSITION_REASON_AUTO)
         }
 
         Timber.tag("MusicService").d(logMessage)
@@ -1499,6 +1502,10 @@ class MusicService : MediaLibraryService() {
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            handleMediaItemTransition(mediaItem, reason)
+        }
+
+        private fun handleMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val player = mediaSession?.player ?: engine.masterPlayer
             syncLocalListeningStatsFromPlayer(player, forceNewSession = true)
             grantArtworkPermissionsForCurrentSong(mediaItem)

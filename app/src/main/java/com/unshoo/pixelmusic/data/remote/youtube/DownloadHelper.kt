@@ -3,6 +3,8 @@ package com.unshoo.pixelmusic.data.remote.youtube
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.os.Environment
+import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
 import androidx.datastore.preferences.core.intPreferencesKey
 import com.unshoo.pixelmusic.data.model.youtube.Song
 import com.unshoo.pixelmusic.data.preferences.dataStore
@@ -56,6 +58,25 @@ object DownloadHelper {
         song: Song,
         connections: Int = 8
     ): String? = withContext(Dispatchers.IO) {
+
+        val repo = DatastoreRepository(context)
+        val customPath = repo.customDownloadPath.first()
+        val safeTitle = song.title.replace(Regex("[\\\\/:*?\"\\<>|]"), "_")
+        val safeArtist = song.artist.replace(Regex("[\\\\/:*?\"\\<>|]"), "_")
+        val fileName = "$safeTitle - $safeArtist.webm"
+
+        if (customPath.isNotBlank()) {
+            try {
+                val treeUri = Uri.parse(customPath)
+                val documentDir = DocumentFile.fromTreeUri(context, treeUri)
+                val existingFile = documentDir?.findFile(fileName)
+                if (existingFile != null && existingFile.exists()) {
+                    return@withContext existingFile.uri.toString()
+                }
+            } catch (e: Exception) {
+                UmihiHelper.printe("Error checking custom download path exists: ${e.message}")
+            }
+        }
 
         val audioDir =
             UmihiHelper.getDownloadDirectory(context, Constants.Downloads.AUDIO_FILES_FOLDER)
@@ -123,6 +144,22 @@ object DownloadHelper {
                     }
                 }
             }.awaitAll().also { tempFiles.addAll(it) }
+
+            if (customPath.isNotBlank()) {
+                val treeUri = Uri.parse(customPath)
+                val documentDir = DocumentFile.fromTreeUri(context, treeUri)
+                val file = documentDir?.createFile("audio/webm", fileName)
+                val outputUri = file?.uri
+                if (outputUri != null) {
+                    context.contentResolver.openOutputStream(outputUri)?.use { out ->
+                        tempFiles.sortedBy { it.name }.forEach { part ->
+                            part.inputStream().use { it.copyTo(out) }
+                            part.delete()
+                        }
+                    }
+                    return@withContext outputUri.toString()
+                }
+            }
 
             FileOutputStream(outputFile).use { out ->
                 tempFiles.sortedBy { it.name }.forEach { part ->

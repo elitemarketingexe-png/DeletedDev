@@ -2309,6 +2309,7 @@ class PlayerViewModel @Inject constructor(
                 _isMediaControllerReady.value = true
 
                 setupMediaControllerListeners()
+                syncCurrentPlayerState(controller)
                 flushPendingRepeatMode()
                 syncShuffleStateWithSession(playbackStateHolder.stablePlayerState.value.isShuffleEnabled)
                 pendingPlaybackAction?.invoke()
@@ -2345,6 +2346,51 @@ class PlayerViewModel @Inject constructor(
         // Player always reflects the actual MediaSession the moment the user looks at it again.
         Log.d("PlayerViewModel", "MediaController still connected; forcing a full state resync for Full Player")
         setupMediaControllerListeners()
+        syncCurrentPlayerState(currentController)
+    }
+
+    private fun syncCurrentPlayerState(playerCtrl: MediaController) {
+        val mediaItem = playerCtrl.currentMediaItem
+        if (mediaItem != null) {
+            val song = resolveSongFromMediaItem(mediaItem)
+            val readyPosition = playerCtrl.currentPosition.coerceAtLeast(0L)
+            val songDurationHint = song?.duration?.coerceAtLeast(0L) ?: 0L
+            val resolvedDuration = playbackStateHolder.resolveDurationForPlaybackState(
+                reportedDurationMs = playerCtrl.duration,
+                songDurationHintMs = songDurationHint,
+                currentPositionMs = readyPosition
+            )
+            playbackStateHolder.updateStablePlayerState {
+                it.copy(
+                    currentSong = song,
+                    currentMediaItemIndex = playerCtrl.currentMediaItemIndex,
+                    totalDuration = resolvedDuration,
+                    isPlaying = playerCtrl.isPlaying,
+                    playWhenReady = playerCtrl.playWhenReady,
+                    isShuffleEnabled = playerCtrl.shuffleModeEnabled,
+                    repeatMode = playerCtrl.repeatMode
+                )
+            }
+            syncPlaybackPositionFromPlayer(mediaItem.mediaId, readyPosition)
+            if (playerCtrl.isPlaying) {
+                startProgressUpdates()
+            } else {
+                stopProgressUpdates()
+            }
+        } else {
+            playbackStateHolder.updateStablePlayerState {
+                it.copy(
+                    currentSong = null,
+                    isPlaying = false,
+                    playWhenReady = false,
+                    totalDuration = 0L
+                )
+            }
+            playbackStateHolder.clearCurrentPositionHints()
+            playbackStateHolder.setCurrentPosition(0L)
+            stopProgressUpdates()
+        }
+        updateCurrentPlaybackQueueFromPlayer(playerCtrl)
     }
 
 
@@ -3350,10 +3396,12 @@ class PlayerViewModel @Inject constructor(
                 withContext(Dispatchers.Main.immediate) {
                     val stuckAtStart = controller.currentMediaItemIndex == targetIndex &&
                         controller.playWhenReady &&
+                        !controller.isPlaying &&
                         controller.currentPosition < 800L &&
                         (controller.playbackState == Player.STATE_BUFFERING ||
                             controller.playbackState == Player.STATE_IDLE ||
-                            controller.playbackState == Player.STATE_ENDED)
+                            controller.playbackState == Player.STATE_ENDED) &&
+                        !dualPlayerEngine.isTransitionRunning()
                     if (stuckAtStart) {
                         Timber.w("playLoadedControllerItem stuck — re-resolving LOW stream")
                         val item = runCatching { controller.getMediaItemAt(targetIndex) }.getOrNull()

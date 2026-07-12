@@ -832,8 +832,12 @@ class DualPlayerEngine @Inject constructor(
                 if (scheme == "telegram" || scheme == "gdrive" || scheme == "youtube") {
                     val originalUri = uri.toString()
                     val localPath = localFilePathCache[originalUri]
-                    if (localPath != null && java.io.File(localPath).exists()) {
-                        return dataSpec.buildUpon().setUri(Uri.fromFile(java.io.File(localPath))).build()
+                    if (localPath != null) {
+                        val isLocalFile = !localPath.startsWith("content://") && java.io.File(localPath).exists()
+                        val isContentUri = localPath.startsWith("content://")
+                        if (isLocalFile || isContentUri) {
+                            return dataSpec.buildUpon().setUri(Uri.parse(localPath)).build()
+                        }
                     }
 
                     activePlaybackResolvedUris[originalUri]?.let { locked ->
