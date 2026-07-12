@@ -226,8 +226,53 @@ fun ExploreSkeletonGrid(
 
 @Composable
 fun SearchSkeletonList(
-    modifier: Modifier = Modifier,
-    message: String = "Searching the infinite music universe..."
+    modifier: Modifier = Modifier
+) {
+    val shimmerBrush = rememberShimmerBrush()
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        items(6) { index ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left morphing/expressive shape placeholder for search item art
+                ShapeShiftingPlaceholder(
+                    modifier = Modifier.size(56.dp),
+                    shimmerBrush = shimmerBrush
+                )
+                
+                Spacer(modifier = Modifier.width(16.dp))
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .height(16.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(shimmerBrush)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.4f)
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(shimmerBrush)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaylistSkeletonDetail(
+    modifier: Modifier = Modifier
 ) {
     val shimmerBrush = rememberShimmerBrush()
     Column(
@@ -236,47 +281,85 @@ fun SearchSkeletonList(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Status Message
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.2.sp
-            ),
-            color = MaterialTheme.colorScheme.primary,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 24.dp)
+        Spacer(modifier = Modifier.height(24.dp))
+        // 1. Cover Art Placeholder
+        ShapeShiftingPlaceholder(
+            modifier = Modifier.size(180.dp),
+            shimmerBrush = shimmerBrush
         )
+        Spacer(modifier = Modifier.height(24.dp))
         
+        // 2. Playlist Title
+        Box(
+            modifier = Modifier
+                .width(180.dp)
+                .height(24.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(shimmerBrush)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // 3. Count/Duration Subtitle
+        Box(
+            modifier = Modifier
+                .width(100.dp)
+                .height(14.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(shimmerBrush)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // 4. Play/Shuffle Buttons Row
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(shimmerBrush)
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(shimmerBrush)
+            )
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // 5. Songs List Placeholders
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            items(6) { index ->
+            items(5) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left morphing/expressive shape placeholder for search item art
-                    ShapeShiftingPlaceholder(
-                        modifier = Modifier.size(56.dp),
-                        shimmerBrush = shimmerBrush
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(shimmerBrush)
                     )
-                    
                     Spacer(modifier = Modifier.width(16.dp))
-                    
                     Column(modifier = Modifier.weight(1f)) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(0.6f)
+                                .fillMaxWidth(0.5f)
                                 .height(16.dp)
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(shimmerBrush)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(0.4f)
+                                .fillMaxWidth(0.3f)
                                 .height(12.dp)
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(shimmerBrush)
@@ -287,3 +370,4 @@ fun SearchSkeletonList(
         }
     }
 }
+

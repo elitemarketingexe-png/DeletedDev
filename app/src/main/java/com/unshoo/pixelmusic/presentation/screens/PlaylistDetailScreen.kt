@@ -907,14 +907,7 @@ fun PlaylistDetailScreen(
             enter = androidx.compose.animation.fadeIn(animationSpec = tween(200)),
             exit = androidx.compose.animation.fadeOut(animationSpec = tween(350))
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background),
-                contentAlignment = Alignment.Center
-            ) {
-                M3MicroAnimatedLoader(color = MaterialTheme.colorScheme.primary)
-            }
+                com.unshoo.pixelmusic.presentation.components.PlaylistSkeletonDetail()
         }
     }
 
