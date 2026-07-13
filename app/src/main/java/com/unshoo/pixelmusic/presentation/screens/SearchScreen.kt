@@ -152,6 +152,8 @@ import unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem
 import unshoo.ianshulyadav.pixelmusic.innertube.models.PlaylistItem
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YTItem
 import java.util.concurrent.ConcurrentHashMap
+import com.unshoo.pixelmusic.presentation.components.SongInfoBottomSheet
+import com.unshoo.pixelmusic.presentation.components.PlaylistBottomSheet
 
 private val SearchGroupOuterCorner = 24.dp
 private val SearchGroupInnerCorner  = 6.dp
@@ -159,11 +161,11 @@ private val SearchHorizontalPad     = 12.dp
 private val SearchRowMinHeight      = 64.dp
 private val SearchRowSpacing        = 2.dp
 
-private val MoodAndGenresButtonShape = RoundedCornerShape(24.dp)
-private val MoodAndGenresCoverShape = RoundedCornerShape(16.dp)
-private val MoodAndGenresCoverSize = 80.dp
-private val MoodAndGenresArtworkRequestSize = 80.dp
-private val MoodAndGenresButtonHeight = 100.dp
+val MoodAndGenresButtonShape = RoundedCornerShape(24.dp)
+val MoodAndGenresCoverShape = RoundedCornerShape(16.dp)
+val MoodAndGenresCoverSize = 80.dp
+val MoodAndGenresArtworkRequestSize = 80.dp
+val MoodAndGenresButtonHeight = 100.dp
 private val MoodAndGenresMinCellWidth = 180.dp
 
 private val SuggestedSongGroupHorizontalPadding = 12.dp
@@ -172,16 +174,16 @@ private val SuggestedSongGroupItemSpacing = 2.dp
 private val SuggestedSongGroupLargeCorner = 28.dp
 private val SuggestedSongGroupSmallCorner = 6.dp
 
-private val MoodPalette = listOf(
+val MoodPalette = listOf(
     0xFF6650A4L, 0xFF7D5260L, 0xFF006E2CL, 0xFF8B5000L,
     0xFF006874L, 0xFF984816L, 0xFF3D5A80L, 0xFF6B3A2AL,
     0xFF17494DL, 0xFF4A4458L, 0xFF005700L, 0xFF9C4300L,
 )
 
-private val moodAndGenresArtworkCache = ConcurrentHashMap<String, String>()
+val moodAndGenresArtworkCache = ConcurrentHashMap<String, String>()
 
 @Composable
-private fun rememberMoodAndGenresArtworkUrl(endpoint: BrowseEndpoint?): String? {
+fun rememberMoodAndGenresArtworkUrl(endpoint: BrowseEndpoint?): String? {
     endpoint ?: return null
     val cacheKey = "${endpoint.browseId}:${endpoint.params.orEmpty()}"
     val cachedArtwork = moodAndGenresArtworkCache[cacheKey]
@@ -199,7 +201,7 @@ private fun rememberMoodAndGenresArtworkUrl(endpoint: BrowseEndpoint?): String? 
 }
 
 @Composable
-private fun rememberMoodAndGenresArtworkModel(
+fun rememberMoodAndGenresArtworkModel(
     endpoint: BrowseEndpoint?,
     artworkUrl: String?,
 ): ImageRequest? {
@@ -294,6 +296,20 @@ fun SearchScreen(
     val discoveryViewModel: SearchDiscoveryViewModel = hiltViewModel()
     val discoveryState by discoveryViewModel.state.collectAsStateWithLifecycle()
     val selectedDiscoveryTab by discoveryViewModel.selectedTab.collectAsStateWithLifecycle()
+
+    val favoriteSongIds by playerViewModel.favoriteSongIds.collectAsStateWithLifecycle()
+    val selectedSongForInfo by playerViewModel.selectedSongForInfo.collectAsStateWithLifecycle()
+    val playlistViewModel: com.unshoo.pixelmusic.presentation.viewmodel.PlaylistViewModel = hiltViewModel()
+    val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()
+
+    var showPlaylistBottomSheet by remember { mutableStateOf(false) }
+    var showSongInfoBottomSheet by remember { mutableStateOf(false) }
+    var playlistSheetSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
+
+    val handleSongMoreOptionsClick: (Song) -> Unit = { song ->
+        playerViewModel.selectSongForInfo(song)
+        showSongInfoBottomSheet = true
+    }
 
     LaunchedEffect(lazyListState) {
         snapshotFlow { lazyListState.firstVisibleItemScrollOffset }
@@ -590,10 +606,18 @@ fun SearchScreen(
                                 val data = currState.data
                                 if (selectedDiscoveryTab == SearchDiscoveryTab.EXPLORE) {
                                     item(key = "mood_explore_title", contentType = "section_header") {
-                                        Text(
-                                            text = "Mood & Genres",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+                                        SearchSectionHeader(
+                                            title = "Mood & Genres",
+                                            trailing = {
+                                                TextButton(onClick = { navController.navigateSafely("mood_and_genres") }) {
+                                                    Text(
+                                                        "See all",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                    )
+                                                }
+                                            },
+                                            modifier = Modifier.animateItem()
                                         )
                                     }
                                     item(key = "mood_genres_grid", contentType = "mood_grid") {
@@ -617,6 +641,7 @@ fun SearchScreen(
                                                 songs = data.suggestedSongs,
                                                 navController = navController,
                                                 playerViewModel = playerViewModel,
+                                                onMoreClick = handleSongMoreOptionsClick,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                         }
@@ -781,6 +806,7 @@ fun SearchScreen(
                                     item            = item,
                                     playerViewModel = playerViewModel,
                                     navController   = navController,
+                                    onMoreClick     = handleSongMoreOptionsClick,
                                     modifier        = Modifier.animateItem(),
                                 )
                             }
@@ -788,6 +814,82 @@ fun SearchScreen(
                     }
                 }
             }
+        }
+
+        if (showSongInfoBottomSheet && selectedSongForInfo != null) {
+            val song = selectedSongForInfo!!
+            SongInfoBottomSheet(
+                song = song,
+                isFavorite = favoriteSongIds.contains(song.id),
+                onToggleFavorite = {
+                    playerViewModel.toggleFavoriteSpecificSong(song)
+                },
+                onDismiss = {
+                    showSongInfoBottomSheet = false
+                },
+                onPlaySong = {
+                    playerViewModel.showAndPlaySong(song)
+                    showSongInfoBottomSheet = false
+                },
+                onAddToQueue = {
+                    playerViewModel.addSongToQueue(song)
+                    showSongInfoBottomSheet = false
+                },
+                onAddNextToQueue = {
+                    playerViewModel.addSongNextToQueue(song)
+                    showSongInfoBottomSheet = false
+                },
+                onAddToPlayList = {
+                    playlistSheetSongs = listOf(song)
+                    showSongInfoBottomSheet = false
+                    showPlaylistBottomSheet = true
+                },
+                onDeleteFromDevice = playerViewModel::deleteFromDevice,
+                onNavigateToAlbum = {
+                    navController.navigateSafely(Screen.AlbumDetail.createRoute(song.albumId))
+                    showSongInfoBottomSheet = false
+                },
+                onNavigateToArtist = {
+                    navController.navigateSafely(Screen.ArtistDetail.createRoute(song.artistId))
+                    showSongInfoBottomSheet = false
+                },
+                onNavigateToArtistById = { artistId ->
+                    navController.navigateSafely(Screen.ArtistDetail.createRoute(artistId))
+                    showSongInfoBottomSheet = false
+                },
+                onNavigateToGenre = {},
+                onEditSong = { newTitle, newArtist, newAlbum, newAlbumArtist, newComposer, newGenre, newLyrics, newTrackNumber, newDiscNumber, replayGainTrackGainDb, replayGainAlbumGainDb, coverArtUpdate ->
+                    playerViewModel.editSongMetadata(
+                        song,
+                        newTitle,
+                        newArtist,
+                        newAlbum,
+                        newAlbumArtist,
+                        newComposer,
+                        newGenre,
+                        newLyrics,
+                        newTrackNumber,
+                        newDiscNumber,
+                        replayGainTrackGainDb,
+                        replayGainAlbumGainDb,
+                        coverArtUpdate
+                    )
+                },
+                generateAiMetadata = { fields ->
+                    playerViewModel.generateAiMetadata(song, fields)
+                },
+                removeFromListTrigger = {}
+            )
+        }
+
+        if (showPlaylistBottomSheet && selectedSongForInfo != null) {
+            PlaylistBottomSheet(
+                playlistUiState = playlistUiState,
+                songs = playlistSheetSongs,
+                onDismiss = { showPlaylistBottomSheet = false },
+                bottomBarHeight = paddingValues.calculateBottomPadding(),
+                playerViewModel = playerViewModel,
+            )
         }
     }
 }
@@ -1064,6 +1166,7 @@ private fun SuggestedSongsSection(
     songs: List<SongItem>,
     navController: NavHostController,
     playerViewModel: PlayerViewModel,
+    onMoreClick: (Song) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (songs.isEmpty()) return
@@ -1124,7 +1227,7 @@ private fun SuggestedSongsSection(
 
                     IconButton(
                         onClick = {
-                            // Standard popup menu or action triggers
+                            onMoreClick(songNative)
                         }
                     ) {
                         Icon(
@@ -1144,6 +1247,7 @@ private fun SearchResultRow(
     item            : SearchResultItem,
     playerViewModel : PlayerViewModel,
     navController   : NavHostController,
+    onMoreClick     : (Song) -> Unit,
     modifier        : Modifier = Modifier,
 ) {
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
@@ -1159,7 +1263,9 @@ private fun SearchResultRow(
                 song          = song,
                 isCurrentSong = isActive,
                 isPlaying     = isPlaying,
-                onMoreOptionsClick = {},
+                onMoreOptionsClick = {
+                    onMoreClick(song)
+                },
                 onClick       = {
                     if (isActive) {
                         playerViewModel.playPause()

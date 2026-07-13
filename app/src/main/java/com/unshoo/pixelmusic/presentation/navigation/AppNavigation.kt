@@ -662,6 +662,20 @@ fun AppNavigation(
                     )
                 }
             }
+
+            composable(
+                route = "mood_and_genres",
+                enterTransition = { enterTransition() },
+                exitTransition = { exitTransition() },
+                popEnterTransition = { popEnterTransition() },
+                popExitTransition = { popExitTransition() },
+            ) {
+                ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
+                    com.unshoo.pixelmusic.presentation.screens.youtube.MoodAndGenresScreen(
+                        navController = navController
+                    )
+                }
+            }
         }
     }
 }
