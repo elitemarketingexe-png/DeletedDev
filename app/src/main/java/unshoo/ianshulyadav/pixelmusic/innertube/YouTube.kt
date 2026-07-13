@@ -794,10 +794,19 @@ object YouTube {
                 ?.mapNotNull(NewReleaseAlbumPage::fromMusicTwoRowItemRenderer).orEmpty()
         } else emptyList()
 
+        val moodsAndGenresList = if (targetBrowseId == "FEmusic_explore") {
+            response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()?.tabRenderer?.content?.sectionListRenderer?.contents?.find {
+                it.musicCarouselShelfRenderer?.header?.musicCarouselShelfBasicHeaderRenderer?.moreContentButton?.buttonRenderer?.navigationEndpoint?.browseEndpoint?.browseId == "FEmusic_moods_and_genres"
+            }?.musicCarouselShelfRenderer?.contents
+                ?.mapNotNull { it.musicNavigationButtonRenderer }
+                ?.mapNotNull(unshoo.ianshulyadav.pixelmusic.innertube.pages.MoodAndGenres.Companion::fromMusicNavigationButtonRenderer).orEmpty()
+        } else emptyList()
+
         ExplorePage(
             chips = chips,
             sections = sections,
-            newReleaseAlbums = newReleases
+            newReleaseAlbums = newReleases,
+            moodAndGenres = moodsAndGenresList
         )
     }
 

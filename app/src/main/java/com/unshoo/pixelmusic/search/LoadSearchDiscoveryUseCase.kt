@@ -32,7 +32,7 @@ class LoadSearchDiscoveryUseCase @Inject constructor(
 
 @Immutable
 data class SearchDiscoveryUiModel(
-    val moodAndGenres: List<HomePage.Chip>,
+    val moodAndGenres: List<unshoo.ianshulyadav.pixelmusic.innertube.pages.MoodAndGenres.Item>,
     val suggestedSongs: List<SongItem>,
     val trendingAlbums: List<AlbumItem>,
     val suggestedArtists: List<ArtistItem>,

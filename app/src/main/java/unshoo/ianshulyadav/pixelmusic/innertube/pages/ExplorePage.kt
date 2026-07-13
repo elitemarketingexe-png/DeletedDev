@@ -6,4 +6,5 @@ data class ExplorePage(
     val chips: List<HomePage.Chip>?,
     val sections: List<HomePage.Section>,
     val newReleaseAlbums: List<AlbumItem>,
+    val moodAndGenres: List<MoodAndGenres.Item>,
 )

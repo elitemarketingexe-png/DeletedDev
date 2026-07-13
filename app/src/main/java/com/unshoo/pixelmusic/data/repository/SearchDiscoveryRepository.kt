@@ -19,7 +19,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 data class SearchDiscoveryData(
-    val moodAndGenres: List<HomePage.Chip>,
+    val moodAndGenres: List<unshoo.ianshulyadav.pixelmusic.innertube.pages.MoodAndGenres.Item>,
     val newReleaseAlbums: List<AlbumItem>,
     val chartSections: List<ChartsPage.ChartSection>,
     val suggestedSongs: List<SongItem>,
@@ -52,7 +52,7 @@ class SearchDiscoveryRepository @Inject constructor(
 
                     Result.success(
                         SearchDiscoveryData(
-                            moodAndGenres = explorePage.chips.orEmpty(),
+                            moodAndGenres = explorePage.moodAndGenres,
                             newReleaseAlbums = explorePage.newReleaseAlbums,
                             chartSections = chartsPage.sections,
                             suggestedSongs = suggestedSongsDeferred.await(),
@@ -87,12 +87,19 @@ class SearchDiscoveryRepository @Inject constructor(
     private suspend fun loadSuggestedSongs(): List<SongItem> =
         coroutineScope {
             // Retrieve most played songs from stats history
-            val seedSongIds = playbackStatsRepository
+            var seedSongIds = playbackStatsRepository
                 .loadSongPlayCounts(limit = MaxHistoryLookupItems)
                 // Filter out local songs if needed (non-YouTube songs usually have long IDs or numeric paths)
                 .filterNot { it.songId.startsWith("/") || it.songId.toLongOrNull() != null }
                 .take(MaxSuggestionSeedItems)
                 .map { it.songId }
+            
+            if (seedSongIds.isEmpty()) {
+                try {
+                    val trendingResult = YouTube.search(query = "trending hits", filter = YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                    seedSongIds = trendingResult?.items?.filterIsInstance<SongItem>()?.take(MaxSuggestionSeedItems)?.map { it.id }.orEmpty()
+                } catch (_: Exception) {}
+            }
             
             val seedSongIdsSet = seedSongIds.toSet()
 
@@ -153,10 +160,25 @@ class SearchDiscoveryRepository @Inject constructor(
 
     private suspend fun loadSuggestedArtists(): List<ArtistItem> =
         coroutineScope {
-            val seedArtists = musicDao
+            var seedArtists = musicDao
                 .getArtistsByPlayCount()
                 .filter { it.channelId.isNotBlank() }
                 .take(MaxSuggestionSeedItems)
+
+            if (seedArtists.isEmpty()) {
+                try {
+                    val trendingArtistsResult = YouTube.search(query = "popular artists", filter = YouTube.SearchFilter.FILTER_ARTIST).getOrNull()
+                    val fallbackItems = trendingArtistsResult?.items?.filterIsInstance<ArtistItem>().orEmpty()
+                    seedArtists = fallbackItems.map { artistItem ->
+                        com.unshoo.pixelmusic.data.database.ArtistPlayCountRow(
+                            artistItem.id,
+                            0L,
+                            0
+                        )
+                    }
+                } catch (_: Exception) {}
+            }
+
             val seedArtistIds = seedArtists.mapTo(HashSet()) { it.channelId }
 
             seedArtists

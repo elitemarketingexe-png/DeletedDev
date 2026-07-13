@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -29,6 +30,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -53,6 +57,8 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DockedSearchBar
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilterChip
@@ -238,6 +244,25 @@ private fun segmentedSuggestedSongShape(index: Int, count: Int): Shape {
     }
 }
 
+@Composable
+private fun YouTubeSegmentIcon() {
+    val bgColor = MaterialTheme.colorScheme.error
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(20.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(bgColor),
+    ) {
+        Icon(
+            imageVector         = Icons.Rounded.PlayArrow,
+            contentDescription  = null,
+            tint                = Color.White,
+            modifier            = Modifier.size(14.dp),
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
@@ -316,6 +341,7 @@ fun SearchScreen(
     }
 
     val showHistoryAndSuggestions = query.isNotEmpty() && searchResults.isEmpty() && !isSearching
+    val statusBarTopInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
 
     Box(
         modifier = modifier
@@ -343,468 +369,423 @@ fun SearchScreen(
                 },
         )
 
-        LazyColumn(
-            state = lazyListState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(SearchRowSpacing),
-        ) {
-            item(key = "source_toggle", contentType = "source_toggle") {
-                SearchSourceToggle(
-                    searchSource = searchSource,
-                    onToggle = { playerViewModel.toggleSearchSource() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .animateItem(),
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Polished Search Bar row exactly as it was positioned before 20 commits
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 24.dp, top = statusBarTopInset + 12.dp, end = 24.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val searchBarInputFieldColors = SearchBarDefaults.inputFieldColors(
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    cursorColor = MaterialTheme.colorScheme.primary
                 )
-            }
 
-            item(key = "search_bar", contentType = "search_bar") {
-                SearchInputBar(
-                    value          = queryTfv,
-                    onValueChange  = { new ->
-                        queryTfv = new
-                        playerViewModel.updateSearchQuery(new.text)
-                        playerViewModel.performSearch(new.text)
-                    },
-                    onSearch       = { q ->
-                        keyboardController?.hide()
-                        playerViewModel.onSearchQuerySubmitted(q)
-                        playerViewModel.performSearch(q)
-                    },
-                    onClear        = {
-                        queryTfv = TextFieldValue("")
-                        playerViewModel.updateSearchQuery("")
-                        playerViewModel.performSearch("")
-                    },
-                    onBack         = { navController.navigateUp() },
-                    focusRequester = focusRequester,
-                    searchSource   = searchSource,
-                    modifier       = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp)
-                        .animateItem(),
-                )
-            }
-
-            if (query.isBlank()) {
-                if (searchHistory.isNotEmpty()) {
-                    item(key = "history_header", contentType = "section_header") {
-                        SearchSectionHeader(
-                            title = "Recent Searches",
-                            trailing = {
-                                TextButton(onClick = { playerViewModel.clearSearchHistory() }) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .background(color = Color.Transparent)
+                ) {
+                    DockedSearchBar(
+                        inputField = {
+                            SearchBarDefaults.InputField(
+                                modifier = Modifier.focusRequester(focusRequester),
+                                query = queryTfv.text,
+                                onQueryChange = {
+                                    queryTfv = TextFieldValue(it)
+                                    playerViewModel.updateSearchQuery(it)
+                                    playerViewModel.performSearch(it)
+                                },
+                                onSearch = { q ->
+                                    if (q.isNotBlank()) {
+                                        playerViewModel.onSearchQuerySubmitted(q)
+                                    }
+                                    keyboardController?.hide()
+                                },
+                                expanded = false,
+                                onExpandedChange = {},
+                                placeholder = {
+                                    val placeholderText = if (searchSource == SearchSource.LOCAL) {
+                                        "Search Library..."
+                                    } else {
+                                        "Search YouTube Music..."
+                                    }
                                     Text(
-                                        "Clear all",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary,
+                                        placeholderText,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.primary
                                     )
-                                }
-                            },
-                            modifier = Modifier.animateItem(),
-                        )
-                    }
-
-                    itemsIndexed(
-                        items = searchHistory,
-                        key   = { _, h -> "hist_${h.query}" },
-                        contentType = { _, _ -> "history_item" },
-                    ) { idx, histItem ->
-                        SuggestionItem(
-                            query           = histItem.query,
-                            isOnlineSuggestion = false,
-                            onClick         = {
-                                queryTfv = TextFieldValue(histItem.query)
-                                playerViewModel.updateSearchQuery(histItem.query)
-                                playerViewModel.onSearchQuerySubmitted(histItem.query)
-                                playerViewModel.performSearch(histItem.query)
-                                keyboardController?.hide()
-                            },
-                            onDelete        = { playerViewModel.deleteSearchHistoryItem(histItem.query) },
-                            onFillTextField = {
-                                queryTfv = TextFieldValue(histItem.query, androidx.compose.ui.text.TextRange(histItem.query.length))
-                                playerViewModel.updateSearchQuery(histItem.query)
-                            },
-                            shape           = segmentedShape(idx, searchHistory.size),
-                            modifier        = Modifier.animateItem(),
-                        )
-                    }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Search,
+                                        contentDescription = "Search",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                },
+                                trailingIcon = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                         IconButton(
+                                             onClick = { playerViewModel.toggleSearchSource() },
+                                             modifier = Modifier
+                                                 .size(48.dp)
+                                                 .clip(CircleShape)
+                                         ) {
+                                             if (searchSource == SearchSource.LOCAL) {
+                                                 Icon(
+                                                     painter = painterResource(id = R.drawable.rounded_library_music_24),
+                                                     contentDescription = "Toggle Search Source",
+                                                     tint = MaterialTheme.colorScheme.primary,
+                                                     modifier = Modifier.size(24.dp)
+                                                 )
+                                             } else {
+                                                 YouTubeSegmentIcon()
+                                             }
+                                         }
+                                        if (queryTfv.text.isNotEmpty()) {
+                                            IconButton(
+                                                onClick = {
+                                                    queryTfv = TextFieldValue("")
+                                                    playerViewModel.updateSearchQuery("")
+                                                    playerViewModel.performSearch("")
+                                                },
+                                                modifier = Modifier
+                                                    .size(48.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                                                    )
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.Close,
+                                                    contentDescription = "Clear",
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                    }
+                                },
+                                colors = searchBarInputFieldColors
+                            )
+                        },
+                        expanded = false,
+                        onExpandedChange = {},
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(28.dp)),
+                        colors = SearchBarDefaults.colors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                            dividerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                            inputFieldColors = searchBarInputFieldColors
+                        ),
+                        content = {}
+                    )
                 }
 
-                if (searchSource == SearchSource.ONLINE) {
-                    item(key = "discovery_tabs", contentType = "tabs") {
-                        PrimaryTabRow(
-                            selectedTabIndex  = selectedDiscoveryTab.ordinal,
-                            containerColor    = Color.Transparent,
-                            modifier          = Modifier
-                                .fillMaxWidth()
-                                .padding(top = if (searchHistory.isEmpty()) 0.dp else 8.dp)
-                                .animateItem(),
-                        ) {
-                            SearchDiscoveryTab.entries.forEach { tab ->
-                                Tab(
-                                    selected = selectedDiscoveryTab == tab,
-                                    onClick  = { discoveryViewModel.selectTab(tab) },
-                                    text     = {
+                FilledIconButton(
+                    modifier = Modifier.padding(bottom = 2.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    onClick = { navController.navigateSafely(Screen.Settings.route) }
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.rounded_settings_24),
+                        contentDescription = "Settings"
+                    )
+                }
+            }
+
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 120.dp),
+                verticalArrangement = Arrangement.spacedBy(SearchRowSpacing),
+            ) {
+                if (query.isBlank()) {
+                    if (searchHistory.isNotEmpty()) {
+                        item(key = "history_header", contentType = "section_header") {
+                            SearchSectionHeader(
+                                title = "Recent Searches",
+                                trailing = {
+                                    TextButton(onClick = { playerViewModel.clearSearchHistory() }) {
                                         Text(
-                                            text = when (tab) {
-                                                SearchDiscoveryTab.EXPLORE     -> "Explore"
-                                                SearchDiscoveryTab.SUGGESTIONS -> "Suggestions"
-                                            },
-                                            maxLines = 1,
+                                            "Clear all",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.primary,
                                         )
+                                    }
+                                },
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+
+                        itemsIndexed(
+                            items = searchHistory,
+                            key   = { _, h -> "hist_${h.query}" },
+                            contentType = { _, _ -> "history_item" },
+                        ) { idx, histItem ->
+                            SuggestionItem(
+                                query           = histItem.query,
+                                isOnlineSuggestion = false,
+                                onClick         = {
+                                    queryTfv = TextFieldValue(histItem.query)
+                                    playerViewModel.updateSearchQuery(histItem.query)
+                                    playerViewModel.onSearchQuerySubmitted(histItem.query)
+                                    playerViewModel.performSearch(histItem.query)
+                                    keyboardController?.hide()
+                                },
+                                onDelete        = { playerViewModel.deleteSearchHistoryItem(histItem.query) },
+                                onFillTextField = {
+                                    queryTfv = TextFieldValue(histItem.query, androidx.compose.ui.text.TextRange(histItem.query.length))
+                                    playerViewModel.updateSearchQuery(histItem.query)
+                                },
+                                shape           = segmentedShape(idx, searchHistory.size),
+                                modifier        = Modifier.animateItem(),
+                            )
+                        }
+                    }
+
+                    if (searchSource == SearchSource.ONLINE) {
+                        item(key = "discovery_tabs", contentType = "tabs") {
+                            PrimaryTabRow(
+                                selectedTabIndex  = selectedDiscoveryTab.ordinal,
+                                containerColor    = Color.Transparent,
+                                modifier          = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = if (searchHistory.isEmpty()) 0.dp else 8.dp)
+                                    .animateItem(),
+                            ) {
+                                SearchDiscoveryTab.entries.forEach { tab ->
+                                    Tab(
+                                        selected = selectedDiscoveryTab == tab,
+                                        onClick  = { discoveryViewModel.selectTab(tab) },
+                                        text     = {
+                                            Text(
+                                                text = when (tab) {
+                                                    SearchDiscoveryTab.EXPLORE     -> "Explore"
+                                                    SearchDiscoveryTab.SUGGESTIONS -> "Suggestions"
+                                                },
+                                                maxLines = 1,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                        }
+
+                        when (val currState = discoveryState) {
+                            is SearchDiscoveryScreenState.Loading -> {
+                                item(key = "loading_discovery") {
+                                    SearchSkeleton(modifier = Modifier.animateItem())
+                                }
+                            }
+                            is SearchDiscoveryScreenState.Success -> {
+                                val data = currState.data
+                                if (selectedDiscoveryTab == SearchDiscoveryTab.EXPLORE) {
+                                    item(key = "mood_explore_title", contentType = "section_header") {
+                                        Text(
+                                            text = "Mood & Genres",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+                                        )
+                                    }
+                                    item(key = "mood_genres_grid", contentType = "mood_grid") {
+                                        SearchMoodAndGenresGrid(
+                                            data = data,
+                                            navController = navController,
+                                            modifier = Modifier.fillMaxWidth().animateItem(),
+                                        )
+                                    }
+                                } else {
+                                    if (data.suggestedSongs.isNotEmpty()) {
+                                        item(key = "suggested_songs_header") {
+                                            Text(
+                                                text = "Unique Songs",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+                                            )
+                                        }
+                                        item(key = "suggested_songs_list") {
+                                            SuggestedSongsSection(
+                                                songs = data.suggestedSongs,
+                                                navController = navController,
+                                                playerViewModel = playerViewModel,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+
+                                    if (data.suggestedArtists.isNotEmpty()) {
+                                        item(key = "suggested_artists_header") {
+                                            Text(
+                                                text = "Unique Artists",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+                                            )
+                                        }
+                                        item(key = "suggested_artists_list") {
+                                            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                                items(data.suggestedArtists) { artist ->
+                                                    Box(modifier = Modifier.padding(4.dp)) {
+                                                        ArtistCardItem(
+                                                            artist = artist,
+                                                            onClick = {
+                                                                navController.navigateSafely(Screen.ArtistDetail.createRoute(artist.id))
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (data.trendingAlbums.isNotEmpty()) {
+                                        item(key = "trending_albums_header") {
+                                            Text(
+                                                text = "Top Albums",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+                                            )
+                                        }
+                                        item(key = "trending_albums_list") {
+                                            LazyRow(contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                                items(data.trendingAlbums) { album ->
+                                                    Box(modifier = Modifier.padding(4.dp)) {
+                                                        AlbumCarouselItem(
+                                                            album = album,
+                                                            onClick = {
+                                                                navController.navigateSafely(Screen.AlbumDetail.createRoute(album.browseId))
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else -> {
+                                item(key = "empty_discovery") {
+                                    SearchEmptyState(query = "", modifier = Modifier.animateItem())
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if (showHistoryAndSuggestions) {
+                        if (filteredHistory.isNotEmpty()) {
+                            item(key = "hist_inline_header", contentType = "section_header") {
+                                SearchSectionHeader("History", modifier = Modifier.animateItem())
+                            }
+                            itemsIndexed(
+                                items = filteredHistory,
+                                key   = { _, h -> "hist_inline_${h.query}" },
+                                contentType = { _, _ -> "history_item" },
+                            ) { idx, h ->
+                                SuggestionItem(
+                                    query              = h.query,
+                                    isOnlineSuggestion = false,
+                                    onClick            = {
+                                        queryTfv = TextFieldValue(h.query)
+                                        playerViewModel.updateSearchQuery(h.query)
+                                        playerViewModel.onSearchQuerySubmitted(h.query)
+                                        playerViewModel.performSearch(h.query)
+                                        keyboardController?.hide()
                                     },
+                                    onDelete        = { playerViewModel.deleteSearchHistoryItem(h.query) },
+                                    onFillTextField = {
+                                        queryTfv = TextFieldValue(h.query, androidx.compose.ui.text.TextRange(h.query.length))
+                                        playerViewModel.updateSearchQuery(h.query)
+                                    },
+                                    shape    = segmentedShape(idx, filteredHistory.size),
+                                    modifier = Modifier.animateItem(),
+                                )
+                            }
+                        }
+
+                        if (suggestions.isNotEmpty()) {
+                            item(key = "suggestions_header", contentType = "section_header") {
+                                SearchSectionHeader("Suggestions", modifier = Modifier.animateItem())
+                            }
+                            itemsIndexed(
+                                items = suggestions,
+                                key   = { _, s -> "sug_$s" },
+                                contentType = { _, _ -> "suggestion_item" },
+                            ) { idx, sug ->
+                                SuggestionItem(
+                                    query              = sug,
+                                    isOnlineSuggestion = true,
+                                    onClick            = {
+                                        queryTfv = TextFieldValue(sug)
+                                        playerViewModel.updateSearchQuery(sug)
+                                        playerViewModel.onSearchQuerySubmitted(sug)
+                                        playerViewModel.performSearch(sug)
+                                        keyboardController?.hide()
+                                    },
+                                    onFillTextField = {
+                                        queryTfv = TextFieldValue(sug, androidx.compose.ui.text.TextRange(sug.length))
+                                        playerViewModel.updateSearchQuery(sug)
+                                    },
+                                    shape    = segmentedShape(idx, suggestions.size),
+                                    modifier = Modifier.animateItem(),
                                 )
                             }
                         }
                     }
 
-                    when (val currState = discoveryState) {
-                        is SearchDiscoveryScreenState.Loading -> {
-                            item(key = "loading_discovery") {
+                    if (!showHistoryAndSuggestions) {
+                        item(key = "filter_chips", contentType = "filter_chips") {
+                            SearchFilterChipsRow(
+                                currentFilter = currentFilter,
+                                searchSource  = searchSource,
+                                onFilterSelect = { playerViewModel.updateSearchFilter(it) },
+                                modifier      = Modifier.animateItem(),
+                            )
+                        }
+
+                        if (searchResults.isNotEmpty()) {
+                            item(key = "results_header", contentType = "section_header") {
+                                SearchSectionHeader("Top Results", modifier = Modifier.animateItem())
+                            }
+                        }
+
+                        if (isSearching && searchResults.isEmpty()) {
+                            item(key = "skeleton", contentType = "skeleton") {
                                 SearchSkeleton(modifier = Modifier.animateItem())
                             }
-                        }
-                        is SearchDiscoveryScreenState.Success -> {
-                            val data = currState.data
-                            if (selectedDiscoveryTab == SearchDiscoveryTab.EXPLORE) {
-                                item(key = "mood_explore_title", contentType = "section_header") {
-                                    Text(
-                                        text = "Mood & Genres",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
-                                    )
-                                }
-                                item(key = "mood_genres_grid", contentType = "mood_grid") {
-                                    SearchMoodAndGenresGrid(
-                                        data = data,
-                                        navController = navController,
-                                        modifier = Modifier.fillMaxWidth().animateItem(),
-                                    )
-                                }
-                            } else {
-                                if (data.suggestedSongs.isNotEmpty()) {
-                                    item(key = "suggested_songs_header") {
-                                        Text(
-                                            text = "Unique Songs",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
-                                        )
-                                    }
-                                    item(key = "suggested_songs_list") {
-                                        SuggestedSongsSection(
-                                            songs = data.suggestedSongs,
-                                            navController = navController,
-                                            playerViewModel = playerViewModel,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-                                }
-
-                                if (data.suggestedArtists.isNotEmpty()) {
-                                    item(key = "suggested_artists_header") {
-                                        Text(
-                                            text = "Unique Artists",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
-                                        )
-                                    }
-                                    item(key = "suggested_artists_list") {
-                                        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp)) {
-                                            items(data.suggestedArtists) { artist ->
-                                                Box(modifier = Modifier.padding(4.dp)) {
-                                                    ArtistCardItem(
-                                                        artist = artist,
-                                                        onClick = {
-                                                            navController.navigateSafely(Screen.ArtistDetail.createRoute(artist.id))
-                                                        }
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if (data.trendingAlbums.isNotEmpty()) {
-                                    item(key = "trending_albums_header") {
-                                        Text(
-                                            text = "Top Albums",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
-                                        )
-                                    }
-                                    item(key = "trending_albums_list") {
-                                        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp)) {
-                                            items(data.trendingAlbums) { album ->
-                                                Box(modifier = Modifier.padding(4.dp)) {
-                                                    AlbumCarouselItem(
-                                                        album = album,
-                                                        onClick = {
-                                                            navController.navigateSafely(Screen.AlbumDetail.createRoute(album.browseId))
-                                                        }
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                        } else if (!isSearching && searchResults.isEmpty() && query.isNotBlank()) {
+                            item(key = "empty", contentType = "empty") {
+                                SearchEmptyState(query = query, modifier = Modifier.animateItem())
                             }
-                        }
-                        else -> {
-                            item(key = "empty_discovery") {
-                                SearchEmptyState(query = "", modifier = Modifier.animateItem())
+                        } else {
+                            itemsIndexed(
+                                items       = searchResults,
+                                key         = { _, item ->
+                                    when (item) {
+                                        is SearchResultItem.SongItem -> "song_${item.song.id}"
+                                        is SearchResultItem.AlbumItem -> "album_${item.album.id}"
+                                        is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
+                                        is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}"
+                                    }
+                                },
+                                contentType = { _, item -> item::class.simpleName },
+                            ) { _, item ->
+                                SearchResultRow(
+                                    item            = item,
+                                    playerViewModel = playerViewModel,
+                                    navController   = navController,
+                                    modifier        = Modifier.animateItem(),
+                                )
                             }
                         }
                     }
-                }
-            } else {
-                if (showHistoryAndSuggestions) {
-                    if (filteredHistory.isNotEmpty()) {
-                        item(key = "hist_inline_header", contentType = "section_header") {
-                            SearchSectionHeader("History", modifier = Modifier.animateItem())
-                        }
-                        itemsIndexed(
-                            items = filteredHistory,
-                            key   = { _, h -> "hist_inline_${h.query}" },
-                            contentType = { _, _ -> "history_item" },
-                        ) { idx, h ->
-                            SuggestionItem(
-                                query              = h.query,
-                                isOnlineSuggestion = false,
-                                onClick            = {
-                                    queryTfv = TextFieldValue(h.query)
-                                    playerViewModel.updateSearchQuery(h.query)
-                                    playerViewModel.onSearchQuerySubmitted(h.query)
-                                    playerViewModel.performSearch(h.query)
-                                    keyboardController?.hide()
-                                },
-                                onDelete        = { playerViewModel.deleteSearchHistoryItem(h.query) },
-                                onFillTextField = {
-                                    queryTfv = TextFieldValue(h.query, androidx.compose.ui.text.TextRange(h.query.length))
-                                    playerViewModel.updateSearchQuery(h.query)
-                                },
-                                shape    = segmentedShape(idx, filteredHistory.size),
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
-                    }
-
-                    if (suggestions.isNotEmpty()) {
-                        item(key = "suggestions_header", contentType = "section_header") {
-                            SearchSectionHeader("Suggestions", modifier = Modifier.animateItem())
-                        }
-                        itemsIndexed(
-                            items = suggestions,
-                            key   = { _, s -> "sug_$s" },
-                            contentType = { _, _ -> "suggestion_item" },
-                        ) { idx, sug ->
-                            SuggestionItem(
-                                query              = sug,
-                                isOnlineSuggestion = true,
-                                onClick            = {
-                                    queryTfv = TextFieldValue(sug)
-                                    playerViewModel.updateSearchQuery(sug)
-                                    playerViewModel.onSearchQuerySubmitted(sug)
-                                    playerViewModel.performSearch(sug)
-                                    keyboardController?.hide()
-                                },
-                                onFillTextField = {
-                                    queryTfv = TextFieldValue(sug, androidx.compose.ui.text.TextRange(sug.length))
-                                    playerViewModel.updateSearchQuery(sug)
-                                },
-                                shape    = segmentedShape(idx, suggestions.size),
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
-                    }
-                }
-
-                if (!showHistoryAndSuggestions) {
-                    item(key = "filter_chips", contentType = "filter_chips") {
-                        SearchFilterChipsRow(
-                            currentFilter = currentFilter,
-                            searchSource  = searchSource,
-                            onFilterSelect = { playerViewModel.updateSearchFilter(it) },
-                            modifier      = Modifier.animateItem(),
-                        )
-                    }
-
-                    if (searchResults.isNotEmpty()) {
-                        item(key = "results_header", contentType = "section_header") {
-                            SearchSectionHeader("Top Results", modifier = Modifier.animateItem())
-                        }
-                    }
-
-                    if (isSearching && searchResults.isEmpty()) {
-                        item(key = "skeleton", contentType = "skeleton") {
-                            SearchSkeleton(modifier = Modifier.animateItem())
-                        }
-                    } else if (!isSearching && searchResults.isEmpty() && query.isNotBlank()) {
-                        item(key = "empty", contentType = "empty") {
-                            SearchEmptyState(query = query, modifier = Modifier.animateItem())
-                        }
-                    } else {
-                        itemsIndexed(
-                            items       = searchResults,
-                            key         = { _, item ->
-                                when (item) {
-                                    is SearchResultItem.SongItem -> "song_${item.song.id}"
-                                    is SearchResultItem.AlbumItem -> "album_${item.album.id}"
-                                    is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
-                                    is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}"
-                                }
-                            },
-                            contentType = { _, item -> item::class.simpleName },
-                        ) { _, item ->
-                            SearchResultRow(
-                                item            = item,
-                                playerViewModel = playerViewModel,
-                                navController   = navController,
-                                modifier        = Modifier.animateItem(),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SearchSourceToggle(
-    searchSource : SearchSource,
-    onToggle     : () -> Unit,
-    modifier     : Modifier = Modifier,
-) {
-    val options = listOf(SearchSource.LOCAL, SearchSource.ONLINE)
-    SingleChoiceSegmentedButtonRow(modifier = modifier) {
-        options.forEachIndexed { idx, src ->
-            SegmentedButton(
-                selected = searchSource == src,
-                onClick  = { if (searchSource != src) onToggle() },
-                shape    = SegmentedButtonDefaults.itemShape(idx, options.size),
-                icon     = {
-                    when (src) {
-                        SearchSource.LOCAL  -> Icon(Icons.Rounded.MusicNote, contentDescription = null, modifier = Modifier.size(18.dp))
-                        SearchSource.ONLINE -> YouTubeSegmentIcon()
-                    }
-                },
-                label    = {
-                    Text(
-                        text = when (src) {
-                            SearchSource.LOCAL  -> "Library"
-                            SearchSource.ONLINE -> "YouTube"
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun YouTubeSegmentIcon() {
-    val bgColor = MaterialTheme.colorScheme.error
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .size(20.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(bgColor),
-    ) {
-        Icon(
-            imageVector         = Icons.Rounded.PlayArrow,
-            contentDescription  = null,
-            tint                = Color.White,
-            modifier            = Modifier.size(14.dp),
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SearchInputBar(
-    value          : TextFieldValue,
-    onValueChange  : (TextFieldValue) -> Unit,
-    onSearch       : (String) -> Unit,
-    onClear        : () -> Unit,
-    onBack         : () -> Unit,
-    focusRequester : FocusRequester,
-    searchSource   : SearchSource,
-    modifier       : Modifier = Modifier,
-) {
-    val placeholder = when (searchSource) {
-        SearchSource.LOCAL  -> "Search your library…"
-        SearchSource.ONLINE -> "Search YouTube Music…"
-    }
-
-    Surface(
-        shape  = AbsoluteSmoothCornerShape(cornerRadius = 28.dp, smoothnessAsPercent = 60),
-        color  = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 3.dp,
-        modifier = modifier.height(56.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier          = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 4.dp),
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector        = Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Back",
-                    tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            androidx.compose.foundation.text.BasicTextField(
-                value         = value,
-                onValueChange = onValueChange,
-                modifier      = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester),
-                singleLine    = true,
-                textStyle     = MaterialTheme.typography.bodyLarge.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                ),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction      = ImeAction.Search,
-                ),
-                keyboardActions = KeyboardActions(
-                    onSearch = { onSearch(value.text.trim()) }
-                ),
-                decorationBox = { innerTextField ->
-                    Box {
-                        if (value.text.isEmpty()) {
-                            Text(
-                                text  = placeholder,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        innerTextField()
-                    }
-                },
-            )
-
-            AnimatedVisibility(
-                visible = value.text.isNotEmpty(),
-                enter   = fadeIn() + scaleIn(),
-                exit    = fadeOut(),
-            ) {
-                IconButton(onClick = onClear) {
-                    Icon(
-                        imageVector        = Icons.Rounded.Cancel,
-                        contentDescription = "Clear",
-                        tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         }
@@ -813,22 +794,21 @@ private fun SearchInputBar(
 
 @Composable
 private fun SearchSectionHeader(
-    title    : String,
-    modifier : Modifier = Modifier,
-    trailing : @Composable (() -> Unit)? = null,
+    title: String,
+    modifier: Modifier = Modifier,
+    trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
-        verticalAlignment   = Alignment.CenterVertically,
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = SearchHorizontalPad + 4.dp, end = 4.dp, top = 16.dp, bottom = 6.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
     ) {
         Text(
-            text  = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
+            text = title,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onSurface
         )
         trailing?.invoke()
     }
@@ -836,74 +816,57 @@ private fun SearchSectionHeader(
 
 @Composable
 fun SuggestionItem(
-    query              : String,
-    isOnlineSuggestion : Boolean,
-    onClick            : () -> Unit,
-    onFillTextField    : () -> Unit,
-    onDelete           : () -> Unit = {},
-    shape              : Shape = MaterialTheme.shapes.large,
-    modifier           : Modifier = Modifier,
+    query: String,
+    isOnlineSuggestion: Boolean,
+    onClick: () -> Unit,
+    onFillTextField: () -> Unit,
+    onDelete: () -> Unit = {},
+    shape: Shape = MaterialTheme.shapes.large,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
         onClick = onClick,
-        shape   = shape,
-        color   = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SearchHorizontalPad),
+            .padding(horizontal = 16.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = SearchRowMinHeight)
-                .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(
-                        color  = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        shape  = MaterialTheme.shapes.medium,
-                    ),
-            ) {
-                Icon(
-                    imageVector        = if (isOnlineSuggestion) Icons.Rounded.Search else Icons.Rounded.History,
-                    contentDescription = null,
-                    tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier           = Modifier.size(20.dp),
-                )
-            }
-
-            Spacer(Modifier.width(14.dp))
-
-            Text(
-                text     = query,
-                style    = MaterialTheme.typography.bodyLarge,
-                color    = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+            Icon(
+                imageVector = if (isOnlineSuggestion) Icons.Rounded.Search else Icons.Rounded.History,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
+            Spacer(modifier = Modifier.width(16.dp))
+            Text(
+                text = query,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             if (!isOnlineSuggestion) {
                 IconButton(onClick = onDelete) {
                     Icon(
-                        imageVector        = Icons.Rounded.Close,
-                        contentDescription = "Remove from history",
-                        tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier           = Modifier.size(18.dp),
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-
             IconButton(onClick = onFillTextField) {
                 Icon(
-                    imageVector        = Icons.Rounded.NorthWest,
-                    contentDescription = "Fill search field",
-                    tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier           = Modifier.size(18.dp),
+                    imageVector = Icons.Rounded.NorthWest,
+                    contentDescription = "Fill",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -988,7 +951,7 @@ private fun SearchMoodAndGenresGrid(
         ) {
             items(
                 items = data.moodAndGenres,
-                key = { item -> "${item.title}:${item.endpoint?.browseId}:${item.endpoint?.params}" },
+                key = { item -> "${item.title}:${item.endpoint.browseId}:${item.endpoint.params}" },
                 contentType = { "mood_genres_item" },
             ) { item ->
                 val color = MoodPalette.getOrElse(data.moodAndGenres.indexOf(item) % MoodPalette.size) { 0xFF6650A4L }
@@ -997,8 +960,8 @@ private fun SearchMoodAndGenresGrid(
                     stripeColor = color,
                     endpoint = item.endpoint,
                     onClick = {
-                        val browseId = item.endpoint?.browseId.orEmpty()
-                        val params = item.endpoint?.params.orEmpty()
+                        val browseId = item.endpoint.browseId
+                        val params = item.endpoint.params.orEmpty()
                         navController.navigateSafely("youtube_browse/$browseId?params=$params")
                     },
                     modifier = Modifier
@@ -1136,7 +1099,6 @@ private fun SuggestedSongsSection(
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Number on the left
                     Text(
                         text = (index + 1).toString(),
                         style = MaterialTheme.typography.labelLarge,
