@@ -146,6 +146,10 @@ fun StatsScreen(
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
 
+    LaunchedEffect(statsViewModel) {
+        statsViewModel.forceRegenerateStats()
+    }
+
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val minTopBarHeight = 62.dp + statusBarHeight
     val maxTopBarHeight = 176.dp
