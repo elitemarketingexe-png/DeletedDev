@@ -344,10 +344,45 @@ fun QuickPicksSection(
                             .width(uncontainedCardSize)
                             .clickable { onSongClick(song) }
                     ) {
-                        val cardShape = remember { AbsoluteSmoothCornerShape(24.dp, 80) }
                         Card(
-                            modifier = Modifier.size(uncontainedCardSize),
-                            shape = cardShape,
+                            modifier = Modifier
+                                .size(uncontainedCardSize)
+                                .graphicsLayer {
+                                    val layoutInfo = lazyListState.layoutInfo
+                                    val visibleItems = layoutInfo.visibleItemsInfo
+                                    val itemInfo = visibleItems.firstOrNull { it.key == song.id }
+                                    if (itemInfo != null) {
+                                        val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+                                        val itemCenter = itemInfo.offset + itemInfo.size / 2f
+                                        val fraction = (itemCenter / viewportWidth.toFloat()).coerceIn(0f, 1f)
+                                        
+                                        // dynamic Material 3 uncontained scale
+                                        val scale = if (fraction > 0.6f) {
+                                            1f - (fraction - 0.6f) * 0.3f
+                                        } else {
+                                            1f
+                                        }
+                                        scaleX = scale
+                                        scaleY = scale
+                                        alpha = 0.7f + (1f - 0.7f) * scale
+                                        
+                                        // Dynamic Material 3 shape morphing: squircle corner sizes change on scroll position
+                                        val currentCorner = if (fraction > 0.5f) {
+                                            val morphProgress = (fraction - 0.5f) * 2f
+                                            24.dp + (56.dp - 24.dp) * morphProgress.coerceIn(0f, 1f)
+                                        } else {
+                                            24.dp
+                                        }
+                                        shape = AbsoluteSmoothCornerShape(currentCorner, 80)
+                                        clip = true
+                                    } else {
+                                        scaleX = 0.88f
+                                        scaleY = 0.88f
+                                        alpha = 0.7f
+                                        shape = AbsoluteSmoothCornerShape(56.dp, 80)
+                                        clip = true
+                                    }
+                                },
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                         ) {
