@@ -306,6 +306,8 @@ fun SearchScreen(
     var showSongInfoBottomSheet by remember { mutableStateOf(false) }
     var playlistSheetSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
 
+    var isSearchSubmitted by remember { mutableStateOf(false) }
+
     val handleSongMoreOptionsClick: (Song) -> Unit = { song ->
         playerViewModel.selectSongForInfo(song)
         showSongInfoBottomSheet = true
@@ -356,7 +358,7 @@ fun SearchScreen(
         searchHistory.filter { it.query.startsWith(query, ignoreCase = true) }.take(3)
     }
 
-    val showHistoryAndSuggestions = query.isNotEmpty() && searchResults.isEmpty() && !isSearching
+    val showHistoryAndSuggestions = query.isNotEmpty() && !isSearchSubmitted
     val statusBarTopInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
 
     Box(
@@ -368,29 +370,12 @@ fun SearchScreen(
                 detectTapGestures(onTap = { keyboardController?.hide() })
             },
     ) {
-        val gradientStart  = MaterialTheme.colorScheme.primaryContainer
-        val gradientMiddle = MaterialTheme.colorScheme.secondaryContainer
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(380.dp)
-                .align(Alignment.TopCenter)
-                .drawWithCache {
-                    val brush = Brush.verticalGradient(
-                        0f to gradientStart.copy(alpha = 0.28f),
-                        0.45f to gradientMiddle.copy(alpha = 0.12f),
-                        1f to Color.Transparent,
-                    )
-                    onDrawBehind { drawRect(brush) }
-                },
-        )
-
         Column(modifier = Modifier.fillMaxSize()) {
             // Polished Search Bar row exactly as it was positioned before 20 commits
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 24.dp, top = statusBarTopInset + 12.dp, end = 24.dp, bottom = 8.dp),
+                    .padding(start = 24.dp, top = 12.dp, end = 24.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -416,10 +401,13 @@ fun SearchScreen(
                                     queryTfv = TextFieldValue(it)
                                     playerViewModel.updateSearchQuery(it)
                                     playerViewModel.performSearch(it)
+                                    isSearchSubmitted = false
                                 },
                                 onSearch = { q ->
                                     if (q.isNotBlank()) {
                                         playerViewModel.onSearchQuerySubmitted(q)
+                                        playerViewModel.performSearch(q)
+                                        isSearchSubmitted = true
                                     }
                                     keyboardController?.hide()
                                 },
@@ -434,7 +422,9 @@ fun SearchScreen(
                                     Text(
                                         placeholderText,
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.primary
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 },
                                 leadingIcon = {
@@ -470,6 +460,7 @@ fun SearchScreen(
                                                     queryTfv = TextFieldValue("")
                                                     playerViewModel.updateSearchQuery("")
                                                     playerViewModel.performSearch("")
+                                                    isSearchSubmitted = false
                                                 },
                                                 modifier = Modifier
                                                     .size(48.dp)
@@ -492,6 +483,7 @@ fun SearchScreen(
                         },
                         expanded = false,
                         onExpandedChange = {},
+                        tonalElevation = 0.dp,
                         modifier = Modifier
                             .clip(RoundedCornerShape(28.dp)),
                         colors = SearchBarDefaults.colors(
@@ -555,6 +547,7 @@ fun SearchScreen(
                                     playerViewModel.updateSearchQuery(histItem.query)
                                     playerViewModel.onSearchQuerySubmitted(histItem.query)
                                     playerViewModel.performSearch(histItem.query)
+                                    isSearchSubmitted = true
                                     keyboardController?.hide()
                                 },
                                 onDelete        = { playerViewModel.deleteSearchHistoryItem(histItem.query) },
@@ -722,6 +715,7 @@ fun SearchScreen(
                                         playerViewModel.updateSearchQuery(h.query)
                                         playerViewModel.onSearchQuerySubmitted(h.query)
                                         playerViewModel.performSearch(h.query)
+                                        isSearchSubmitted = true
                                         keyboardController?.hide()
                                     },
                                     onDelete        = { playerViewModel.deleteSearchHistoryItem(h.query) },
@@ -752,6 +746,7 @@ fun SearchScreen(
                                         playerViewModel.updateSearchQuery(sug)
                                         playerViewModel.onSearchQuerySubmitted(sug)
                                         playerViewModel.performSearch(sug)
+                                        isSearchSubmitted = true
                                         keyboardController?.hide()
                                     },
                                     onFillTextField = {
@@ -1188,9 +1183,9 @@ private fun SuggestedSongsSection(
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 onClick = {
-                    playerViewModel.showAndPlaySong(
-                        song = songNative,
-                        contextSongs = visibleSongs.map { it.toNativeSong() },
+                    playerViewModel.playSongs(
+                        songsToPlay = visibleSongs.map { it.toNativeSong() },
+                        startSong = songNative,
                         queueName = "Suggestions"
                     )
                 },

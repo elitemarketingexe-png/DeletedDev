@@ -87,7 +87,7 @@ class SearchDiscoveryRepository @Inject constructor(
     private suspend fun loadSuggestedSongs(): List<SongItem> =
         coroutineScope {
             // Retrieve most played songs from stats history
-            var seedSongIds = playbackStatsRepository
+            val seedSongIds = playbackStatsRepository
                 .loadSongPlayCounts(limit = MaxHistoryLookupItems)
                 // Filter out local songs if needed (non-YouTube songs usually have long IDs or numeric paths)
                 .filterNot { it.songId.startsWith("/") || it.songId.toLongOrNull() != null }
@@ -97,8 +97,12 @@ class SearchDiscoveryRepository @Inject constructor(
             if (seedSongIds.isEmpty()) {
                 try {
                     val trendingResult = YouTube.search(query = "trending hits", filter = YouTube.SearchFilter.FILTER_SONG).getOrNull()
-                    seedSongIds = trendingResult?.items?.filterIsInstance<SongItem>()?.take(MaxSuggestionSeedItems)?.map { it.id }.orEmpty()
+                    val fallbackSongs = trendingResult?.items?.filterIsInstance<SongItem>().orEmpty()
+                    if (fallbackSongs.isNotEmpty()) {
+                        return@coroutineScope fallbackSongs
+                    }
                 } catch (_: Exception) {}
+                return@coroutineScope emptyList()
             }
             
             val seedSongIdsSet = seedSongIds.toSet()
@@ -160,7 +164,7 @@ class SearchDiscoveryRepository @Inject constructor(
 
     private suspend fun loadSuggestedArtists(): List<ArtistItem> =
         coroutineScope {
-            var seedArtists = musicDao
+            val seedArtists = musicDao
                 .getArtistsByPlayCount()
                 .filter { it.channelId.isNotBlank() }
                 .take(MaxSuggestionSeedItems)
@@ -169,14 +173,11 @@ class SearchDiscoveryRepository @Inject constructor(
                 try {
                     val trendingArtistsResult = YouTube.search(query = "popular artists", filter = YouTube.SearchFilter.FILTER_ARTIST).getOrNull()
                     val fallbackItems = trendingArtistsResult?.items?.filterIsInstance<ArtistItem>().orEmpty()
-                    seedArtists = fallbackItems.map { artistItem ->
-                        com.unshoo.pixelmusic.data.database.ArtistPlayCountRow(
-                            artistItem.id,
-                            0L,
-                            0
-                        )
+                    if (fallbackItems.isNotEmpty()) {
+                        return@coroutineScope fallbackItems
                     }
                 } catch (_: Exception) {}
+                return@coroutineScope emptyList()
             }
 
             val seedArtistIds = seedArtists.mapTo(HashSet()) { it.channelId }
