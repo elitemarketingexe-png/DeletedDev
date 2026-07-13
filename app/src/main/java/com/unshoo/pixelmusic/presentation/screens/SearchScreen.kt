@@ -1265,7 +1265,7 @@ private fun SearchResultRow(
                     if (isActive) {
                         playerViewModel.playPause()
                     } else {
-                        playerViewModel.playSong(song)
+                        playerViewModel.playSongs(listOf(song), song, "Search")
                     }
                 },
                 modifier   = modifier
