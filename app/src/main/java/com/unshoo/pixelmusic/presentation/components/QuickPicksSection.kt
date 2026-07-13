@@ -333,12 +333,12 @@ fun QuickPicksSection(
             
             LazyRow(
                 state = lazyListState,
-                contentPadding = PaddingValues(start = 16.dp, end = 96.dp), // Intentional cut-off showing upcoming content
+                contentPadding = PaddingValues(start = 16.dp, end = 76.dp), // Leaves next item cut off for standard uncontained look
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 items(limitSongs, key = { it.id }) { song ->
-                    val uncontainedCardSize = 160.dp
+                    val uncontainedCardSize = 150.dp
                     Column(
                         modifier = Modifier
                             .width(uncontainedCardSize)
@@ -346,31 +346,10 @@ fun QuickPicksSection(
                     ) {
                         val cardShape = remember { AbsoluteSmoothCornerShape(24.dp, 80) }
                         Card(
-                            modifier = Modifier
-                                .size(uncontainedCardSize)
-                                .graphicsLayer {
-                                    val layoutInfo = lazyListState.layoutInfo
-                                    val visibleItems = layoutInfo.visibleItemsInfo
-                                    val itemInfo = visibleItems.firstOrNull { it.key == song.id }
-                                    if (itemInfo != null) {
-                                        val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
-                                        val itemCenter = itemInfo.offset + itemInfo.size / 2f
-                                        val fraction = (itemCenter / viewportWidth.toFloat()).coerceIn(0f, 1f)
-                                        
-                                        // dynamic Material 3 uncontained exit scale
-                                        val scale = if (fraction > 0.6f) {
-                                            1f - (fraction - 0.6f) * 0.38f
-                                        } else {
-                                            1f
-                                        }
-                                        scaleX = scale
-                                        scaleY = scale
-                                        alpha = 0.7f + (1f - 0.7f) * scale
-                                    }
-                                },
+                            modifier = Modifier.size(uncontainedCardSize),
                             shape = cardShape,
-                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
                                 SmartImage(
@@ -379,40 +358,6 @@ fun QuickPicksSection(
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                 )
-                                
-                                // Sleek bottom scrim overlay with metadata inside card
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .align(Alignment.BottomStart)
-                                        .background(
-                                            Brush.verticalGradient(
-                                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                                            )
-                                        )
-                                        .padding(12.dp)
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = song.title,
-                                            style = MaterialTheme.typography.titleSmall.copy(
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontFamily = GoogleSansRounded
-                                            ),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = song.artist,
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                color = Color.White.copy(alpha = 0.7f)
-                                            ),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
                                 
                                 val isPlaying = song.id == currentSongId
                                 if (isPlaying) {
@@ -433,6 +378,31 @@ fun QuickPicksSection(
                                 }
                             }
                         }
+                        
+                        Spacer(modifier = Modifier.height(7.dp))
+                        
+                        // Metadata details below card
+                        Text(
+                            text = song.title,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = GoogleSansRounded,
+                                color = if (song.id == currentSongId) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = song.artist,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
                     }
                 }
             }
