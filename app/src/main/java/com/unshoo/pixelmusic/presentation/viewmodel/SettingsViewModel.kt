@@ -143,7 +143,7 @@ data class SettingsUiState(
     val hideVideo: Boolean = false,
     val topSize: String = "50",
     val discover: QuickPicks = QuickPicks.QUICK_PICKS,
-    val quickPicksDisplayMode: QuickPicksDisplayMode = QuickPicksDisplayMode.CARD,
+    val quickPicksDisplayMode: QuickPicksDisplayMode = QuickPicksDisplayMode.CARD_CLASSIC,
     val ytUsername: String = "",
     val ytHandle: String = "",
     val ytAvatarUrl: String = "",

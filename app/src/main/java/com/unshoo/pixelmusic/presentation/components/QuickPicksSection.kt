@@ -193,7 +193,7 @@ fun QuickPicksSection(
                     )
                 }
             }
-        } else if (displayMode == QuickPicksDisplayMode.CARD_CLASSIC || displayMode == QuickPicksDisplayMode.UNCONTAINED) {
+        } else if (displayMode == QuickPicksDisplayMode.CARD_CLASSIC) {
             val limitSongs = remember(songs) { songs.take(20) }
             val lazyListState = rememberLazyListState()
             val context = LocalContext.current
@@ -211,7 +211,7 @@ fun QuickPicksSection(
                 }
             }
 
-            // Auto-scroll logic for Classic / Uncontained lazy lists
+            // Auto-scroll logic for Classic lazy lists
             LaunchedEffect(lazyListState.isScrollInProgress, limitSongs) {
                 if (!lazyListState.isScrollInProgress && limitSongs.isNotEmpty()) {
                     while (true) {
@@ -324,6 +324,115 @@ fun QuickPicksSection(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(horizontal = 4.dp)
                         )
+                    }
+                }
+            }
+        } else if (displayMode == QuickPicksDisplayMode.UNCONTAINED) {
+            val limitSongs = remember(songs) { songs.take(20) }
+            val lazyListState = rememberLazyListState()
+            
+            LazyRow(
+                state = lazyListState,
+                contentPadding = PaddingValues(start = 16.dp, end = 96.dp), // Intentional cut-off showing upcoming content
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(limitSongs, key = { it.id }) { song ->
+                    val uncontainedCardSize = 160.dp
+                    Column(
+                        modifier = Modifier
+                            .width(uncontainedCardSize)
+                            .clickable { onSongClick(song) }
+                    ) {
+                        val cardShape = remember { AbsoluteSmoothCornerShape(24.dp, 80) }
+                        Card(
+                            modifier = Modifier
+                                .size(uncontainedCardSize)
+                                .graphicsLayer {
+                                    val layoutInfo = lazyListState.layoutInfo
+                                    val visibleItems = layoutInfo.visibleItemsInfo
+                                    val itemInfo = visibleItems.firstOrNull { it.key == song.id }
+                                    if (itemInfo != null) {
+                                        val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+                                        val itemCenter = itemInfo.offset + itemInfo.size / 2f
+                                        val fraction = (itemCenter / viewportWidth.toFloat()).coerceIn(0f, 1f)
+                                        
+                                        // dynamic Material 3 uncontained exit scale
+                                        val scale = if (fraction > 0.6f) {
+                                            1f - (fraction - 0.6f) * 0.38f
+                                        } else {
+                                            1f
+                                        }
+                                        scaleX = scale
+                                        scaleY = scale
+                                        alpha = 0.7f + (1f - 0.7f) * scale
+                                    }
+                                },
+                            shape = cardShape,
+                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                SmartImage(
+                                    model = song.albumArtUriString,
+                                    contentDescription = song.title,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                
+                                // Sleek bottom scrim overlay with metadata inside card
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .align(Alignment.BottomStart)
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                                            )
+                                        )
+                                        .padding(12.dp)
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = song.title,
+                                            style = MaterialTheme.typography.titleSmall.copy(
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = GoogleSansRounded
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = song.artist,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                color = Color.White.copy(alpha = 0.7f)
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                
+                                val isPlaying = song.id == currentSongId
+                                if (isPlaying) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color.Black.copy(alpha = 0.4f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        EqualizerAnimation(
+                                            modifier = Modifier
+                                                .width(24.dp)
+                                                .height(18.dp),
+                                            color = Color.White,
+                                            barCount = 3
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
