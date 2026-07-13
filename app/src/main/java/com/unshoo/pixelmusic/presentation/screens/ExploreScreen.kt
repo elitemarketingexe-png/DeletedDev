@@ -1229,21 +1229,21 @@ fun RecentMixCardItem(
 
     Column(
         modifier = Modifier
-            .width(120.dp)
+            .width(140.dp)
             .clickable(onClick = onClick)
     ) {
         PlaylistCover(
             playlist = playlist,
             playlistSongs = playlistSongs ?: emptyList(),
             modifier = Modifier
-                .size(120.dp)
+                .size(140.dp)
                 .clip(shape),
-            size = 120.dp
+            size = 140.dp
         )
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = playlist.name,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1251,7 +1251,7 @@ fun RecentMixCardItem(
         )
         Text(
             text = "Smart Mix",
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1378,21 +1378,21 @@ fun AlbumCarouselItem(
 
     Column(
         modifier = Modifier
-            .width(120.dp)
+            .width(140.dp)
             .clickable(onClick = onClick)
     ) {
         SmartImage(
             model = album.thumbnail,
             contentDescription = album.title,
             modifier = Modifier
-                .size(120.dp)
+                .size(140.dp)
                 .clip(shape),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = album.title,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1400,7 +1400,7 @@ fun AlbumCarouselItem(
         )
         Text(
             text = album.artists?.joinToString { it.name } ?: "",
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

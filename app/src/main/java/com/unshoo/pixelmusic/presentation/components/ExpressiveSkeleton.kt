@@ -360,12 +360,10 @@ fun ExploreSkeletonGrid(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     repeat(4) {
-                        Column(modifier = Modifier.width(120.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(120.dp)
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(shimmerBrush)
+                        Column(modifier = Modifier.width(140.dp)) {
+                            ShapeShiftingPlaceholder(
+                                modifier = Modifier.size(140.dp),
+                                shimmerBrush = shimmerBrush
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Box(
