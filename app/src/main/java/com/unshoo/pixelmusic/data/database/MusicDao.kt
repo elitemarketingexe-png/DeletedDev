@@ -138,6 +138,9 @@ interface MusicDao {
     @Query("SELECT * FROM artists WHERE id IN (:artistIds)")
     suspend fun getArtistsByIds(artistIds: List<Long>): List<ArtistEntity>
 
+    @Query("SELECT * FROM artists WHERE channel_id = :channelId LIMIT 1")
+    suspend fun getArtistByChannelId(channelId: String): ArtistEntity?
+
     @Transaction
     suspend fun insertSongs(songs: List<SongEntity>) {
         if (songs.isEmpty()) return

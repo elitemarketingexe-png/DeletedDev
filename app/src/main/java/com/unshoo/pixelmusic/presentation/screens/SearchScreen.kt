@@ -3,20 +3,14 @@ package com.unshoo.pixelmusic.presentation.screens
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,12 +26,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -66,8 +60,6 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
@@ -100,10 +92,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -129,6 +119,11 @@ import com.unshoo.pixelmusic.presentation.components.subcomps.EnhancedSongListIt
 import com.unshoo.pixelmusic.presentation.navigation.Screen
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
+import com.unshoo.pixelmusic.presentation.viewmodel.SearchDiscoveryViewModel
+import com.unshoo.pixelmusic.presentation.viewmodel.SearchDiscoveryScreenState
+import com.unshoo.pixelmusic.presentation.viewmodel.SearchDiscoveryTab
+import com.unshoo.pixelmusic.data.remote.youtube.toNativeSong
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.Dispatchers
@@ -139,10 +134,11 @@ import kotlinx.coroutines.withContext
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import timber.log.Timber
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
+import unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem
+import unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumItem
+import unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem
+import unshoo.ianshulyadav.pixelmusic.innertube.models.PlaylistItem
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Constants (ArchiveTune spec)
-// ──────────────────────────────────────────────────────────────────────────────
 private val SearchGroupOuterCorner = 24.dp
 private val SearchGroupInnerCorner  = 6.dp
 private val SearchHorizontalPad     = 12.dp
@@ -154,29 +150,12 @@ private val MoodCoverShape          = RoundedCornerShape(16.dp)
 private val MoodCoverSize           = 80.dp
 private val MoodMinCellWidth        = 180.dp
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Private data / enum
-// ──────────────────────────────────────────────────────────────────────────────
-private data class MoodAndGenresItem(
-    val title: String,
-    val stripeColor: Long,
-    val browseId: String,
-    val params: String?,
-    val artworkUrl: String? = null,
-)
-
-private enum class DiscoveryTab { EXPLORE, SUGGESTIONS }
-
-// Predefined palette for genre cards (following dynamic theming seed)
 private val MoodPalette = listOf(
     0xFF6650A4L, 0xFF7D5260L, 0xFF006E2CL, 0xFF8B5000L,
     0xFF006874L, 0xFF984816L, 0xFF3D5A80L, 0xFF6B3A2AL,
     0xFF17494DL, 0xFF4A4458L, 0xFF005700L, 0xFF9C4300L,
 )
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Segmented corner shape helper (ArchiveTune)
-// ──────────────────────────────────────────────────────────────────────────────
 private fun segmentedShape(index: Int, count: Int): Shape = when {
     count <= 1   -> RoundedCornerShape(SearchGroupOuterCorner)
     index == 0   -> RoundedCornerShape(
@@ -190,9 +169,6 @@ private fun segmentedShape(index: Int, count: Int): Shape = when {
     else -> RoundedCornerShape(SearchGroupInnerCorner)
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// SearchScreen
-// ──────────────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
@@ -203,11 +179,9 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
-    val haptic             = LocalHapticFeedback.current
     val coroutineScope     = rememberCoroutineScope()
     val focusRequester     = remember { FocusRequester() }
 
-    // ── ViewModel state ──────────────────────────────────────────────────────
     val playerUiState  by playerViewModel.playerUiState.collectAsStateWithLifecycle()
     val searchSource   by playerViewModel.searchSource.collectAsStateWithLifecycle()
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
@@ -217,31 +191,26 @@ fun SearchScreen(
     val isSearching      = playerUiState.isSearching
     val currentFilter    = playerUiState.selectedSearchFilter
 
-    val currentSong      = stablePlayerState.currentSong
-    val isPlaying        = stablePlayerState.isPlaying
-
-    // ── Local UI state ────────────────────────────────────────────────────────
     var queryTfv         by remember { mutableStateOf(TextFieldValue(playerViewModel.searchQuery)) }
     var suggestions      by remember { mutableStateOf<List<String>>(emptyList()) }
-    var moodGenres       by remember { mutableStateOf<List<MoodAndGenresItem>>(emptyList()) }
-    var selectedTab      by rememberSaveable { mutableIntStateOf(0) } // 0=Explore, 1=Suggestions
     val lazyListState    = rememberLazyListState()
 
     val query = queryTfv.text.trim()
 
-    // ── Keyboard hide on scroll (ArchiveTune) ────────────────────────────────
+    val discoveryViewModel: SearchDiscoveryViewModel = hiltViewModel()
+    val discoveryState by discoveryViewModel.state.collectAsStateWithLifecycle()
+    val selectedDiscoveryTab by discoveryViewModel.selectedTab.collectAsStateWithLifecycle()
+
     LaunchedEffect(lazyListState) {
         snapshotFlow { lazyListState.firstVisibleItemScrollOffset }
             .drop(1)
             .collect { keyboardController?.hide() }
     }
 
-    // ── Notify AppNavigation of Search Bar active status ─────────────────────
     LaunchedEffect(query) {
         onSearchBarActiveChange(query.isNotEmpty())
     }
 
-    // ── Auto-focus on screen entry ────────────────────────────────────────────
     LaunchedEffect(Unit) {
         playerViewModel.loadSearchHistory()
         delay(120L)
@@ -249,7 +218,6 @@ fun SearchScreen(
         keyboardController?.show()
     }
 
-    // ── Re-focus on double-tap nav icon ──────────────────────────────────────
     LaunchedEffect(playerViewModel) {
         playerViewModel.searchNavDoubleTapEvents.collect {
             delay(40L)
@@ -258,7 +226,6 @@ fun SearchScreen(
         }
     }
 
-    // ── Load YouTube suggestions while typing (ONLINE, 150 ms debounce) ──────
     LaunchedEffect(query, searchSource) {
         if (query.isBlank() || searchSource == SearchSource.LOCAL) {
             suggestions = emptyList()
@@ -275,53 +242,10 @@ fun SearchScreen(
         }
     }
 
-    // ── Load Mood & Genres (ONLINE) — uses ExplorePage.chips ─────────────────
-    LaunchedEffect(searchSource) {
-        if (searchSource != SearchSource.ONLINE) return@LaunchedEffect
-        withContext(Dispatchers.IO) {
-            try {
-                YouTube.explore().getOrNull()?.let { page ->
-                    val chipItems = page.chips?.mapIndexed { idx, chip ->
-                        val browseId = chip.endpoint?.browseId ?: return@mapIndexed null
-                        val color = MoodPalette.getOrElse(idx % MoodPalette.size) { 0xFF6650A4L }
-                        MoodAndGenresItem(
-                            title     = chip.title,
-                            stripeColor = color,
-                            browseId  = browseId,
-                            params    = chip.endpoint.params,
-                        )
-                    }?.filterNotNull().orEmpty()
-
-                    val items = if (chipItems.isNotEmpty()) {
-                        chipItems
-                    } else {
-                        page.sections.mapIndexed { idx, section ->
-                            val browseId = section.endpoint?.browseId ?: return@mapIndexed null
-                            if (section.title.isBlank()) return@mapIndexed null
-                            val color = MoodPalette.getOrElse(idx % MoodPalette.size) { 0xFF6650A4L }
-                            MoodAndGenresItem(
-                                title     = section.title,
-                                stripeColor = color,
-                                browseId  = browseId,
-                                params    = section.endpoint?.params,
-                                artworkUrl = section.thumbnail,
-                            )
-                        }.filterNotNull()
-                    }
-                    moodGenres = items
-                }
-            } catch (e: Exception) {
-                Timber.w(e, "Mood & Genres fetch failed")
-            }
-        }
-    }
-
-    // Calculate filtered history outside of LazyColumn DSL to avoid @Composable constraint violations
     val filteredHistory = remember(query, searchHistory) {
         searchHistory.filter { it.query.startsWith(query, ignoreCase = true) }.take(3)
     }
 
-    // ── Root container — tap-outside dismisses keyboard ───────────────────────
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -331,7 +255,6 @@ fun SearchScreen(
                 detectTapGestures(onTap = { keyboardController?.hide() })
             },
     ) {
-        // Gradient header background
         val gradientStart  = MaterialTheme.colorScheme.primaryContainer
         val gradientMiddle = MaterialTheme.colorScheme.secondaryContainer
         Box(
@@ -355,8 +278,6 @@ fun SearchScreen(
             contentPadding = PaddingValues(bottom = 120.dp),
             verticalArrangement = Arrangement.spacedBy(SearchRowSpacing),
         ) {
-
-            // ── Source Toggle (ABOVE search bar) ─────────────────────────────
             item(key = "source_toggle", contentType = "source_toggle") {
                 SearchSourceToggle(
                     searchSource = searchSource,
@@ -368,7 +289,6 @@ fun SearchScreen(
                 )
             }
 
-            // ── Search bar ────────────────────────────────────────────────────
             item(key = "search_bar", contentType = "search_bar") {
                 SearchInputBar(
                     value          = queryTfv,
@@ -397,12 +317,7 @@ fun SearchScreen(
                 )
             }
 
-            // ─────────────────────────────────────────────────────────────────
-            // BLANK QUERY → History / Explore / Suggestions
-            // ─────────────────────────────────────────────────────────────────
             if (query.isBlank()) {
-
-                // History section
                 if (searchHistory.isNotEmpty()) {
                     item(key = "history_header", contentType = "section_header") {
                         SearchSectionHeader(
@@ -446,26 +361,25 @@ fun SearchScreen(
                     }
                 }
 
-                // Discovery tabs (ONLINE mode only)
                 if (searchSource == SearchSource.ONLINE) {
                     item(key = "discovery_tabs", contentType = "tabs") {
                         PrimaryTabRow(
-                            selectedTabIndex  = selectedTab,
+                            selectedTabIndex  = selectedDiscoveryTab.ordinal,
                             containerColor    = Color.Transparent,
                             modifier          = Modifier
                                 .fillMaxWidth()
                                 .padding(top = if (searchHistory.isEmpty()) 0.dp else 8.dp)
                                 .animateItem(),
                         ) {
-                            DiscoveryTab.entries.forEachIndexed { i, tab ->
+                            SearchDiscoveryTab.entries.forEach { tab ->
                                 Tab(
-                                    selected = selectedTab == i,
-                                    onClick  = { selectedTab = i },
+                                    selected = selectedDiscoveryTab == tab,
+                                    onClick  = { discoveryViewModel.selectTab(tab) },
                                     text     = {
                                         Text(
                                             text = when (tab) {
-                                                DiscoveryTab.EXPLORE     -> "Explore"
-                                                DiscoveryTab.SUGGESTIONS -> "Suggestions"
+                                                SearchDiscoveryTab.EXPLORE     -> "Explore"
+                                                SearchDiscoveryTab.SUGGESTIONS -> "Suggestions"
                                             },
                                             maxLines = 1,
                                         )
@@ -475,41 +389,114 @@ fun SearchScreen(
                         }
                     }
 
-                    if (selectedTab == DiscoveryTab.EXPLORE.ordinal) {
-                        // Mood & Genres grid
-                        item(key = "mood_genres_title", contentType = "section_title") {
-                            Text(
-                                text  = "Mood & Genres",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                                    .animateItem(),
-                            )
+                    when (val currState = discoveryState) {
+                        is SearchDiscoveryScreenState.Loading -> {
+                            item(key = "loading_discovery") {
+                                SearchSkeleton(modifier = Modifier.animateItem())
+                            }
                         }
-
-                        item(key = "mood_genres_grid", contentType = "mood_grid") {
-                            MoodAndGenresGrid(
-                                items        = moodGenres,
-                                onItemClick  = { item ->
-                                    navController.navigateSafely(
-                                        "youtube_browse/${item.browseId}?params=${item.params ?: ""}"
+                        is SearchDiscoveryScreenState.Success -> {
+                            val data = currState.data
+                            if (selectedDiscoveryTab == SearchDiscoveryTab.EXPLORE) {
+                                item(key = "mood_genres_grid", contentType = "mood_grid") {
+                                    val mappedMoods = data.moodAndGenres.mapIndexed { idx, m ->
+                                        val color = MoodPalette.getOrElse(idx % MoodPalette.size) { 0xFF6650A4L }
+                                        MoodAndGenresItem(
+                                            title = m.title,
+                                            stripeColor = color,
+                                            browseId = m.endpoint?.browseId.orEmpty(),
+                                            params = m.endpoint?.params,
+                                            artworkUrl = null
+                                        )
+                                    }
+                                    MoodAndGenresGrid(
+                                        items        = mappedMoods,
+                                        onItemClick  = { item ->
+                                            navController.navigateSafely(
+                                                "youtube_browse/${item.browseId}?params=${item.params ?: ""}"
+                                            )
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .animateItem(),
                                     )
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .animateItem(),
-                            )
+                                }
+                            } else {
+                                if (data.suggestedSongs.isNotEmpty()) {
+                                    item(key = "suggested_songs_header") {
+                                        Text("Suggested Songs", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+                                    }
+                                    item(key = "suggested_songs_list") {
+                                        val nativeSongs = data.suggestedSongs.map { it.toNativeSong() }
+                                        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                            items(data.suggestedSongs) { song ->
+                                                val songNative = song.toNativeSong()
+                                                Box(modifier = Modifier.width(280.dp).padding(4.dp)) {
+                                                    SongCardItem(
+                                                        song = songNative,
+                                                        onClick = {
+                                                            playerViewModel.showAndPlaySong(
+                                                                song = songNative,
+                                                                contextSongs = nativeSongs,
+                                                                queueName = "Suggestions"
+                                                            )
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (data.suggestedArtists.isNotEmpty()) {
+                                    item(key = "suggested_artists_header") {
+                                        Text("Suggested Artists", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+                                    }
+                                    item(key = "suggested_artists_list") {
+                                        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                            items(data.suggestedArtists) { artist ->
+                                                Box(modifier = Modifier.padding(4.dp)) {
+                                                    ArtistCardItem(
+                                                        artist = artist,
+                                                        onClick = {
+                                                            navController.navigateSafely(Screen.ArtistDetail.createRoute(artist.id))
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (data.trendingAlbums.isNotEmpty()) {
+                                    item(key = "trending_albums_header") {
+                                        Text("Trending Albums", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp))
+                                    }
+                                    item(key = "trending_albums_list") {
+                                        LazyRow(contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                            items(data.trendingAlbums) { album ->
+                                                Box(modifier = Modifier.padding(4.dp)) {
+                                                    AlbumCarouselItem(
+                                                        album = album,
+                                                        onClick = {
+                                                            navController.navigateSafely(Screen.AlbumDetail.createRoute(album.browseId))
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else -> {
+                            item(key = "empty_discovery") {
+                                SearchEmptyState(query = "", modifier = Modifier.animateItem())
+                            }
                         }
                     }
                 }
-            }
-
-            // ─────────────────────────────────────────────────────────────────
-            // NON-BLANK QUERY → Suggestions inline + Filter Chips + Results
-            // ─────────────────────────────────────────────────────────────────
-            else {
-
+            } else {
                 if (filteredHistory.isNotEmpty()) {
                     item(key = "hist_inline_header", contentType = "section_header") {
                         SearchSectionHeader("History", modifier = Modifier.animateItem())
@@ -569,7 +556,6 @@ fun SearchScreen(
                     }
                 }
 
-                // Filter Chips
                 item(key = "filter_chips", contentType = "filter_chips") {
                     SearchFilterChipsRow(
                         currentFilter = currentFilter,
@@ -579,14 +565,12 @@ fun SearchScreen(
                     )
                 }
 
-                // Results header (only when results or suggestions exist)
                 if (searchResults.isNotEmpty()) {
                     item(key = "results_header", contentType = "section_header") {
                         SearchSectionHeader("Top Results", modifier = Modifier.animateItem())
                     }
                 }
 
-                // Skeleton / Results / Empty
                 if (isSearching && searchResults.isEmpty()) {
                     item(key = "skeleton", contentType = "skeleton") {
                         SearchSkeleton(modifier = Modifier.animateItem())
@@ -621,9 +605,6 @@ fun SearchScreen(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Source Toggle — SingleChoiceSegmentedButtonRow (ABOVE search bar)
-// ──────────────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchSourceToggle(
@@ -658,7 +639,6 @@ private fun SearchSourceToggle(
     }
 }
 
-/** YouTube icon with dynamic-themed red background + white play triangle */
 @Composable
 private fun YouTubeSegmentIcon() {
     val bgColor = MaterialTheme.colorScheme.error
@@ -678,9 +658,6 @@ private fun YouTubeSegmentIcon() {
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Search Input Bar (replaces DockedSearchBar)
-// ──────────────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchInputBar(
@@ -768,9 +745,6 @@ private fun SearchInputBar(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Section Header
-// ──────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun SearchSectionHeader(
     title    : String,
@@ -794,9 +768,6 @@ private fun SearchSectionHeader(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Suggestion / History Item  (ArchiveTune SuggestionItem)
-// ──────────────────────────────────────────────────────────────────────────────
 @Composable
 fun SuggestionItem(
     query              : String,
@@ -873,9 +844,6 @@ fun SuggestionItem(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Filter chips row
-// ──────────────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchFilterChipsRow(
@@ -946,9 +914,14 @@ private fun SearchFilterChipsRow(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Mood & Genres Grid  (ArchiveTune MoodAndGenresButton)
-// ──────────────────────────────────────────────────────────────────────────────
+private data class MoodAndGenresItem(
+    val title: String,
+    val stripeColor: Long,
+    val browseId: String,
+    val params: String?,
+    val artworkUrl: String? = null,
+)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MoodAndGenresGrid(
@@ -1094,9 +1067,6 @@ private fun MoodCardShimmer(modifier: Modifier = Modifier) {
     )
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Search Result Row — dispatches to type-specific cards
-// ──────────────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SearchResultRow(
@@ -1118,9 +1088,7 @@ private fun SearchResultRow(
                 song          = song,
                 isCurrentSong = isActive,
                 isPlaying     = isPlaying,
-                onMoreOptionsClick = {
-                    // Standard context menu logic is handled by PlayerViewModel
-                },
+                onMoreOptionsClick = {},
                 onClick       = {
                     if (isActive) {
                         playerViewModel.playPause()
@@ -1158,9 +1126,6 @@ private fun SearchResultRow(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Album Card
-// ──────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun SearchAlbumCard(
     album        : Album,
@@ -1248,9 +1213,6 @@ private fun SearchAlbumCard(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Artist Card
-// ──────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun SearchArtistCard(
     artist       : Artist,
@@ -1327,9 +1289,6 @@ private fun SearchArtistCard(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Playlist Card
-// ──────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun SearchPlaylistCard(
     playlist        : Playlist,
@@ -1337,15 +1296,8 @@ private fun SearchPlaylistCard(
     navController   : NavHostController,
     modifier        : Modifier = Modifier,
 ) {
-    val isYoutube = playlist.source == "YOUTUBE"
     Card(
-        onClick   = {
-            if (isYoutube) {
-                navController.navigateSafely("online_playlist/${playlist.id}")
-            } else {
-                navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id))
-            }
-        },
+        onClick   = { navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id)) },
         shape     = AbsoluteSmoothCornerShape(cornerRadius = 20.dp, smoothnessAsPercent = 60),
         colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -1387,7 +1339,7 @@ private fun SearchPlaylistCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text  = if (isYoutube) "YouTube Playlist" else "Playlist · ${playlist.songIds.size} songs",
+                    text  = if (playlist.source == "YOUTUBE") "YouTube Playlist" else "Playlist · ${playlist.songIds.size} songs",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1396,10 +1348,7 @@ private fun SearchPlaylistCard(
             Spacer(Modifier.width(8.dp))
 
             Surface(
-                onClick = {
-                    if (isYoutube) navController.navigateSafely("online_playlist/${playlist.id}")
-                    else navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id))
-                },
+                onClick = { navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id)) },
                 shape   = CircleShape,
                 color   = MaterialTheme.colorScheme.secondaryContainer,
                 modifier = Modifier.size(40.dp),
@@ -1417,9 +1366,6 @@ private fun SearchPlaylistCard(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Empty state with breathing pulse animation
-// ──────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun SearchEmptyState(query: String, modifier: Modifier = Modifier) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -1452,7 +1398,7 @@ private fun SearchEmptyState(query: String, modifier: Modifier = Modifier) {
                     .graphicsLayer { scaleX = scale; scaleY = scale },
             )
             Text(
-                text  = "No results for \"$query\"",
+                text  = if (query.isEmpty()) "No content available" else "No results for \"$query\"",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1465,17 +1411,50 @@ private fun SearchEmptyState(query: String, modifier: Modifier = Modifier) {
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Skeleton loading
-// ──────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun SearchSkeleton(modifier: Modifier = Modifier) {
     val shimmerBrush = rememberShimmerBrush()
-    Box(
+    val itemShape = remember { RoundedCornerShape(24.dp) }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = modifier
             .fillMaxWidth()
             .padding(16.dp)
     ) {
-        SearchSkeletonList(modifier = Modifier)
+        repeat(8) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(itemShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(shimmerBrush)
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .height(16.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(shimmerBrush)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.4f)
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(shimmerBrush)
+                    )
+                }
+            }
+        }
     }
 }

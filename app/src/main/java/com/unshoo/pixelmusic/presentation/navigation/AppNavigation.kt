@@ -643,6 +643,25 @@ fun AppNavigation(
                     )
                 }
             }
+
+            composable(
+                route = "youtube_browse/{browseId}?params={params}",
+                arguments = listOf(
+                    navArgument("browseId") { type = NavType.StringType; nullable = true },
+                    navArgument("params") { type = NavType.StringType; nullable = true }
+                ),
+                enterTransition = { enterTransition() },
+                exitTransition = { exitTransition() },
+                popEnterTransition = { popEnterTransition() },
+                popExitTransition = { popExitTransition() },
+            ) {
+                ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
+                    com.unshoo.pixelmusic.presentation.screens.youtube.YouTubeBrowseScreen(
+                        navController = navController,
+                        playerViewModel = playerViewModel
+                    )
+                }
+            }
         }
     }
 }
