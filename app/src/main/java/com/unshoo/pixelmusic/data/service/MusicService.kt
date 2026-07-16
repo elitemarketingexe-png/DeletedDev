@@ -2562,8 +2562,9 @@ class MusicService : MediaLibraryService() {
     private fun getOpenAppPendingIntent(): PendingIntent {
         val intent = Intent(this, MainActivity::class.java).apply {
             setPackage(packageName)
-            action = WearIntents.ACTION_OPEN_PLAYER
+            action = Intent.ACTION_MAIN
             addCategory(Intent.CATEGORY_DEFAULT)
+            addCategory(Intent.CATEGORY_LAUNCHER)
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("ACTION_SHOW_PLAYER", true) // Signal to MainActivity to show the player
         }

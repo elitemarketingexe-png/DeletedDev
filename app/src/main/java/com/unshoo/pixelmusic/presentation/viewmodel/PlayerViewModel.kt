@@ -6334,6 +6334,37 @@ class PlayerViewModel @Inject constructor(
         searchStateHolder.loadMoreSearch()
     }
 
+    /**
+     * Entry point for playing a song tapped in the Search Results screen.
+     *
+     * YouTube search results arrive with [Song.contentUriString] blank (the stream URL is
+     * resolved lazily by [com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper]).
+     * [showAndPlaySong] → [playSongs] → [hydrateSongsIfNeeded] looks up the song in Room
+     * to fill the URI, so the song **must** exist in the DB before playback starts.
+     *
+     * Without this insert step, [hydrateSongsIfNeeded] returns an empty list → playback
+     * fails silently or crashes.  Local songs already have a URI so the upsert is a no-op
+     * for them.
+     */
+    fun playYouTubeSearchSong(song: Song, contextSongs: List<Song>, queueName: String) {
+        viewModelScope.launch {
+            try {
+                // Upsert all YouTube context songs so hydration can resolve their stream URLs.
+                val ytSongs = contextSongs.filter { it.isYouTube || it.contentUriString.isBlank() }
+                if (ytSongs.isNotEmpty()) {
+                    musicRepository.insertYoutubeSongs(ytSongs)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "playYouTubeSearchSong: pre-insert failed, attempting playback anyway")
+            }
+            showAndPlaySong(
+                song = song,
+                contextSongs = contextSongs.ifEmpty { listOf(song) },
+                queueName = queueName
+            )
+        }
+    }
+
     fun deleteSearchHistoryItem(query: String) {
         searchStateHolder.deleteSearchHistoryItem(query)
     }

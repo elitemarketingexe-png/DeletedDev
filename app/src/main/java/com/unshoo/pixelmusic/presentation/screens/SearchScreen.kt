@@ -399,7 +399,6 @@ fun SearchScreen(
                                 query = queryTfv.text,
                                 onQueryChange = {
                                     queryTfv = TextFieldValue(it)
-                                    playerViewModel.updateSearchQuery(it)
                                     playerViewModel.performSearch(it)
                                     isSearchSubmitted = false
                                 },
@@ -789,10 +788,10 @@ fun SearchScreen(
                                 items       = searchResults,
                                 key         = { _, item ->
                                     when (item) {
-                                        is SearchResultItem.SongItem -> "song_${item.song.id}"
-                                        is SearchResultItem.AlbumItem -> "album_${item.album.id}"
-                                        is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
-                                        is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}"
+                                        is SearchResultItem.SongItem -> "song_${currentFilter.name}_${item.song.id}"
+                                        is SearchResultItem.AlbumItem -> "album_${currentFilter.name}_${item.album.id}"
+                                        is SearchResultItem.ArtistItem -> "artist_${currentFilter.name}_${item.artist.id}"
+                                        is SearchResultItem.PlaylistItem -> "playlist_${currentFilter.name}_${item.playlist.id}"
                                     }
                                 },
                                 contentType = { _, item -> item::class.simpleName },
@@ -802,6 +801,7 @@ fun SearchScreen(
                                     playerViewModel = playerViewModel,
                                     navController   = navController,
                                     onMoreClick     = handleSongMoreOptionsClick,
+                                    songsQueue      = searchResults.mapNotNull { if (it is SearchResultItem.SongItem) it.song else null },
                                     modifier        = Modifier.animateItem(),
                                 )
                             }
@@ -1243,6 +1243,7 @@ private fun SearchResultRow(
     playerViewModel : PlayerViewModel,
     navController   : NavHostController,
     onMoreClick     : (Song) -> Unit,
+    songsQueue      : List<Song> = emptyList(),
     modifier        : Modifier = Modifier,
 ) {
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
@@ -1265,7 +1266,8 @@ private fun SearchResultRow(
                     if (isActive) {
                         playerViewModel.playPause()
                     } else {
-                        playerViewModel.playSongs(listOf(song), song, "Search")
+                        val queue = if (songsQueue.isNotEmpty()) songsQueue else listOf(song)
+                        playerViewModel.playYouTubeSearchSong(song, queue, "Search")
                     }
                 },
                 modifier   = modifier

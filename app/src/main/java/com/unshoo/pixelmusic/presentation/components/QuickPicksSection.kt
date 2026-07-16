@@ -305,7 +305,7 @@ fun QuickPicksSection(
                         // Metadata details below card
                         Text(
                             text = song.title,
-                            style = MaterialTheme.typography.titleSmall.copy(
+                            style = MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = GoogleSansRounded,
                                 color = if (song.id == currentSongId) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
@@ -612,9 +612,10 @@ private fun QuickPickPortraitCard(
                 ) {
                     Text(
                         text = song.title,
-                        style = MaterialTheme.typography.titleSmall.copy(
+                        style = MaterialTheme.typography.bodyLarge.copy(
                             color = Color.White,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
                         ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -624,6 +625,7 @@ private fun QuickPickPortraitCard(
                         text = song.artist,
                         style = MaterialTheme.typography.bodySmall.copy(
                             color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         ),
                         maxLines = 1,

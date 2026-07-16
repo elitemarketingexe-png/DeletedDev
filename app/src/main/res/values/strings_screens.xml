@@ -172,6 +172,8 @@
     <string name="search_nothing_found">Nothing found</string>
     <string name="search_try_different_or_filters">Try a different search term or check your filters.</string>
     <string name="search_no_results_found">No results found.</string>
+    <string name="search_no_history">No recent searches</string>
+
 
     <!-- Genre browse -->
     <string name="browse_by_genre">Browse by genre</string>

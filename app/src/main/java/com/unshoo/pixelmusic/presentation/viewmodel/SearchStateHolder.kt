@@ -244,8 +244,30 @@ class SearchStateHolder @Inject constructor(
                     val newItems = result.items.mapNotNull { it.toSearchResultItem(pureYtMusicOnly) }
                     if (newItems.isNotEmpty()) {
                         val currentList = _searchResults.value
-                        val updatedList = (currentList + newItems).toImmutableList()
-                        _searchResults.value = updatedList
+                        // Deduplicate against the existing list so the same item cannot appear
+                        // twice (YouTube continuation pages occasionally repeat first-page results).
+                        // Duplicate IDs in the list cause the LazyColumn key uniqueness check to
+                        // throw IllegalArgumentException (duplicate key crash).
+                        val existingKeys = currentList.mapTo(HashSet()) { item ->
+                            when (item) {
+                                is SearchResultItem.SongItem -> "s_${item.song.id}"
+                                is SearchResultItem.AlbumItem -> "a_${item.album.id}"
+                                is SearchResultItem.ArtistItem -> "ar_${item.artist.id}"
+                                is SearchResultItem.PlaylistItem -> "p_${item.playlist.id}"
+                            }
+                        }
+                        val uniqueNewItems = newItems.filter { item ->
+                            val key = when (item) {
+                                is SearchResultItem.SongItem -> "s_${item.song.id}"
+                                is SearchResultItem.AlbumItem -> "a_${item.album.id}"
+                                is SearchResultItem.ArtistItem -> "ar_${item.artist.id}"
+                                is SearchResultItem.PlaylistItem -> "p_${item.playlist.id}"
+                            }
+                            existingKeys.add(key) // returns false if already present
+                        }
+                        if (uniqueNewItems.isNotEmpty()) {
+                            _searchResults.value = (currentList + uniqueNewItems).toImmutableList()
+                        }
                         lastContinuationToken = result.continuation
                     }
                 }
