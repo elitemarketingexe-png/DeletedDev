@@ -791,6 +791,21 @@ fun ExperimentalSettingsScreen(
                 }
             }
 
+            item(key = "po_token_section") {
+                SettingsSection(
+                    title = "YouTube Integrity (PoToken)",
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.BlurOn,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                ) {
+                    PoTokenSettingItem()
+                }
+            }
+
             item(key = "experimental_bottom_spacer") {
                 Spacer(modifier = Modifier.height(MiniPlayerHeight + 36.dp))
             }
@@ -865,6 +880,52 @@ private fun TriggerModeOptionCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = subtitleColor
             )
+    }
+}
+
+@Composable
+private fun PoTokenSettingItem() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var statusText by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("Checking...") }
+    var isRefreshing by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+    val updateStatus = {
+        scope.launch {
+            statusText = com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.getPoTokenStatus()
         }
     }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        updateStatus()
+    }
+
+    ActionSettingsItem(
+        title = "PoToken Status",
+        subtitle = statusText,
+        icon = {
+            Icon(
+                imageVector = Icons.Rounded.BlurOn,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.secondary
+            )
+        },
+        primaryActionLabel = if (isRefreshing) "Refreshing..." else "Force Refresh Token",
+        onPrimaryAction = {
+            if (!isRefreshing) {
+                isRefreshing = true
+                scope.launch {
+                    try {
+                        com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.forceRefresh(context)
+                        updateStatus()
+                    } catch (e: Exception) {
+                        statusText = "Refresh failed: ${e.message}"
+                    } finally {
+                        isRefreshing = false
+                    }
+                }
+            }
+        },
+        enabled = !isRefreshing
+    )
 }

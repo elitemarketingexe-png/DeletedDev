@@ -226,9 +226,32 @@ object BotGuardTokenGenerator {
         }
     }
 
+    suspend fun getPoTokenStatus(): String {
+        mutex.withLock {
+            if (permanentlyBroken) return "Permanently Broken"
+            val eng = engine ?: return "Idle (No active token)"
+            if (eng.isExpired) return "Expired"
+            return try {
+                val expiryTime = eng.expiry
+                val duration = java.time.Duration.between(java.time.Instant.now(), expiryTime)
+                val hours = duration.toHours()
+                val minutes = duration.toMinutes() % 60
+                "Valid (expires in ${hours}h ${minutes}m)"
+            } catch (_: Exception) {
+                "Valid (Initializing...)"
+            }
+        }
+    }
+
+    suspend fun forceRefresh(ctx: Context) {
+        invalidateAll()
+        val sessionId = java.util.UUID.randomUUID().toString()
+        ensureEngineReady(ctx, sessionId)
+    }
+
     // ── internal ─────────────────────────────────────────────────────
 
-    private suspend fun ensureEngineReady(ctx: Context, sessionId: String): PoTokenResult {
+    internal suspend fun ensureEngineReady(ctx: Context, sessionId: String): PoTokenResult {
         return mintTokenInternal(ctx, "__warmup__", sessionId, forceNewEngine = false)
     }
 
@@ -290,9 +313,10 @@ object BotGuardTokenGenerator {
         private val pendingMints = Collections.synchronizedMap(
             ArrayMap<String, Continuation<String>>()
         )
-        private lateinit var expiry: Instant
+        lateinit var expiry: java.time.Instant
+            private set
 
-        val isExpired: Boolean get() = Instant.now().isAfter(expiry)
+        val isExpired: Boolean get() = java.time.Instant.now().isAfter(expiry)
 
         fun startBootstrap() {
             scope.launch(exceptionHandler) {
@@ -335,7 +359,8 @@ object BotGuardTokenGenerator {
             postToBotGuard(GENERATE_IT_URL, "[ \"$REQUEST_KEY\", \"$botguardResponse\" ]") { body ->
                 try {
                     val (tokenU8, lifetimeSec) = parseIntegrityToken(body)
-                    expiry = Instant.now().plusSeconds(lifetimeSec).minus(10, ChronoUnit.MINUTES)
+                    val capLifetimeSec = minOf(lifetimeSec, 18000L) // Cap at 5 hours max
+                    expiry = java.time.Instant.now().plusSeconds(capLifetimeSec).minus(10, java.time.temporal.ChronoUnit.MINUTES)
 
                     webView.evaluateJavascript(
                         """
