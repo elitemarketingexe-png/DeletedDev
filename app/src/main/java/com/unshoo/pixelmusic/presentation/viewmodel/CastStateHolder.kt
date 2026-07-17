@@ -37,9 +37,13 @@ class CastStateHolder @Inject constructor(
     @Volatile
     private var _sessionManager: SessionManager? = null
 
+    @Volatile
+    private var _initFailed = false
+
     // Cast session manager
     val sessionManager: SessionManager?
         get() {
+            if (_initFailed) return null
             val cached = _sessionManager
             if (cached != null) return cached
             return try {
@@ -48,19 +52,11 @@ class CastStateHolder @Inject constructor(
                     _sessionManager = manager
                     manager
                 } else {
-                    // BUGFIX (freeze after long idle): unbounded runBlocking(Dispatchers.Main)
-                    // called from a background thread. If CastContext.getSharedInstance() ever
-                    // stalls on the main thread (e.g. Play Services needing to reconnect after
-                    // the device has been idle/Doze for a long time), the calling background
-                    // thread would block forever waiting for it, with no way to recover. Bounding
-                    // it means the worst case is "Cast briefly unavailable", not a permanent hang.
-                    // BUGFIX (task-specific timeouts): given more headroom than the DB/network
-                    // timeouts elsewhere - Play Services genuinely can take longer to reconnect
-                    // after a long idle period than a local write or a single HTTP ping should
-                    // ever take, and Cast is a non-essential, opt-in feature, so it's fine to
-                    // wait a bit longer for it rather than giving up prematurely.
+                    // BUGFIX (freeze after long idle): Bounding the wait so the calling
+                    // background thread doesn't hang. We reduce this from 6s to 800ms to keep
+                    // the app completely fluid even if Play Services is slow or struggling.
                     kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Main) {
-                        kotlinx.coroutines.withTimeoutOrNull(6_000L) {
+                        kotlinx.coroutines.withTimeoutOrNull(800L) {
                             val manager = CastContext.getSharedInstance(context).sessionManager
                             _sessionManager = manager
                             manager
@@ -68,7 +64,8 @@ class CastStateHolder @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                Timber.tag(CAST_STATE_TAG).e(e, "Failed to get CastContext/SessionManager")
+                Timber.tag(CAST_STATE_TAG).e(e, "Failed to get CastContext/SessionManager. Disabling Cast provider.")
+                _initFailed = true
                 null
             }
         }
