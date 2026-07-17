@@ -43,9 +43,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.NorthWest
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
@@ -591,18 +591,6 @@ fun SearchScreen(
                                     keyboardController?.hide()
                                 },
                                 onDelete           = { playerViewModel.deleteSearchHistoryItem(histItem.query) },
-                                onFillTextField    = {
-                                    // Fill the text field and keep focus — cursor goes to end naturally.
-                                    val filled = histItem.query
-                                    queryText = filled
-                                    playerViewModel.updateSearchQuery(filled)
-                                    // Keep in typing mode so user can continue refining.
-                                    isSearchSubmitted = false
-                                    coroutineScope.launch {
-                                        delay(50L)
-                                        runCatching { focusRequester.requestFocus() }
-                                    }
-                                },
                                 shape              = segmentedShape(idx, searchHistory.size),
                                 modifier           = Modifier.animateItem(),
                             )
@@ -769,16 +757,6 @@ fun SearchScreen(
                                         keyboardController?.hide()
                                     },
                                     onDelete           = { playerViewModel.deleteSearchHistoryItem(h.query) },
-                                    onFillTextField    = {
-                                        val filled = h.query
-                                        queryText = filled
-                                        playerViewModel.updateSearchQuery(filled)
-                                        isSearchSubmitted = false
-                                        coroutineScope.launch {
-                                            delay(50L)
-                                            runCatching { focusRequester.requestFocus() }
-                                        }
-                                    },
                                     shape    = segmentedShape(idx, filteredHistory.size),
                                     modifier = Modifier.animateItem(),
                                 )
@@ -805,16 +783,6 @@ fun SearchScreen(
                                         playerViewModel.performSearch(sug)
                                         isSearchSubmitted = true
                                         keyboardController?.hide()
-                                    },
-                                    onFillTextField = {
-                                        // Fill text and keep in typing mode — cursor to end.
-                                        queryText = sug
-                                        playerViewModel.updateSearchQuery(sug)
-                                        isSearchSubmitted = false
-                                        coroutineScope.launch {
-                                            delay(50L)
-                                            runCatching { focusRequester.requestFocus() }
-                                        }
                                     },
                                     shape    = segmentedShape(idx, suggestions.size),
                                     modifier = Modifier.animateItem(),
@@ -993,7 +961,6 @@ fun SuggestionItem(
     query: String,
     isOnlineSuggestion: Boolean,
     onClick: () -> Unit,
-    onFillTextField: () -> Unit,
     onDelete: () -> Unit = {},
     shape: Shape = MaterialTheme.shapes.large,
     modifier: Modifier = Modifier,
@@ -1030,18 +997,11 @@ fun SuggestionItem(
             if (!isOnlineSuggestion) {
                 IconButton(onClick = onDelete) {
                     Icon(
-                        imageVector = Icons.Rounded.Close,
+                        imageVector = Icons.Rounded.Delete,
                         contentDescription = "Delete",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-            IconButton(onClick = onFillTextField) {
-                Icon(
-                    imageVector = Icons.Rounded.NorthWest,
-                    contentDescription = "Fill",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
