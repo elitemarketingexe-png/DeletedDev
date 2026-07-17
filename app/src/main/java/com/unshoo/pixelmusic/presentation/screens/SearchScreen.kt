@@ -1,15 +1,10 @@
 package com.unshoo.pixelmusic.presentation.screens
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -20,7 +15,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -76,6 +70,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -105,9 +100,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -265,7 +257,7 @@ private fun YouTubeSegmentIcon() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     paddingValues: PaddingValues,
@@ -287,11 +279,15 @@ fun SearchScreen(
     val isSearching      = playerUiState.isSearching
     val currentFilter    = playerUiState.selectedSearchFilter
 
-    var queryTfv         by remember { mutableStateOf(TextFieldValue(playerViewModel.searchQuery)) }
+    var queryText         by remember { mutableStateOf(playerViewModel.searchQuery) }
     var suggestions      by remember { mutableStateOf<List<String>>(emptyList()) }
     val lazyListState    = rememberLazyListState()
 
-    val query = queryTfv.text.trim()
+    // Track if user is in "submitted" mode (tapped search / history / suggestion).
+    // Drives whether to show suggestions/history or the results list.
+    var isSearchSubmitted by remember { mutableStateOf(queryText.isNotBlank()) }
+
+    val query = queryText.trim()
 
     val discoveryViewModel: SearchDiscoveryViewModel = hiltViewModel()
     val discoveryState by discoveryViewModel.state.collectAsStateWithLifecycle()
@@ -306,17 +302,39 @@ fun SearchScreen(
     var showSongInfoBottomSheet by remember { mutableStateOf(false) }
     var playlistSheetSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
 
-    var isSearchSubmitted by remember { mutableStateOf(false) }
+    // isSearchSubmitted is now declared above with queryText
 
     val handleSongMoreOptionsClick: (Song) -> Unit = { song ->
         playerViewModel.selectSongForInfo(song)
         showSongInfoBottomSheet = true
     }
 
+    // Only hide keyboard when user has actually scrolled past the first item,
+    // not on micro-oscillations within the first visible item.
     LaunchedEffect(lazyListState) {
-        snapshotFlow { lazyListState.firstVisibleItemScrollOffset }
+        snapshotFlow { lazyListState.firstVisibleItemIndex }
             .drop(1)
-            .collect { keyboardController?.hide() }
+            .collect { index -> if (index > 0) keyboardController?.hide() }
+    }
+
+    // Sync local queryText if the ViewModel clears search state (e.g. programmatic clear).
+    // This also handles: coming back to the tab after DisposableEffect cleared it.
+    LaunchedEffect(playerViewModel.searchQuery) {
+        val vmQuery = playerViewModel.searchQuery
+        if (vmQuery != queryText) {
+            queryText = vmQuery
+            suggestions = emptyList()
+            if (vmQuery.isBlank()) isSearchSubmitted = false
+        }
+    }
+
+    // Clear search state when the user navigates away to another tab.
+    // This ensures a fresh search experience when returning to this screen.
+    DisposableEffect(Unit) {
+        onDispose {
+            playerViewModel.updateSearchQuery("")
+            playerViewModel.performSearch("")
+        }
     }
 
     LaunchedEffect(query) {
@@ -339,15 +357,19 @@ fun SearchScreen(
     }
 
     LaunchedEffect(query, searchSource) {
-        if (query.isBlank() || searchSource == SearchSource.LOCAL) {
-            suggestions = emptyList()
+        // Clear suggestions immediately whenever query changes so stale ones never show.
+        suggestions = emptyList()
+        if (query.isBlank() || searchSource == SearchSource.LOCAL || isSearchSubmitted) {
             return@LaunchedEffect
         }
-        delay(150L)
+        delay(180L)
         withContext(Dispatchers.IO) {
             try {
                 val result = YouTube.searchSuggestions(query)
-                suggestions = result.getOrNull()?.queries ?: emptyList()
+                // Only set if user is still in typing mode (not submitted yet).
+                if (!isSearchSubmitted) {
+                    suggestions = result.getOrNull()?.queries ?: emptyList()
+                }
             } catch (e: Exception) {
                 Timber.w(e, "Suggestions fetch failed")
             }
@@ -355,9 +377,12 @@ fun SearchScreen(
     }
 
     val filteredHistory = remember(query, searchHistory) {
-        searchHistory.filter { it.query.startsWith(query, ignoreCase = true) }.take(3)
+        if (query.isBlank()) emptyList()
+        else searchHistory.filter { it.query.startsWith(query, ignoreCase = true) }.take(5)
     }
 
+    // Show history/suggestions when user is actively typing (not yet submitted).
+    // Once submitted (tapped item or search key), switch to results view.
     val showHistoryAndSuggestions = query.isNotEmpty() && !isSearchSubmitted
     val statusBarTopInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
 
@@ -375,7 +400,8 @@ fun SearchScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 24.dp, top = 12.dp, end = 24.dp, bottom = 8.dp),
+                    // Apply actual status bar inset so the bar never sits under the status bar.
+                    .padding(start = 24.dp, top = statusBarTopInset + 4.dp, end = 24.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -396,17 +422,23 @@ fun SearchScreen(
                         inputField = {
                             SearchBarDefaults.InputField(
                                 modifier = Modifier.focusRequester(focusRequester),
-                                query = queryTfv.text,
-                                onQueryChange = {
-                                    queryTfv = TextFieldValue(it)
-                                    playerViewModel.performSearch(it)
+                                query = queryText,
+                                onQueryChange = { newText ->
+                                    queryText = newText
+                                    // Keep ViewModel in sync so tab-switch restore works correctly.
+                                    playerViewModel.updateSearchQuery(newText)
+                                    playerViewModel.performSearch(newText)
+                                    // User is refining → switch back to suggestions mode.
                                     isSearchSubmitted = false
+                                    suggestions = emptyList()
                                 },
                                 onSearch = { q ->
                                     if (q.isNotBlank()) {
+                                        playerViewModel.updateSearchQuery(q)
                                         playerViewModel.onSearchQuerySubmitted(q)
                                         playerViewModel.performSearch(q)
                                         isSearchSubmitted = true
+                                        suggestions = emptyList()
                                     }
                                     keyboardController?.hide()
                                 },
@@ -453,13 +485,20 @@ fun SearchScreen(
                                                  YouTubeSegmentIcon()
                                              }
                                          }
-                                        if (queryTfv.text.isNotEmpty()) {
+                                        if (queryText.isNotEmpty()) {
                                             IconButton(
                                                 onClick = {
-                                                    queryTfv = TextFieldValue("")
+                                                    queryText = ""
                                                     playerViewModel.updateSearchQuery("")
                                                     playerViewModel.performSearch("")
                                                     isSearchSubmitted = false
+                                                    suggestions = emptyList()
+                                                    // Re-focus so keyboard stays up for new search.
+                                                    coroutineScope.launch {
+                                                        delay(80L)
+                                                        runCatching { focusRequester.requestFocus() }
+                                                        keyboardController?.show()
+                                                    }
                                                 },
                                                 modifier = Modifier
                                                     .size(48.dp)
@@ -539,23 +578,33 @@ fun SearchScreen(
                             contentType = { _, _ -> "history_item" },
                         ) { idx, histItem ->
                             SuggestionItem(
-                                query           = histItem.query,
+                                query              = histItem.query,
                                 isOnlineSuggestion = false,
-                                onClick         = {
-                                    queryTfv = TextFieldValue(histItem.query)
-                                    playerViewModel.updateSearchQuery(histItem.query)
-                                    playerViewModel.onSearchQuerySubmitted(histItem.query)
-                                    playerViewModel.performSearch(histItem.query)
+                                onClick            = {
+                                    val tappedQuery = histItem.query
+                                    queryText = tappedQuery
+                                    suggestions = emptyList()
+                                    playerViewModel.updateSearchQuery(tappedQuery)
+                                    playerViewModel.onSearchQuerySubmitted(tappedQuery)
+                                    playerViewModel.performSearch(tappedQuery)
                                     isSearchSubmitted = true
                                     keyboardController?.hide()
                                 },
-                                onDelete        = { playerViewModel.deleteSearchHistoryItem(histItem.query) },
-                                onFillTextField = {
-                                    queryTfv = TextFieldValue(histItem.query, androidx.compose.ui.text.TextRange(histItem.query.length))
-                                    playerViewModel.updateSearchQuery(histItem.query)
+                                onDelete           = { playerViewModel.deleteSearchHistoryItem(histItem.query) },
+                                onFillTextField    = {
+                                    // Fill the text field and keep focus — cursor goes to end naturally.
+                                    val filled = histItem.query
+                                    queryText = filled
+                                    playerViewModel.updateSearchQuery(filled)
+                                    // Keep in typing mode so user can continue refining.
+                                    isSearchSubmitted = false
+                                    coroutineScope.launch {
+                                        delay(50L)
+                                        runCatching { focusRequester.requestFocus() }
+                                    }
                                 },
-                                shape           = segmentedShape(idx, searchHistory.size),
-                                modifier        = Modifier.animateItem(),
+                                shape              = segmentedShape(idx, searchHistory.size),
+                                modifier           = Modifier.animateItem(),
                             )
                         }
                     }
@@ -710,17 +759,25 @@ fun SearchScreen(
                                     query              = h.query,
                                     isOnlineSuggestion = false,
                                     onClick            = {
-                                        queryTfv = TextFieldValue(h.query)
-                                        playerViewModel.updateSearchQuery(h.query)
-                                        playerViewModel.onSearchQuerySubmitted(h.query)
-                                        playerViewModel.performSearch(h.query)
+                                        val tappedQuery = h.query
+                                        queryText = tappedQuery
+                                        suggestions = emptyList()
+                                        playerViewModel.updateSearchQuery(tappedQuery)
+                                        playerViewModel.onSearchQuerySubmitted(tappedQuery)
+                                        playerViewModel.performSearch(tappedQuery)
                                         isSearchSubmitted = true
                                         keyboardController?.hide()
                                     },
-                                    onDelete        = { playerViewModel.deleteSearchHistoryItem(h.query) },
-                                    onFillTextField = {
-                                        queryTfv = TextFieldValue(h.query, androidx.compose.ui.text.TextRange(h.query.length))
-                                        playerViewModel.updateSearchQuery(h.query)
+                                    onDelete           = { playerViewModel.deleteSearchHistoryItem(h.query) },
+                                    onFillTextField    = {
+                                        val filled = h.query
+                                        queryText = filled
+                                        playerViewModel.updateSearchQuery(filled)
+                                        isSearchSubmitted = false
+                                        coroutineScope.launch {
+                                            delay(50L)
+                                            runCatching { focusRequester.requestFocus() }
+                                        }
                                     },
                                     shape    = segmentedShape(idx, filteredHistory.size),
                                     modifier = Modifier.animateItem(),
@@ -741,7 +798,8 @@ fun SearchScreen(
                                     query              = sug,
                                     isOnlineSuggestion = true,
                                     onClick            = {
-                                        queryTfv = TextFieldValue(sug)
+                                        queryText = sug
+                                        suggestions = emptyList()
                                         playerViewModel.updateSearchQuery(sug)
                                         playerViewModel.onSearchQuerySubmitted(sug)
                                         playerViewModel.performSearch(sug)
@@ -749,8 +807,14 @@ fun SearchScreen(
                                         keyboardController?.hide()
                                     },
                                     onFillTextField = {
-                                        queryTfv = TextFieldValue(sug, androidx.compose.ui.text.TextRange(sug.length))
+                                        // Fill text and keep in typing mode — cursor to end.
+                                        queryText = sug
                                         playerViewModel.updateSearchQuery(sug)
+                                        isSearchSubmitted = false
+                                        coroutineScope.launch {
+                                            delay(50L)
+                                            runCatching { focusRequester.requestFocus() }
+                                        }
                                     },
                                     shape    = segmentedShape(idx, suggestions.size),
                                     modifier = Modifier.animateItem(),
@@ -775,35 +839,48 @@ fun SearchScreen(
                             }
                         }
 
-                        if (isSearching && searchResults.isEmpty()) {
-                            item(key = "skeleton", contentType = "skeleton") {
-                                SearchSkeleton(modifier = Modifier.animateItem())
+                        // Skeleton / empty-state / results section.
+                        //
+                        // KEY FIX: Show skeleton during the 220 ms debounce window immediately
+                        // after submission (isSearchSubmitted=true, isSearching still false,
+                        // searchResults empty). Previously this condition was missed, causing the
+                        // "No results" flash that made history/suggestion taps look broken.
+                        val showSkeleton  = searchResults.isEmpty() && (isSearching || isSearchSubmitted)
+                        val showEmptyState = searchResults.isEmpty() && !isSearching && !isSearchSubmitted && query.isNotBlank()
+
+                        when {
+                            showSkeleton -> {
+                                item(key = "skeleton", contentType = "skeleton") {
+                                    SearchSkeleton(modifier = Modifier.animateItem())
+                                }
                             }
-                        } else if (!isSearching && searchResults.isEmpty() && query.isNotBlank()) {
-                            item(key = "empty", contentType = "empty") {
-                                SearchEmptyState(query = query, modifier = Modifier.animateItem())
+                            showEmptyState -> {
+                                item(key = "empty", contentType = "empty") {
+                                    SearchEmptyState(query = query, modifier = Modifier.animateItem())
+                                }
                             }
-                        } else {
-                            itemsIndexed(
-                                items       = searchResults,
-                                key         = { _, item ->
-                                    when (item) {
-                                        is SearchResultItem.SongItem -> "song_${currentFilter.name}_${item.song.id}"
-                                        is SearchResultItem.AlbumItem -> "album_${currentFilter.name}_${item.album.id}"
-                                        is SearchResultItem.ArtistItem -> "artist_${currentFilter.name}_${item.artist.id}"
-                                        is SearchResultItem.PlaylistItem -> "playlist_${currentFilter.name}_${item.playlist.id}"
-                                    }
-                                },
-                                contentType = { _, item -> item::class.simpleName },
-                            ) { _, item ->
-                                SearchResultRow(
-                                    item            = item,
-                                    playerViewModel = playerViewModel,
-                                    navController   = navController,
-                                    onMoreClick     = handleSongMoreOptionsClick,
-                                    songsQueue      = searchResults.mapNotNull { if (it is SearchResultItem.SongItem) it.song else null },
-                                    modifier        = Modifier.animateItem(),
-                                )
+                            searchResults.isNotEmpty() -> {
+                                itemsIndexed(
+                                    items       = searchResults,
+                                    key         = { _, item ->
+                                        when (item) {
+                                            is SearchResultItem.SongItem     -> "song_${currentFilter.name}_${item.song.id}"
+                                            is SearchResultItem.AlbumItem    -> "album_${currentFilter.name}_${item.album.id}"
+                                            is SearchResultItem.ArtistItem   -> "artist_${currentFilter.name}_${item.artist.id}"
+                                            is SearchResultItem.PlaylistItem -> "playlist_${currentFilter.name}_${item.playlist.id}"
+                                        }
+                                    },
+                                    contentType = { _, item -> item::class.simpleName },
+                                ) { _, item ->
+                                    SearchResultRow(
+                                        item            = item,
+                                        playerViewModel = playerViewModel,
+                                        navController   = navController,
+                                        onMoreClick     = handleSongMoreOptionsClick,
+                                        songsQueue      = searchResults.mapNotNull { if (it is SearchResultItem.SongItem) it.song else null },
+                                        modifier        = Modifier.animateItem(),
+                                    )
+                                }
                             }
                         }
                     }
@@ -1046,12 +1123,18 @@ private fun SearchMoodAndGenresGrid(
                 .fillMaxWidth()
                 .height((MoodAndGenresButtonHeight + 12.dp) * rowCount + 12.dp),
         ) {
+            // LazyVerticalGrid.items key/contentType lambdas only receive the item
+            // (no index parameter), so we track index manually for the palette colour.
             items(
                 items = data.moodAndGenres,
                 key = { item -> "${item.title}:${item.endpoint.browseId}:${item.endpoint.params}" },
                 contentType = { "mood_genres_item" },
             ) { item ->
-                val color = MoodPalette.getOrElse(data.moodAndGenres.indexOf(item) % MoodPalette.size) { 0xFF6650A4L }
+                // O(1) color: indexOf is acceptable here because moodAndGenres is ≤20 items
+                // and the list reference is stable (not recomputed per frame).
+                val color = MoodPalette.getOrElse(
+                    data.moodAndGenres.indexOf(item) % MoodPalette.size
+                ) { 0xFF6650A4L }
                 MoodAndGenresButton(
                     title = item.title,
                     stripeColor = color,
