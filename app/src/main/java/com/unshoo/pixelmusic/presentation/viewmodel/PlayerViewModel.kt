@@ -2325,31 +2325,8 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun checkAndReconnectMediaController() {
-        val currentController = mediaController
-        if (currentController == null || !currentController.isConnected) {
-            Log.i("PlayerViewModel", "MediaController is null or disconnected. Triggering reconnect.")
-            connectMediaController()
-            return
-        }
-
-        // BUGFIX (Full Player freezes after long background idle, notification stays fine):
-        // MediaController.isConnected staying true does NOT guarantee the ViewModel-side UI
-        // state (_stablePlayerState, current position, queue) is still in sync with it. The
-        // notification is built server-side directly from MusicService's own player/session, so
-        // it's unaffected by anything on this side - but the Full Player only reflects whatever
-        // was last pushed into these StateFlows. If a Player.Listener callback was ever missed,
-        // or a downstream distinctUntilChanged() suppressed an update while the screen wasn't
-        // being actively collected, the Full Player is left showing a stale snapshot with no
-        // trigger to correct itself, even though the controller is technically fine. Rather than
-        // relying purely on passive listener callbacks to eventually catch up,
-        // setupMediaControllerListeners() re-derives every piece of Full Player state directly
-        // from the live controller and is safe to call again on an already-connected controller
-        // (it removes/re-adds its own listener and every value it sets is freshly read here, not
-        // incrementally patched) - so forcing it on every foreground return guarantees the Full
-        // Player always reflects the actual MediaSession the moment the user looks at it again.
-        Log.d("PlayerViewModel", "MediaController still connected; forcing a full state resync for Full Player")
-        setupMediaControllerListeners()
-        syncCurrentPlayerState(currentController)
+        Log.i("PlayerViewModel", "Reconnecting MediaController on start to prevent stale binder state.")
+        connectMediaController()
     }
 
     private fun syncCurrentPlayerState(playerCtrl: MediaController) {

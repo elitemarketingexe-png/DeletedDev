@@ -131,13 +131,25 @@ import com.unshoo.pixelmusic.utils.formatSongCount
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import com.unshoo.pixelmusic.data.model.SearchHistoryItem
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import timber.log.Timber
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
 import unshoo.ianshulyadav.pixelmusic.innertube.models.BrowseEndpoint
+
+private data class SearchUiSlice(
+    val searchResults: ImmutableList<SearchResultItem> = persistentListOf(),
+    val searchHistory: ImmutableList<SearchHistoryItem> = persistentListOf(),
+    val isSearching: Boolean = false,
+    val selectedSearchFilter: SearchFilterType = SearchFilterType.ALL
+)
 import unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem
 import unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumItem
 import unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem
@@ -270,14 +282,25 @@ fun SearchScreen(
     val coroutineScope     = rememberCoroutineScope()
     val focusRequester     = remember { FocusRequester() }
 
-    val playerUiState  by playerViewModel.playerUiState.collectAsStateWithLifecycle()
+    // Lightweight slice projection for search screen to prevent recompositions on unrelated player state changes
+    val searchSlice by remember(playerViewModel) {
+        playerViewModel.playerUiState.map { state ->
+            SearchUiSlice(
+                searchResults = state.searchResults,
+                searchHistory = state.searchHistory,
+                isSearching = state.isSearching,
+                selectedSearchFilter = state.selectedSearchFilter
+            )
+        }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = SearchUiSlice())
+
     val searchSource   by playerViewModel.searchSource.collectAsStateWithLifecycle()
     val playerStableState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
 
-    val searchResults    = playerUiState.searchResults
-    val searchHistory    = playerUiState.searchHistory
-    val isSearching      = playerUiState.isSearching
-    val currentFilter    = playerUiState.selectedSearchFilter
+    val searchResults    = searchSlice.searchResults
+    val searchHistory    = searchSlice.searchHistory
+    val isSearching      = searchSlice.isSearching
+    val currentFilter    = searchSlice.selectedSearchFilter
 
     var queryText         by remember { mutableStateOf(playerViewModel.searchQuery) }
     var suggestions      by remember { mutableStateOf<List<String>>(emptyList()) }

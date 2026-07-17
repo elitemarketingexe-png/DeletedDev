@@ -961,7 +961,7 @@ class DualPlayerEngine @Inject constructor(
                         hasStartedThisItem = false
                     }
                 })
-            setAudioAttributes(audioAttributes, false)
+            setAudioAttributes(audioAttributes, true)
             applyAudioOffload(this)
             setHandleAudioBecomingNoisy(true)
             setWakeMode(C.WAKE_MODE_LOCAL)

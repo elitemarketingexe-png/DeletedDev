@@ -91,7 +91,7 @@ class DeckController(
         return ExoPlayer.Builder(context, renderersFactory)
             .build()
             .apply {
-                setAudioAttributes(audioAttributes, false)
+                setAudioAttributes(audioAttributes, true)
                 val offloadDisabledPrefs = TrackSelectionParameters.AudioOffloadPreferences.Builder()
                     .setAudioOffloadMode(
                         TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED
