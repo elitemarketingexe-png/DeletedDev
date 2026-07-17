@@ -841,11 +841,10 @@ class DualPlayerEngine @Inject constructor(
                     }
 
                     activePlaybackResolvedUris[originalUri]?.let { locked ->
-                        if (isResolvedUriFresh(originalUri, locked)) {
-                            return dataSpec.buildUpon().setUri(locked).build()
-                        } else {
-                            activePlaybackResolvedUris.remove(originalUri)
-                        }
+                        // During active playback, we must reuse the same resolved URL consistently
+                        // to prevent ExoPlayer from restarting/resetting playback from position 0
+                        // due to mid-stream URI changes.
+                        return dataSpec.buildUpon().setUri(locked).build()
                     }
 
                     val resolved = resolvedUriCache.get(originalUri)
