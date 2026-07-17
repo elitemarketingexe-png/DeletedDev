@@ -15,6 +15,7 @@ import dagger.hilt.components.SingletonComponent
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 import okhttp3.OkHttpClient
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
@@ -29,6 +30,9 @@ class SongDownloadWorker(
     @InstallIn(SingletonComponent::class)
     interface WorkerEntryPoint {
         fun musicDao(): com.unshoo.pixelmusic.data.database.MusicDao
+        fun lyricsDao(): com.unshoo.pixelmusic.data.database.LyricsDao
+        fun lyricsRepository(): com.unshoo.pixelmusic.data.repository.LyricsRepository
+        fun songMetadataEditor(): com.unshoo.pixelmusic.data.media.SongMetadataEditor
     }
 
     private val playlistRepository = AppDatabase.getInstance(appContext).playlistRepository()
@@ -117,6 +121,88 @@ class SongDownloadWorker(
                             position = 0
                         )
                     )
+
+                    // METADATA & LYRICS EMBEDDING
+                    try {
+                        val entryPoint = EntryPointAccessors.fromApplication(
+                            appContext,
+                            WorkerEntryPoint::class.java
+                        )
+                        val lyricsDao = entryPoint.lyricsDao()
+                        val lyricsRepository = entryPoint.lyricsRepository()
+                        val songMetadataEditor = entryPoint.songMetadataEditor()
+
+                        val dbSong = musicDao.getSongById(mainId).first()
+                        if (dbSong != null) {
+                            val songModel = com.unshoo.pixelmusic.data.model.Song(
+                                id = dbSong.id.toString(),
+                                title = dbSong.title,
+                                artistName = dbSong.artistName,
+                                albumName = dbSong.albumName ?: "YouTube Music",
+                                duration = dbSong.duration,
+                                filePath = audioPath,
+                                albumArtUri = dbSong.albumArtUriString
+                            )
+
+                            // Fetch lyrics from remote
+                            val lyricsObj = try {
+                                lyricsRepository.getLyrics(
+                                    song = songModel,
+                                    sourcePreference = com.unshoo.pixelmusic.data.model.LyricsSourcePreference.REMOTE,
+                                    forceRefresh = true
+                                )
+                            } catch (e: Exception) {
+                                null
+                            }
+
+                            val lyricsText = if (lyricsObj != null) {
+                                com.unshoo.pixelmusic.utils.LyricsUtils.toLrcString(lyricsObj)
+                            } else {
+                                ""
+                            }
+
+                            val isSynced = lyricsObj?.synced?.isNotEmpty() == true
+
+                            // Cache in local DB
+                            if (lyricsText.isNotBlank()) {
+                                lyricsDao.insert(
+                                    com.unshoo.pixelmusic.data.database.LyricsEntity(
+                                        songId = mainId,
+                                        content = lyricsText,
+                                        isSynced = isSynced,
+                                        source = "remote"
+                                    )
+                                )
+                            }
+
+                            // Embed Album Art & Lyrics to file
+                            val coverArtUpdate = if (thumbnailPath != null && thumbnailPath.exists()) {
+                                val bytes = thumbnailPath.readBytes()
+                                com.unshoo.pixelmusic.data.media.CoverArtUpdate(
+                                    bytes = bytes,
+                                    mimeType = "image/jpeg",
+                                    width = 0,
+                                    height = 0
+                                )
+                            } else {
+                                null
+                            }
+
+                            songMetadataEditor.editSongMetadata(
+                                songId = mainId,
+                                newTitle = dbSong.title,
+                                newArtist = dbSong.artistName,
+                                newAlbum = dbSong.albumName ?: "YouTube Music",
+                                newGenre = dbSong.genre ?: "YouTube Music",
+                                newLyrics = lyricsText,
+                                newTrackNumber = 0,
+                                newDiscNumber = null,
+                                coverArtUpdate = coverArtUpdate
+                            )
+                        }
+                    } catch (e: Exception) {
+                        UmihiHelper.printe("Error writing metadata for ${song.title}", exception = e)
+                    }
                 }
 
                 UmihiNotificationManager.showSongDownloadSuccess(appContext, song)

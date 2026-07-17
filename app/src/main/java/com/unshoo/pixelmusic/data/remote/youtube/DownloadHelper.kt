@@ -56,7 +56,7 @@ object DownloadHelper {
     suspend fun downloadAudio(
         context: Context,
         song: Song,
-        connections: Int = 8
+        connections: Int = 4
     ): String? = withContext(Dispatchers.IO) {
 
         val repo = DatastoreRepository(context)
@@ -112,38 +112,40 @@ object DownloadHelper {
         val tempFiles = mutableListOf<File>()
 
         try {
-            (0 until connections).map { i ->
-                async {
-                    val start = i * chunkSize
-                    val end = if (i == connections - 1) total - 1 else (start + chunkSize - 1)
-                    val temp = File(audioDir, "${song.youtubeId}.part$i")
+            kotlinx.coroutines.supervisorScope {
+                (0 until connections).map { i ->
+                    async {
+                        val start = i * chunkSize
+                        val end = if (i == connections - 1) total - 1 else (start + chunkSize - 1)
+                        val temp = File(audioDir, "${song.youtubeId}.part$i")
 
-                    try {
-                        val req = Request.Builder()
-                            .url(url)
-                            .header("Range", "bytes=$start-$end")
-                            .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
-                            .build()
+                        try {
+                            val req = Request.Builder()
+                                .url(url)
+                                .header("Range", "bytes=$start-$end")
+                                .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
+                                .build()
 
-                        client.newCall(req).execute().use { response ->
-                            if (!response.isSuccessful) {
-                                throw IOException("Failed to download chunk $i: ${response.code}")
+                            client.newCall(req).execute().use { response ->
+                                if (!response.isSuccessful) {
+                                    throw IOException("Failed to download chunk $i: ${response.code}")
+                                }
+
+                                response.body?.byteStream()?.use { input ->
+                                    FileOutputStream(temp).use { output ->
+                                        input.copyTo(output)
+                                    }
+                                } ?: throw IOException("Empty response body for chunk $i")
                             }
 
-                            response.body?.byteStream()?.use { input ->
-                                FileOutputStream(temp).use { output ->
-                                    input.copyTo(output)
-                                }
-                            } ?: throw IOException("Empty response body for chunk $i")
+                            temp
+                        } catch (e: Exception) {
+                            temp.delete()
+                            throw e
                         }
-
-                        temp
-                    } catch (e: Exception) {
-                        temp.delete()
-                        throw e
                     }
-                }
-            }.awaitAll().also { tempFiles.addAll(it) }
+                }.awaitAll().also { tempFiles.addAll(it) }
+            }
 
             if (customPath.isNotBlank()) {
                 val treeUri = Uri.parse(customPath)

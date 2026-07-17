@@ -27,7 +27,7 @@ object Constants {
     }
 
     object Downloads {
-        const val MAX_CONCURRENT_DOWNLOADS = 5
+        const val MAX_CONCURRENT_DOWNLOADS = 3
         const val DIRECTORY = "downloads"
         const val THUMBNAILS_FOLDER = "thumbnails_downloads"
         const val AUDIO_FILES_FOLDER = "audio_files_downloads"
