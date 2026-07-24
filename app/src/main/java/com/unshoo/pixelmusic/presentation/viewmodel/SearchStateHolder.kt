@@ -273,16 +273,64 @@ class SearchStateHolder @Inject constructor(
             // endpoint, which already returns a single, YouTube-ranked "Top results"
             // shelf followed by category shelves. This does the same thing here, so
             // the All tab's ordering matches what YouTube Music itself would show.
-            SearchFilterType.ALL -> {
-                val summaryResult = YouTube.searchSummary(query).getOrNull()
-                lastContinuationToken = null
+            SearchFilterType.ALL -> coroutineScope {
+                val songsDeferred = async { YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull() }
+                val artistsDeferred = async { YouTube.search(query, YouTube.SearchFilter.FILTER_ARTIST).getOrNull() }
+                val albumsDeferred = async { YouTube.search(query, YouTube.SearchFilter.FILTER_ALBUM).getOrNull() }
 
-                val filtered = summaryResult?.filterVideo(pureYtMusicOnly)
-                filtered?.summaries?.forEach { summary ->
-                    summary.items.forEach { ytItem ->
-                        ytItem.toSearchResultItem(pureYtMusicOnly)?.let { items.add(it) }
+                val songsResult = songsDeferred.await()
+                val artistsResult = artistsDeferred.await()
+                val albumsResult = albumsDeferred.await()
+
+                lastContinuationToken = songsResult?.continuation
+
+                val popularSongs = mutableListOf<SearchResultItem>()
+                val mixedItems = mutableListOf<SearchResultItem>()
+
+                val songsList = songsResult?.items?.filterIsInstance<SongItem>()?.filterVideo(pureYtMusicOnly).orEmpty()
+                val artistsList = artistsResult?.items?.filterIsInstance<ArtistItem>().orEmpty()
+                val albumsList = albumsResult?.items?.filterIsInstance<AlbumItem>().orEmpty()
+
+                // Separate ATV tracks (Popular Songs)
+                val (atvSongs, nonAtvSongs) = songsList.partition {
+                    val musicVideoType = it.endpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType
+                    musicVideoType == "MUSIC_VIDEO_TYPE_ATV"
+                }
+
+                atvSongs.forEach { popularSongs.add(SearchResultItem.SongItem(it.toNativeSong())) }
+
+                // Mix remaining categories in interleaving order (1 Artist, 1 Album, 1 non-ATV Song)
+                val artistIterator = artistsList.iterator()
+                val albumIterator = albumsList.iterator()
+                val songIterator = nonAtvSongs.iterator()
+
+                while (artistIterator.hasNext() || albumIterator.hasNext() || songIterator.hasNext()) {
+                    if (artistIterator.hasNext()) {
+                        val artist = artistIterator.next()
+                        mixedItems.add(SearchResultItem.ArtistItem(
+                            Artist(id = ytArtistId(artist.title), name = artist.title, songCount = 0, imageUrl = artist.thumbnail, channelId = artist.id)
+                        ))
+                    }
+                    if (albumIterator.hasNext()) {
+                        val album = albumIterator.next()
+                        val longId = album.browseId.hashCode().toLong()
+                        albumIdMap[longId] = album.browseId
+                        AlbumIdMapper.putMapping(appContext, longId, album.browseId)
+                        mixedItems.add(SearchResultItem.AlbumItem(
+                            Album(id = longId, title = album.title,
+                                artist = album.artists?.joinToString { it.name }.orEmpty(),
+                                year = album.year ?: 0, dateAdded = System.currentTimeMillis(),
+                                albumArtUriString = album.thumbnail, songCount = 0)
+                        ))
+                    }
+                    if (songIterator.hasNext()) {
+                        val song = songIterator.next()
+                        mixedItems.add(SearchResultItem.SongItem(song.toNativeSong()))
                     }
                 }
+
+                items.addAll(popularSongs)
+                items.addAll(mixedItems)
             }
             SearchFilterType.SONGS -> {
                 val result = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
