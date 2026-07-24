@@ -940,14 +940,22 @@ object YoutubeHelper {
         return url
     }
 
-    /** Invalidate a cached stream URL (e.g. after the remote URL expires). */
+    /** Invalidate ALL cached stream URLs for a video ID (including quality-specific _q* keys). */
     fun invalidateStreamCache(youtubeId: String) {
+        // Always remove the known aliases first.
         streamUrlLruCache.remove("${youtubeId}_low")
         streamUrlLruCache.remove("${youtubeId}_high")
         streamMimeTypeLruCache.remove("${youtubeId}_low")
         streamMimeTypeLruCache.remove("${youtubeId}_high")
         streamBitrateLruCache.remove("${youtubeId}_low")
         streamBitrateLruCache.remove("${youtubeId}_high")
+        // Also sweep quality-specific _q* keys so stale expired URLs can't be replayed.
+        val prefix = "${youtubeId}_"
+        streamUrlLruCache.snapshot().keys.filter { it.startsWith(prefix) }.forEach {
+            streamUrlLruCache.remove(it)
+            streamMimeTypeLruCache.remove(it)
+            streamBitrateLruCache.remove(it)
+        }
     }
 
     private fun extractDuration(songContent: JsonObject): String {
@@ -1327,7 +1335,11 @@ object YoutubeHelper {
                         val isBot = "bot" in reason.lowercase(Locale.US) || "unusual traffic" in reason.lowercase(Locale.US) || "automated" in reason.lowercase(Locale.US)
 
                         if (status != "OK" && isBot && !didRefreshVisitorData) {
-                            UmihiHelper.printd("Bot detection triggered. Refreshing visitorData...")
+                            UmihiHelper.printd("Bot detection triggered. Refreshing visitorData and invalidating PoToken...")
+                            // Invalidate the stale BotGuard session so the next mint gets a fresh token.
+                            try {
+                                com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.invalidateAll()
+                            } catch (_: Exception) {}
                             val refreshedVisitorData = YouTube.visitorData().getOrNull()
                             if (!refreshedVisitorData.isNullOrBlank()) {
                                 YouTube.visitorData = refreshedVisitorData

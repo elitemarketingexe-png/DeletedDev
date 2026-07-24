@@ -1559,18 +1559,14 @@ class MusicService : MediaLibraryService() {
                 engine.invalidateResolvedUri(currentUri)
                 if (currentUri.startsWith("youtube://")) {
                     val videoId = currentUri.removePrefix("youtube://")
-                    listOf(
-                        "${videoId}_low",
-                        "${videoId}_high",
-                    ).forEach { key ->
-                        com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.remove(key)
+                    // Use invalidateStreamCache which sweeps _low, _high, AND all _q* entries.
+                    com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.invalidateStreamCache(videoId)
+                    // Also purge the per-video PoToken so the next resolve gets a fresh mint.
+                    serviceScope.launch {
+                        try {
+                            com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.invalidatePlayerToken(videoId)
+                        } catch (_: Exception) {}
                     }
-                    // Also clear quality-specific keys present in the snapshot.
-                    com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache
-                        .snapshot()
-                        .keys
-                        .filter { it.startsWith("${videoId}_") }
-                        .forEach { com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamUrlLruCache.remove(it) }
                 }
             }
 
@@ -1599,10 +1595,13 @@ class MusicService : MediaLibraryService() {
                 // the user to force-stop the app from Recents.
                 serviceScope.launch {
                     try {
-                        if (streamRecoveryAttempts >= 2) {
+                        // Allow 3 retry attempts before giving up on the song.
+                        // Bot-check recoveries need one extra cycle after the token is reminted.
+                        if (streamRecoveryAttempts >= 3) {
                             Timber.tag(TAG).w("Stream recovery exhausted for %s; skipping", mediaId)
                             withContext(Dispatchers.Main.immediate) {
                                 streamRecoveryAttempts = 0
+                                lastStreamRecoveryMediaId = null
                                 if (player.hasNextMediaItem()) {
                                     player.seekToNextMediaItem()
                                     player.prepare()
@@ -1634,6 +1633,7 @@ class MusicService : MediaLibraryService() {
                         withContext(Dispatchers.Main.immediate) {
                             try {
                                 streamRecoveryAttempts = 0
+                                lastStreamRecoveryMediaId = null
                                 if (player.hasNextMediaItem()) {
                                     player.seekToNextMediaItem()
                                     player.prepare()
@@ -1653,6 +1653,9 @@ class MusicService : MediaLibraryService() {
         val player = mediaSession?.player ?: engine.masterPlayer
         syncLocalListeningStatsFromPlayer(player, forceNewSession = true)
         grantArtworkPermissionsForCurrentSong(mediaItem)
+        // Reset recovery counters — a successful transition clears any per-song blacklist.
+        streamRecoveryAttempts = 0
+        lastStreamRecoveryMediaId = null
         
         val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) {
             player.duration
