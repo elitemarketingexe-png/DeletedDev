@@ -50,8 +50,8 @@ class SearchStateHolder @Inject constructor(
     private val musicRepository: MusicRepository
 ) {
     companion object {
-        const val SEARCH_DEBOUNCE_MS = 220L
-        const val SEARCH_CACHE_SIZE = 100
+        const val SEARCH_DEBOUNCE_MS = 150L
+        const val SEARCH_CACHE_SIZE = 150
         val albumIdMap = java.util.concurrent.ConcurrentHashMap<Long, String>()
     }
 
@@ -85,17 +85,24 @@ class SearchStateHolder @Inject constructor(
     private var activeFilterType: SearchFilterType = SearchFilterType.ALL
     private var isLoadingMore = false
 
-    private fun getLongestPrefixMatch(query: String): ImmutableList<SearchResultItem>? {
+    private fun cacheKey(query: String, filter: SearchFilterType): String = "${filter.name}:${query.lowercase().trim()}"
+
+    private fun getLongestPrefixMatch(query: String, filter: SearchFilterType): ImmutableList<SearchResultItem>? {
         if (query.isBlank()) return null
+        val targetKeyPrefix = "${filter.name}:"
         var longestPrefix: String? = null
         var longestCached: ImmutableList<SearchResultItem>? = null
         
+        val normalizedQuery = query.lowercase().trim()
         val snapshot = searchResultCache.snapshot()
         for (key in snapshot.keys) {
-            if (query.startsWith(key, ignoreCase = true)) {
-                if (longestPrefix == null || key.length > longestPrefix.length) {
-                    longestPrefix = key
-                    longestCached = snapshot[key]
+            if (key.startsWith(targetKeyPrefix)) {
+                val cachedQuery = key.substringAfter(targetKeyPrefix)
+                if (normalizedQuery.startsWith(cachedQuery)) {
+                    if (longestPrefix == null || cachedQuery.length > longestPrefix.length) {
+                        longestPrefix = cachedQuery
+                        longestCached = snapshot[key]
+                    }
                 }
             }
         }
@@ -115,6 +122,7 @@ class SearchStateHolder @Inject constructor(
                 .debounce(SEARCH_DEBOUNCE_MS)
                 .collectLatest { request ->
                     val query = request.query
+                    val currentFilter = _selectedSearchFilter.value
                     if (query.isBlank()) {
                         _searchResults.value = persistentListOf()
                         _isSearching.value = false
@@ -122,10 +130,17 @@ class SearchStateHolder @Inject constructor(
                     }
 
                     _isSearching.value = true
+                    val key = cacheKey(query, currentFilter)
+                    val cached = searchResultCache.get(key) ?: getLongestPrefixMatch(query, currentFilter)
+                    if (cached != null) {
+                        _searchResults.value = cached
+                        _isSearching.value = false
+                    }
+
                     val source = userPreferencesRepository.searchSourceFlow.first()
                     if (source == SearchSource.LOCAL) {
                         try {
-                            val results = musicRepository.searchAllOnce(query, _selectedSearchFilter.value)
+                            val results = musicRepository.searchAllOnce(query, currentFilter)
                             if (request.requestId == latestSearchRequestId.get()) {
                                 _searchResults.value = results.toImmutableList()
                                 _isSearching.value = false
@@ -140,17 +155,11 @@ class SearchStateHolder @Inject constructor(
                         return@collectLatest
                     }
 
-                    val cached = searchResultCache.get(query) ?: getLongestPrefixMatch(query)
-                    if (cached != null) {
-                        _searchResults.value = cached
-                        _isSearching.value = false
-                    }
-
                     try {
                         val results = withContext(Dispatchers.IO) {
-                            val remote = searchYouTube(query, _selectedSearchFilter.value)
+                            val remote = searchYouTube(query, currentFilter)
                             if (remote.isEmpty()) {
-                                musicRepository.searchAllOnce(query, _selectedSearchFilter.value)
+                                musicRepository.searchAllOnce(query, currentFilter)
                             } else {
                                 remote
                             }
@@ -159,7 +168,7 @@ class SearchStateHolder @Inject constructor(
                             val immutable = results.toImmutableList()
                             _searchResults.value = immutable
                             _isSearching.value = false
-                            searchResultCache.put(query, immutable)
+                            searchResultCache.put(key, immutable)
 
                             scope?.launch(Dispatchers.IO) {
                                 try {
