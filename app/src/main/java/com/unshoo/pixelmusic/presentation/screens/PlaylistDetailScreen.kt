@@ -919,6 +919,7 @@ fun PlaylistDetailScreen(
 
     if (showAddSongsSheet && currentPlaylist != null && !isFolderPlaylist) {
         SongPickerBottomSheet(
+            playerViewModel = playerViewModel,
             initiallySelectedSongIds = currentPlaylist.songIds.toSet(),
             onDismiss = { showAddSongsSheet = false },
             onConfirm = { selectedIds ->
@@ -1108,6 +1109,7 @@ fun PlaylistDetailScreen(
         if (currentSong != null) {
             SongInfoBottomSheet(
                 song = currentSong,
+                playerViewModel = playerViewModel,
                 isFavorite = isFavorite,
                 onToggleFavorite = {
                     scope.launch {

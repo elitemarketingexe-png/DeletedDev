@@ -204,6 +204,8 @@ class MusicService : MediaLibraryService() {
     private var castSessionManagerListener: SessionManagerListener<CastSession>? = null
     private var castRemoteClientCallback: RemoteMediaClient.Callback? = null
     private var observedCastSession: CastSession? = null
+    private var observedCastRemoteClient: RemoteMediaClient? = null
+    private var castRemoteAttachRetryJob: Job? = null
     private var activeCastStatsOccurrenceId: String? = null
     private var playbackSnapshotPersistJob: Job? = null
     private var telemetryJob: Job? = null
@@ -258,6 +260,8 @@ class MusicService : MediaLibraryService() {
         private const val WIDGET_ART_FAILURE_RETRY_MS = 30_000L
         private const val WIDGET_QUEUE_PREVIEW_LIMIT = 4
         private const val HEADSET_RECONNECT_RESUME_WINDOW_MS = 15_000L
+        private const val CAST_REMOTE_CLIENT_ATTACH_RETRY_MS = 250L
+        private const val CAST_REMOTE_CLIENT_ATTACH_RETRIES = 40
 
         fun markPendingMediaButtonForegroundStart() {
             pendingMediaButtonForegroundStarts.incrementAndGet()
@@ -303,6 +307,14 @@ class MusicService : MediaLibraryService() {
 
     private fun publishMediaSessionPlayer(player: Player, logMessage: String) {
         val session = mediaSession ?: return
+        // While casting, the MediaSession must remain attached to the remote-state adapter.
+        // Crossfade/master-player callbacks can still arrive from the local engine; allowing one
+        // to replace the adapter makes Android Auto, lock-screen controls and the notification
+        // suddenly control a paused local player while the Chromecast keeps playing.
+        if (observedCastSession != null && player !is CastMediaSessionPlayer) {
+            Timber.tag(TAG).d("Ignoring local MediaSession player swap while casting: %s", logMessage)
+            return
+        }
         val oldPlayer = session.player
         if (oldPlayer !== player) {
             oldPlayer.removeListener(playerListener)
@@ -802,8 +814,19 @@ class MusicService : MediaLibraryService() {
                 query: String,
                 params: MediaLibraryService.LibraryParams?
             ): ListenableFuture<LibraryResult<Void>> {
-                // Signal that search is supported; results delivered via onGetSearchResult
-                return Futures.immediateFuture(LibraryResult.ofVoid())
+                // Media3's search contract is asynchronous: Android Auto waits for this
+                // notification before requesting onGetSearchResult. Returning success without
+                // notifying leaves voice/keyboard search permanently spinning on many hosts.
+                return serviceScope.future {
+                    try {
+                        val resultCount = autoMediaBrowseTree.search(query).size
+                        session.notifySearchResultChanged(browser, query, resultCount, params)
+                        LibraryResult.ofVoid()
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "onSearch failed for query=$query")
+                        LibraryResult.ofError(SessionError.ERROR_UNKNOWN)
+                    }
+                }
             }
 
             override fun onGetSearchResult(
@@ -1928,15 +1951,25 @@ class MusicService : MediaLibraryService() {
     }
 
     private fun attachCastRemoteClient(session: CastSession?) {
-        if (observedCastSession === session) return
+        val newClient = session?.remoteMediaClient
+        if (
+            observedCastSession === session &&
+            observedCastRemoteClient === newClient &&
+            (session == null || newClient != null)
+        ) return
 
-        observedCastSession?.remoteMediaClient?.let { oldClient ->
+        observedCastRemoteClient?.let { oldClient ->
             castRemoteClientCallback?.let { callback ->
                 runCatching { oldClient.unregisterCallback(callback) }
             }
         }
 
         observedCastSession = session
+        observedCastRemoteClient = newClient
+        if (newClient != null || session == null) {
+            castRemoteAttachRetryJob?.cancel()
+            castRemoteAttachRetryJob = null
+        }
         if (session != null) {
             val castPlayer = CastMediaSessionPlayer(engine.masterPlayer)
             publishMediaSessionPlayer(castPlayer, "Casting active")
@@ -1950,6 +1983,22 @@ class MusicService : MediaLibraryService() {
             } ?: run {
                 activeCastStatsOccurrenceId = null
                 listeningStatsTracker.onPlaybackStopped()
+                // Some Cast SDK versions publish onSessionStarted just before
+                // remoteMediaClient is attached. Retry for a bounded period instead of leaving
+                // the session permanently connected but uncontrollable.
+                if (castRemoteAttachRetryJob?.isActive != true) {
+                    castRemoteAttachRetryJob = serviceScope.launch {
+                        repeat(CAST_REMOTE_CLIENT_ATTACH_RETRIES) {
+                            delay(CAST_REMOTE_CLIENT_ATTACH_RETRY_MS)
+                            if (observedCastSession !== session) return@launch
+                            if (session.remoteMediaClient != null) {
+                                attachCastRemoteClient(session)
+                                return@launch
+                            }
+                        }
+                        Timber.tag(TAG).w("Cast remote client did not attach before retry timeout")
+                    }
+                }
             }
         } else {
             publishMediaSessionPlayer(engine.masterPlayer, "Casting stopped")
@@ -1977,12 +2026,13 @@ class MusicService : MediaLibraryService() {
         private var lastNotifiedIsPlaying: Boolean? = null
 
         override fun addListener(listener: Player.Listener) {
-            super.addListener(listener)
-            listeners.add(listener)
+            // Do not register on the local delegate. Local ExoPlayer events are unrelated while
+            // Cast is active and previously leaked through ForwardingPlayer, overwriting remote
+            // metadata/state in MediaSession and causing visible UI jumps.
+            listeners.addIfAbsent(listener)
         }
 
         override fun removeListener(listener: Player.Listener) {
-            super.removeListener(listener)
             listeners.remove(listener)
         }
 
@@ -2140,6 +2190,32 @@ class MusicService : MediaLibraryService() {
             observedCastSession?.remoteMediaClient?.play()
         }
 
+        override fun setPlayWhenReady(playWhenReady: Boolean) {
+            if (playWhenReady) play() else pause()
+        }
+
+        override fun setRepeatMode(repeatMode: Int) {
+            val castRepeatMode = when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> MediaStatus.REPEAT_MODE_REPEAT_SINGLE
+                Player.REPEAT_MODE_ALL -> MediaStatus.REPEAT_MODE_REPEAT_ALL
+                else -> MediaStatus.REPEAT_MODE_REPEAT_OFF
+            }
+            observedCastSession?.remoteMediaClient?.queueSetRepeatMode(castRepeatMode, null)
+        }
+
+        override fun setShuffleModeEnabled(shuffleModeEnabled: Boolean) {
+            val castRepeatMode = if (shuffleModeEnabled) {
+                MediaStatus.REPEAT_MODE_REPEAT_ALL_AND_SHUFFLE
+            } else {
+                when (getRepeatMode()) {
+                    Player.REPEAT_MODE_ONE -> MediaStatus.REPEAT_MODE_REPEAT_SINGLE
+                    Player.REPEAT_MODE_ALL -> MediaStatus.REPEAT_MODE_REPEAT_ALL
+                    else -> MediaStatus.REPEAT_MODE_REPEAT_OFF
+                }
+            }
+            observedCastSession?.remoteMediaClient?.queueSetRepeatMode(castRepeatMode, null)
+        }
+
         override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
             observedCastSession?.remoteMediaClient?.seek(positionMs)
         }
@@ -2162,12 +2238,15 @@ class MusicService : MediaLibraryService() {
     }
 
     private fun stopCastWearSync() {
-        observedCastSession?.remoteMediaClient?.let { remoteClient ->
+        castRemoteAttachRetryJob?.cancel()
+        castRemoteAttachRetryJob = null
+        observedCastRemoteClient?.let { remoteClient ->
             castRemoteClientCallback?.let { callback ->
                 runCatching { remoteClient.unregisterCallback(callback) }
             }
         }
         observedCastSession = null
+        observedCastRemoteClient = null
 
         val listener = castSessionManagerListener
         val manager = castSessionManager

@@ -213,6 +213,7 @@ fun DailyMixScreen(
         }
         SongInfoBottomSheet(
             song = song,
+            playerViewModel = playerViewModel,
             isFavorite = favoriteSongIds.contains(song.id),
             onToggleFavorite = { playerViewModel.toggleFavoriteSpecificSong(song) },
             onDismiss = { showSongInfoSheet = false },

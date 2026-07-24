@@ -149,7 +149,7 @@ private data class SearchUiSlice(
 @Composable
 fun SearchScreen(
     paddingValues: PaddingValues,
-    playerViewModel: PlayerViewModel = hiltViewModel(),
+    playerViewModel: PlayerViewModel,
     playlistViewModel: PlaylistViewModel = hiltViewModel(),
     navController: NavHostController,
     onSearchBarActiveChange: (Boolean) -> Unit = {}
@@ -565,6 +565,7 @@ fun SearchScreen(
         if (currentSong != null) {
             SongInfoBottomSheet(
                 song = currentSong,
+                playerViewModel = playerViewModel,
                 isFavorite = isFavorite,
                 removeFromListTrigger = removeFromListTrigger,
                 onToggleFavorite = {

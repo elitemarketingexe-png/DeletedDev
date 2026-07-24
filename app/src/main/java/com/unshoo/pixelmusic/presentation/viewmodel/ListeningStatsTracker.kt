@@ -25,7 +25,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import timber.log.Timber
@@ -252,6 +251,9 @@ class ListeningStatsTracker @Inject constructor(
         }
 
         persistenceScope.launch(Dispatchers.IO) {
+            // MusicService's YouTubeTelemetryManager is the sole remote history writer. Do not
+            // resolve tracking URLs or create a second timing session merely for local stats.
+            if (!SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY) return@launch
             runCatching {
                 val ytId = resolveYtId(safeSongId)
                 if (ytId != null) {
@@ -571,6 +573,20 @@ class ListeningStatsTracker @Inject constructor(
         val nowEpoch = System.currentTimeMillis()
         accumulateRealtimeListening(session, nowRealtime)
         val listened = session.accumulatedListeningMs.coerceAtLeast(0L)
+        val trackDuration = session.totalDurationMs
+        val completedPlayback = isCompletedPlayback(
+            listenedMs = listened,
+            lastPositionMs = session.lastKnownPositionMs,
+            durationMs = trackDuration
+        )
+        // A completed play contributes at most one track duration.  Previously the wall-clock
+        // accumulator was persisted without a bound, so a stale/paused YouTube or Cast session
+        // could add hours (or days) to one song and inflate every aggregate built from history.
+        val countedDuration = if (completedPlayback) {
+            listened.coerceAtMost(trackDuration)
+        } else {
+            0L
+        }
 
         val songId = session.songId
         val cpn = telemetryCpn
@@ -588,11 +604,11 @@ class ListeningStatsTracker @Inject constructor(
             }
             telemetryCpn = null
         }
-        if (listened >= MIN_SESSION_LISTEN_MS) {
+        if (completedPlayback) {
             val rawEndTimestamp = when {
                 session.isPlaying -> nowEpoch
                 session.lastUpdateEpochMs > 0L -> session.lastUpdateEpochMs
-                else -> session.startedAtEpochMs + listened
+                else -> session.startedAtEpochMs + countedDuration
             }
             val timestamp = rawEndTimestamp
                 .coerceAtLeast(session.startedAtEpochMs.coerceAtLeast(0L))
@@ -610,7 +626,7 @@ class ListeningStatsTracker @Inject constructor(
             }
             persistPlayback(
                 songId = songId,
-                listened = listened,
+                listened = countedDuration,
                 timestamp = timestamp,
                 forceSynchronous = forceSynchronousPersistence,
                 title = session.title,
@@ -726,24 +742,16 @@ class ListeningStatsTracker @Inject constructor(
             genre = genre,
             album = album
         )
-        val ytId = if (songId.startsWith("youtube_")) {
-            songId.removePrefix("youtube_")
-        } else {
-            val numericId = songId.toLongOrNull()
-            if (numericId != null && numericId < 0) {
-                val songEntity = musicDao.getSongByIdOnce(numericId)
-                if (songEntity?.contentUriString?.startsWith("youtube://") == true) {
-                    songEntity.contentUriString.removePrefix("youtube://")
-                } else null
-            } else null
-        }
-        if (ytId != null && SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY) {
-            persistenceScope.launch(Dispatchers.IO) {
-                runCatching {
-                    val cpn = (1..16).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".random() }.joinToString("")
-                    val lengthSec = listened / 1000
-                    val pingUrl = "https://music.youtube.com/api/stats/watchtime?ns=yt&el=detailpage&docid=$ytId&ver=2&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER&cpn=$cpn&state=ended&st=0&et=$lengthSec&cmt=$lengthSec&rt=$lengthSec&lact=1&len=$lengthSec"
-                    unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(pingUrl)
+        if (SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY) {
+            val ytId = resolveYtId(songId)
+            if (ytId != null) {
+                persistenceScope.launch(Dispatchers.IO) {
+                    runCatching {
+                        val cpn = (1..16).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".random() }.joinToString("")
+                        val lengthSec = listened / 1000
+                        val pingUrl = "https://music.youtube.com/api/stats/watchtime?ns=yt&el=detailpage&docid=$ytId&ver=2&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER&cpn=$cpn&state=ended&st=0&et=$lengthSec&cmt=$lengthSec&rt=$lengthSec&lact=1&len=$lengthSec"
+                        unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(pingUrl)
+                    }
                 }
             }
         }
@@ -810,8 +818,31 @@ class ListeningStatsTracker @Inject constructor(
         }
     }
 
+    /**
+     * Counts a play only when the device actually listened through the track.
+     *
+     * Both conditions are intentional: position alone can be satisfied by seeking to the end,
+     * while elapsed listening alone can be satisfied by a stuck stream or bad remote duration.
+     * Requiring both keeps YouTube/Cast metadata and remote watch-history timing from creating
+     * local plays. A small end tolerance accounts for players transitioning just before their
+     * final progress callback.
+     */
+    private fun isCompletedPlayback(
+        listenedMs: Long,
+        lastPositionMs: Long,
+        durationMs: Long
+    ): Boolean {
+        if (durationMs <= 0L || durationMs == C.TIME_UNSET) return false
+        val requiredListeningMs = durationMs - (durationMs / COMPLETION_MISSING_DIVISOR)
+        val requiredPositionMs = (durationMs - COMPLETION_POSITION_TOLERANCE_MS)
+            .coerceAtLeast(requiredListeningMs)
+        return listenedMs >= requiredListeningMs && lastPositionMs >= requiredPositionMs
+    }
+
     companion object {
-        private val MIN_SESSION_LISTEN_MS = 2_000L
+        /** At most 1/20 (5%) of a track may be missed and still count as completed. */
+        private const val COMPLETION_MISSING_DIVISOR = 20L
+        private const val COMPLETION_POSITION_TOLERANCE_MS = 5_000L
         private const val MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS = 500
         /** Number of plays before a YouTube song is auto-downloaded for offline use. */
         private const val AUTO_CACHE_PLAY_COUNT_THRESHOLD = 3
@@ -827,10 +858,9 @@ class ListeningStatsTracker @Inject constructor(
          *
          * MusicService's telemetry manager is now the single authoritative remote writer (it
          * observes the actual MediaSession player and a canonical, correctly-extracted video ID).
-         * This flag gates ONLY the outbound network calls below (sendTelemetryPing /
-         * registerPlayback); all the surrounding session/timing bookkeeping in this class is left
-         * untouched since local features (Recently Played, listening-time stats, Daily Mix
-         * engagement scoring) still depend on it.
+         * This flag gates the entire redundant tracking path, including URL resolution and CPN
+         * timing. Local playback completion, Recently Played, stats and Daily Mix scoring do not
+         * depend on YouTube telemetry and are tracked independently.
          */
         private const val SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY = false
 

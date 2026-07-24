@@ -237,19 +237,27 @@ class CastPlayer(
             onComplete(false, "RemoteMediaClient is null")
             return
         }
+        if (songs.isEmpty()) {
+            onComplete(false, "Cannot cast an empty queue")
+            return
+        }
 
         clearCommandPipeline()
 
-        // Track whether callback has been fired to prevent double-calling
-        var callbackFired = false
+        // Codec probing runs off-main while completion/timeout callbacks run on main. Use an
+        // atomic gate so exactly one terminal result is delivered across those threads.
+        val callbackFired = java.util.concurrent.atomic.AtomicBoolean(false)
         val timeoutHandler = android.os.Handler(android.os.Looper.getMainLooper())
         val timeoutRunnable = Runnable {
-            if (!callbackFired) {
-                callbackFired = true
+            if (callbackFired.compareAndSet(false, true)) {
                 Timber.e("Cast loadQueue timed out after %d ms", queueLoadTimeoutMs)
                 onComplete(false, "Timed out after ${queueLoadTimeoutMs}ms")
             }
         }
+        // Include codec probing in the timeout. Previously this was scheduled only after all
+        // probes completed, so a blocked ContentResolver/MediaExtractor left the UI in an
+        // endless "Connecting" state despite the documented queue timeout.
+        timeoutHandler.postDelayed(timeoutRunnable, queueLoadTimeoutMs)
 
         try {
             val safeStartIndex = startIndex.coerceIn(0, (songs.size - 1).coerceAtLeast(0))
@@ -347,6 +355,10 @@ class CastPlayer(
 
                     // Post back to Main thread — Cast SDK requires Main for queueLoad.
                     timeoutHandler.post {
+                        if (callbackFired.get()) {
+                            Timber.w("Skipping Cast queueLoad because preparation exceeded timeout")
+                            return@post
+                        }
                         try {
                             val mediaItems = songs.map { song ->
                                 song.toMediaQueueItem(
@@ -378,8 +390,6 @@ class CastPlayer(
                                 forcedMimeBySongId = forcedMimeBySongId
                             )
 
-                            timeoutHandler.postDelayed(timeoutRunnable, queueLoadTimeoutMs)
-
                             client.queueLoad(
                                 mediaItems,
                                 safeStartIndex,
@@ -390,12 +400,11 @@ class CastPlayer(
                                 // Cancel timeout since we got a response
                                 timeoutHandler.removeCallbacks(timeoutRunnable)
 
-                                if (callbackFired) {
+                                if (!callbackFired.compareAndSet(false, true)) {
                                     // Timeout already fired, ignore this late callback
                                     Timber.w("Cast loadQueue result received after timeout, ignoring")
                                     return@setResultCallback
                                 }
-                                callbackFired = true
 
                                 if (result.status.isSuccess) {
                                     Timber.tag(castLogTag).i(
@@ -433,8 +442,7 @@ class CastPlayer(
                         } catch (e: Exception) {
                             timeoutHandler.removeCallbacks(timeoutRunnable)
                             Timber.tag(castLogTag).e(e, "queueLoad threw exception (size=%d startIndex=%d)", songs.size, startIndex)
-                            if (!callbackFired) {
-                                callbackFired = true
+                            if (callbackFired.compareAndSet(false, true)) {
                                 onComplete(false, "${e.javaClass.simpleName}: ${e.message ?: "Unknown"}")
                             }
                         }
@@ -442,8 +450,8 @@ class CastPlayer(
                 } catch (e: Exception) {
                     Timber.tag(castLogTag).e(e, "queueLoad probe threw exception (size=%d startIndex=%d)", songs.size, startIndex)
                     timeoutHandler.post {
-                        if (!callbackFired) {
-                            callbackFired = true
+                        if (callbackFired.compareAndSet(false, true)) {
+                            timeoutHandler.removeCallbacks(timeoutRunnable)
                             onComplete(false, "${e.javaClass.simpleName}: ${e.message ?: "Unknown"}")
                         }
                     }
@@ -452,8 +460,7 @@ class CastPlayer(
         } catch (e: Exception) {
             timeoutHandler.removeCallbacks(timeoutRunnable)
             Timber.tag(castLogTag).e(e, "queueLoad threw exception (size=%d startIndex=%d)", songs.size, startIndex)
-            if (!callbackFired) {
-                callbackFired = true
+            if (callbackFired.compareAndSet(false, true)) {
                 onComplete(false, "${e.javaClass.simpleName}: ${e.message ?: "Unknown"}")
             }
         }

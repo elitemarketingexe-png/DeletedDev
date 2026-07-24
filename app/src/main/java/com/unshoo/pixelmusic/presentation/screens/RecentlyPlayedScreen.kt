@@ -326,6 +326,7 @@ fun RecentlyPlayedScreen(
             val song = selectedSongForInfo!!
             SongInfoBottomSheet(
                 song = song,
+                playerViewModel = playerViewModel,
                 isFavorite = favoriteSongIds.contains(song.id),
                 onToggleFavorite = {
                     playerViewModel.toggleFavoriteSpecificSong(song)

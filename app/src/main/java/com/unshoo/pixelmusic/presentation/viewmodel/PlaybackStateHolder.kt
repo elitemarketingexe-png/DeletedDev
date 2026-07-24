@@ -168,6 +168,13 @@ class PlaybackStateHolder @Inject constructor(
     fun setMediaController(controller: MediaController?) {
         this.mediaController = controller
     }
+
+    /** Clears only the controller owned by the caller, never a newer controller binding. */
+    fun clearMediaController(controller: MediaController) {
+        if (mediaController === controller) {
+            mediaController = null
+        }
+    }
     
     fun updateStablePlayerState(update: (StablePlayerState) -> StablePlayerState) {
         _stablePlayerState.update { current ->

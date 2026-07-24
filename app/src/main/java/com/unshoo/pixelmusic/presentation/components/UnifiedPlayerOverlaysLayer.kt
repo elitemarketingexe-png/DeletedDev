@@ -44,6 +44,7 @@ internal data class SaveQueueOverlayData(
 
 @Composable
 internal fun UnifiedPlayerQueueLayer(
+    playerViewModel: PlayerViewModel,
     shouldRenderLayer: Boolean,
     albumColorScheme: ColorScheme,
     queueScrimAlpha: Float,
@@ -108,6 +109,7 @@ internal fun UnifiedPlayerQueueLayer(
                 shapes = MaterialTheme.shapes
             ) {
                 QueueBottomSheet(
+                    viewModel = playerViewModel,
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
@@ -190,6 +192,7 @@ internal fun UnifiedPlayerSongInfoLayer(
         ) {
             SongInfoBottomSheet(
                 song = liveSong,
+                playerViewModel = playerViewModel,
                 isFavorite = liveSong.isFavorite,
                 onToggleFavorite = { playerViewModel.toggleFavoriteSpecificSong(liveSong) },
                 onDismiss = {
@@ -395,6 +398,7 @@ internal fun UnifiedPlayerQueueAndSongInfoHost(
             }
 
             UnifiedPlayerQueueLayer(
+                playerViewModel = playerViewModel,
                 shouldRenderLayer = true,
                 albumColorScheme = albumColorScheme,
                 queueScrimAlpha = queueScrimAlpha,

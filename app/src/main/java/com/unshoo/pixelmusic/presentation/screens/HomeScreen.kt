@@ -141,7 +141,7 @@ private const val HomeLoadingPlaceholderMinDurationMillis = 1200L
 fun HomeScreen(
     navController: NavController,
     paddingValuesParent: PaddingValues,
-    playerViewModel: PlayerViewModel = hiltViewModel(),
+    playerViewModel: PlayerViewModel,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     statsViewModel: StatsViewModel = hiltViewModel(),
     quickPicksViewModel: QuickPicksViewModel = hiltViewModel(),

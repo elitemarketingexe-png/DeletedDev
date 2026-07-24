@@ -579,6 +579,7 @@ fun AlbumDetailScreen(
                 }
                 SongInfoBottomSheet(
                     song = currentSong,
+                    playerViewModel = playerViewModel,
                     isFavorite = isFavorite,
                     onToggleFavorite = {
                         playerViewModel.toggleFavoriteSpecificSong(currentSong)

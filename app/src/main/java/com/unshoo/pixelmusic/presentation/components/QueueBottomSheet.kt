@@ -219,7 +219,7 @@ private fun PlayerUiState.toQueueUndoBarProjection(): QueueUndoBarProjection =
 )
 @Composable
 fun QueueBottomSheet(
-    viewModel: PlayerViewModel = hiltViewModel(),
+    viewModel: PlayerViewModel,
     playlistViewModel: PlaylistViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     queue: List<Song>,

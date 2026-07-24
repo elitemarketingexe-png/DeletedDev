@@ -201,6 +201,7 @@ private enum class PlaylistCreationMode {
 
 @Composable
 fun CreatePlaylistDialog(
+    playerViewModel: PlayerViewModel,
     visible: Boolean,
     onDismiss: () -> Unit,
     onGenerateClick: () -> Unit,
@@ -224,6 +225,7 @@ fun CreatePlaylistDialog(
                 label = "create_playlist_dialog"
             ) {
                 CreatePlaylistContent(
+                    playerViewModel = playerViewModel,
                     onDismiss = onDismiss,
                     onGenerateClick = onGenerateClick,
                     onCreate = onCreate
@@ -291,7 +293,7 @@ private fun CreatePlaylistContent(
     onDismiss: () -> Unit,
     onGenerateClick: () -> Unit,
     onCreate: (String, String?, Int?, String?, List<String>, Float, Float, Float, String?, Float?, Float?, Float?, Float?, String?, String) -> Unit,
-    playerViewModel: PlayerViewModel = hiltViewModel()
+    playerViewModel: PlayerViewModel
 ) {
     val context = LocalContext.current
 

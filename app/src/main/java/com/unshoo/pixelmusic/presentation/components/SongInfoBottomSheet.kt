@@ -101,6 +101,7 @@ import androidx.compose.ui.res.stringResource
 @Suppress("UNUSED_PARAMETER")
 fun SongInfoBottomSheet(
     song: Song,
+    playerViewModel: PlayerViewModel,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onDismiss: () -> Unit,
@@ -429,7 +430,6 @@ fun SongInfoBottomSheet(
                                         verticalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
                                         item {
-                                            val playerViewModel: PlayerViewModel = hiltViewModel()
                                             FilledTonalButton(
                                                 modifier = Modifier
                                                     .fillMaxWidth()

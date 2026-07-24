@@ -137,6 +137,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.async
@@ -1457,15 +1458,32 @@ class PlayerViewModel @Inject constructor(
          * playback command — making skip buttons and gestures appear frozen.
          */
         override fun onDisconnected(controller: MediaController) {
-            Log.w("PlayerViewModel", "MediaController disconnected — service may have been killed. Scheduling reconnect.")
-            viewModelScope.launch(Dispatchers.Main) {
-                // Small delay so the service has time to restart before we try to bind again.
-                kotlinx.coroutines.delay(300L)
-                connectMediaController()
+            runOnMainImmediate {
+                // A controller that we intentionally replaced may deliver onDisconnected after a
+                // newer controller is already active. Never let that stale callback tear down the
+                // new connection or start a reconnect loop.
+                if (controller !== mediaController) {
+                    Log.d("PlayerViewModel", "Ignoring disconnect from superseded MediaController")
+                    return@runOnMainImmediate
+                }
+                Log.w("PlayerViewModel", "Active MediaController disconnected; reconnecting")
+                mediaControllerPlaybackListener?.let { listener ->
+                    runCatching { controller.removeListener(listener) }
+                }
+                mediaController = null
+                playbackStateHolder.clearMediaController(controller)
+                _isMediaControllerReady.value = false
+                scheduleMediaControllerReconnect()
             }
         }
     }
     private var activeMediaControllerFuture: ListenableFuture<MediaController>? = null
+    private var mediaControllerConnectionGeneration = 0L
+    private var mediaControllerReconnectJob: Job? = null
+    private var mediaControllerHealthJob: Job? = null
+    private val pendingControllerCommands = ArrayDeque<() -> Unit>()
+    private val maxPendingControllerCommands = 8
+    private val mediaControllerHealthIntervalMs = 2_000L
     private var pendingRepeatMode: Int? = null
 
     private var pendingPlaybackAction: (() -> Unit)? = null
@@ -2062,6 +2080,7 @@ class PlayerViewModel @Inject constructor(
         }
 
         connectMediaController()
+        startMediaControllerHealthMonitor()
 
 
         // Start Cast discovery
@@ -2287,29 +2306,64 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun connectMediaController() {
-        activeMediaControllerFuture?.let {
-            try {
-                androidx.media3.session.MediaController.releaseFuture(it)
-            } catch (e: Exception) {
-                Log.e("PlayerViewModel", "Error releasing media controller future", e)
-            }
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            viewModelScope.launch(Dispatchers.Main.immediate) { connectMediaController() }
+            return
         }
-        _isMediaControllerReady.value = false
 
+        val connectedController = mediaController
+        if (connectedController?.isConnected == true) {
+            _isMediaControllerReady.value = true
+            return
+        }
+
+        // Do not cancel/recreate an in-flight future. The old implementation released every
+        // future each time reconnect was requested. Its resulting onDisconnected callback then
+        // requested another connection, creating a controller churn loop in which UI commands
+        // were sent to released binders while MusicService kept playing normally.
+        val inFlight = activeMediaControllerFuture
+        if (inFlight != null && !inFlight.isDone) return
+        if (inFlight != null) {
+            runCatching { MediaController.releaseFuture(inFlight) }
+            if (activeMediaControllerFuture === inFlight) activeMediaControllerFuture = null
+        }
+
+        mediaControllerReconnectJob?.cancel()
+        mediaControllerReconnectJob = null
+        _isMediaControllerReady.value = false
+        val generation = ++mediaControllerConnectionGeneration
         val future = mediaControllerFactory.create(context, sessionToken, mediaControllerListener)
         activeMediaControllerFuture = future
 
         future.addListener({
+            if (future !== activeMediaControllerFuture || generation != mediaControllerConnectionGeneration) {
+                runCatching { MediaController.releaseFuture(future) }
+                return@addListener
+            }
             try {
-                mediaControllerPlaybackListener?.let { listener ->
-                    mediaController?.removeListener(listener)
-                }
-                mediaController?.release()
-
                 val controller = future.get()
+                if (!controller.isConnected) {
+                    MediaController.releaseFuture(future)
+                    activeMediaControllerFuture = null
+                    scheduleMediaControllerReconnect()
+                    return@addListener
+                }
+
+                val previousController = mediaController
+                val previousListener = mediaControllerPlaybackListener
+
+                // Publish the new reference before releasing the old controller. This makes a
+                // late disconnect callback from the old instance harmless (identity check above).
                 mediaController = controller
                 playbackStateHolder.setMediaController(controller)
                 _isMediaControllerReady.value = true
+
+                if (previousController != null && previousController !== controller) {
+                    previousListener?.let { listener ->
+                        runCatching { previousController.removeListener(listener) }
+                    }
+                    runCatching { previousController.release() }
+                }
 
                 setupMediaControllerListeners()
                 syncCurrentPlayerState(controller)
@@ -2317,11 +2371,107 @@ class PlayerViewModel @Inject constructor(
                 syncShuffleStateWithSession(playbackStateHolder.stablePlayerState.value.isShuffleEnabled)
                 pendingPlaybackAction?.invoke()
                 pendingPlaybackAction = null
+                flushPendingControllerCommands()
             } catch (e: Exception) {
+                if (future === activeMediaControllerFuture) {
+                    activeMediaControllerFuture = null
+                }
+                _isMediaControllerReady.value = false
                 _playerUiState.update { it.copy(isLoadingInitialSongs = false, isLoadingLibraryCategories = false) }
                 Log.e("PlayerViewModel", "Error setting up MediaController", e)
+                scheduleMediaControllerReconnect()
             }
         }, androidx.core.content.ContextCompat.getMainExecutor(context))
+    }
+
+    private fun scheduleMediaControllerReconnect(delayMs: Long = 300L) {
+        if (mediaControllerReconnectJob?.isActive == true) return
+        mediaControllerReconnectJob = viewModelScope.launch(Dispatchers.Main) {
+            delay(delayMs)
+            mediaControllerReconnectJob = null
+            connectMediaController()
+        }
+    }
+
+    private fun runWhenMediaControllerReady(command: () -> Unit) {
+        runOnMainImmediate {
+            val controller = mediaController
+            if (controller?.isConnected == true) {
+                runCatching(command).onFailure { error ->
+                    Timber.tag("PlayerControllerHealth").w(error, "Playback command failed; reconnecting")
+                    enqueuePendingControllerCommand(command)
+                    if (mediaController === controller) {
+                        mediaController = null
+                        playbackStateHolder.clearMediaController(controller)
+                        _isMediaControllerReady.value = false
+                        runCatching { controller.release() }
+                    }
+                    scheduleMediaControllerReconnect(delayMs = 0L)
+                }
+                return@runOnMainImmediate
+            }
+            enqueuePendingControllerCommand(command)
+            connectMediaController()
+        }
+    }
+
+    private fun enqueuePendingControllerCommand(command: () -> Unit) {
+        // Keep the queue bounded against accidental rapid tapping while disconnected.
+        if (pendingControllerCommands.size >= maxPendingControllerCommands) {
+            pendingControllerCommands.removeFirst()
+        }
+        pendingControllerCommands.addLast(command)
+    }
+
+    private fun flushPendingControllerCommands() {
+        if (mediaController?.isConnected != true) return
+        while (pendingControllerCommands.isNotEmpty()) {
+            val command = pendingControllerCommands.removeFirst()
+            val succeeded = runCatching(command)
+                .onFailure { Timber.tag("PlayerControllerHealth").w(it, "Queued playback command failed") }
+                .isSuccess
+            if (!succeeded) {
+                pendingControllerCommands.addFirst(command)
+                scheduleMediaControllerReconnect(delayMs = 0L)
+                return
+            }
+        }
+    }
+
+    private fun startMediaControllerHealthMonitor() {
+        if (mediaControllerHealthJob?.isActive == true) return
+        mediaControllerHealthJob = viewModelScope.launch(Dispatchers.Main) {
+            while (isActive) {
+                delay(mediaControllerHealthIntervalMs)
+                if (castStateHolder.castSession.value?.remoteMediaClient != null) continue
+
+                val controller = mediaController
+                if (controller == null || !controller.isConnected) {
+                    _isMediaControllerReady.value = false
+                    scheduleMediaControllerReconnect(delayMs = 0L)
+                    continue
+                }
+
+                // MediaSession playback lives in the service and can remain healthy even if a UI
+                // listener update is missed under heavy Explore/Search navigation. Reconcile from
+                // the live controller instead of requiring a process restart to unfreeze the UI.
+                val stable = playbackStateHolder.stablePlayerState.value
+                val controllerMediaId = controller.currentMediaItem?.mediaId
+                val stateIsStale = controllerMediaId != stable.currentSong?.id ||
+                    controller.isPlaying != stable.isPlaying ||
+                    controller.playWhenReady != stable.playWhenReady
+                if (stateIsStale) {
+                    Timber.tag("PlayerControllerHealth").w(
+                        "Repairing stale player UI (controller=%s ui=%s connected=%s)",
+                        controllerMediaId,
+                        stable.currentSong?.id,
+                        controller.isConnected
+                    )
+                    setupMediaControllerListeners()
+                    syncCurrentPlayerState(controller)
+                }
+            }
+        }
     }
 
     fun checkAndReconnectMediaController() {
@@ -6119,7 +6269,8 @@ class PlayerViewModel @Inject constructor(
                 }
             }
         } else {
-            mediaController?.let { controller ->
+            runWhenMediaControllerReady {
+                val controller = mediaController ?: return@runWhenMediaControllerReady
                 if (controller.isPlaying) {
                     controller.pause()
                 } else {
@@ -6146,7 +6297,7 @@ class PlayerViewModel @Inject constructor(
                                     if (fallbackSong != null) {
                                         loadAndPlaySong(fallbackSong)
                                     } else {
-                                        controller.play()
+                                        mediaController?.takeIf { it.isConnected }?.play()
                                     }
                                 }
                             }
@@ -6160,18 +6311,33 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun seekTo(position: Long) {
-        playbackStateHolder.seekTo(position)
+        if (castStateHolder.castSession.value?.remoteMediaClient != null) {
+            playbackStateHolder.seekTo(position)
+        } else {
+            runWhenMediaControllerReady { playbackStateHolder.seekTo(position) }
+        }
     }
 
     fun nextSong() {
-        playbackStateHolder.nextSong()
+        if (castStateHolder.castSession.value?.remoteMediaClient != null) {
+            playbackStateHolder.nextSong()
+        } else {
+            runWhenMediaControllerReady { playbackStateHolder.nextSong() }
+        }
     }
 
     fun previousSong() {
-        // Pass the in-memory queue media IDs so PlaybackStateHolder can resolve the
-        // previous-song index without issuing N Binder IPC calls to the MediaController.
-        val queueMediaIds = _playerUiState.value.currentPlaybackQueue.map { it.id }
-        playbackStateHolder.previousSong(queueMediaIds.ifEmpty { null })
+        val command = {
+            // Pass the in-memory queue media IDs so PlaybackStateHolder can resolve the
+            // previous-song index without issuing N Binder IPC calls to the MediaController.
+            val queueMediaIds = _playerUiState.value.currentPlaybackQueue.map { it.id }
+            playbackStateHolder.previousSong(queueMediaIds.ifEmpty { null })
+        }
+        if (castStateHolder.castSession.value?.remoteMediaClient != null) {
+            command()
+        } else {
+            runWhenMediaControllerReady(command)
+        }
     }
 
     private fun startProgressUpdates() {
@@ -6414,14 +6580,25 @@ class PlayerViewModel @Inject constructor(
 
 
     override fun onCleared() {
+        mediaControllerHealthJob?.cancel()
+        mediaControllerHealthJob = null
+        mediaControllerReconnectJob?.cancel()
+        mediaControllerReconnectJob = null
+        pendingControllerCommands.clear()
+        mediaControllerConnectionGeneration++
         mediaControllerPlaybackListener?.let { listener ->
             mediaController?.removeListener(listener)
             mediaControllerPlaybackListener = null
         }
-        playbackStateHolder.setMediaController(null)
-        mediaController?.release()
+        val controllerToRelease = mediaController
         mediaController = null
-        activeMediaControllerFuture?.let {
+        controllerToRelease?.let { controller ->
+            playbackStateHolder.clearMediaController(controller)
+            controller.release()
+        }
+        val futureToRelease = activeMediaControllerFuture
+        activeMediaControllerFuture = null
+        futureToRelease?.let {
             androidx.media3.session.MediaController.releaseFuture(it)
         }
         super.onCleared()

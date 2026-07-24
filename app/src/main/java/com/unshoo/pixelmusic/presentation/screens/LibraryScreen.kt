@@ -444,7 +444,7 @@ private fun PlayerUiState.toLibraryScreenProjection(): LibraryScreenPlayerProjec
 @Composable
 fun LibraryScreen(
     navController: NavController,
-    playerViewModel: PlayerViewModel = hiltViewModel(),
+    playerViewModel: PlayerViewModel,
     playlistViewModel: PlaylistViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
     songInfoBottomSheetViewModel: SongInfoBottomSheetViewModel = hiltViewModel()
@@ -1842,6 +1842,7 @@ fun LibraryScreen(
     )
 
     CreatePlaylistDialog(
+        playerViewModel = playerViewModel,
         visible = showCreatePlaylistDialog,
         onDismiss = { showCreatePlaylistDialog = false },
         onGenerateClick = {
@@ -1919,6 +1920,7 @@ fun LibraryScreen(
         if (currentSong != null) {
             SongInfoBottomSheet(
                 song = currentSong,
+                playerViewModel = playerViewModel,
                 isFavorite = isFavorite,
                 onToggleFavorite = {
                     // Directly use PlayerViewModel's method to toggle, which should handle UserPreferencesRepository
