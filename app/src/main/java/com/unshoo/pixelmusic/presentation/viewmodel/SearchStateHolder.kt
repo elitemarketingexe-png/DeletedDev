@@ -286,34 +286,39 @@ class SearchStateHolder @Inject constructor(
                 val songsDeferred = async { YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull() }
                 val artistsDeferred = async { YouTube.search(query, YouTube.SearchFilter.FILTER_ARTIST).getOrNull() }
                 val albumsDeferred = async { YouTube.search(query, YouTube.SearchFilter.FILTER_ALBUM).getOrNull() }
+                val playlistsDeferred = async { YouTube.search(query, YouTube.SearchFilter.FILTER_FEATURED_PLAYLIST).getOrNull() }
 
                 val songsResult = songsDeferred.await()
                 val artistsResult = artistsDeferred.await()
                 val albumsResult = albumsDeferred.await()
+                val playlistsResult = playlistsDeferred.await()
 
                 lastContinuationToken = songsResult?.continuation
 
-                val popularSongs = mutableListOf<SearchResultItem>()
+                val topSongs = mutableListOf<SearchResultItem>()
                 val mixedItems = mutableListOf<SearchResultItem>()
 
                 val songsList = songsResult?.items?.filterIsInstance<SongItem>()?.filterVideo(pureYtMusicOnly).orEmpty()
                 val artistsList = artistsResult?.items?.filterIsInstance<ArtistItem>().orEmpty()
                 val albumsList = albumsResult?.items?.filterIsInstance<AlbumItem>().orEmpty()
+                val playlistsList = playlistsResult?.items?.filterIsInstance<PlaylistItem>().orEmpty()
 
-                // Separate ATV tracks (Popular Songs)
-                val (atvSongs, nonAtvSongs) = songsList.partition {
-                    val musicVideoType = it.endpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType
-                    musicVideoType == "MUSIC_VIDEO_TYPE_ATV"
+                // Top 10 Songs
+                val (top10Songs, remainingSongs) = if (songsList.size > 10) {
+                    songsList.take(10) to songsList.drop(10)
+                } else {
+                    songsList to emptyList()
                 }
 
-                atvSongs.forEach { popularSongs.add(SearchResultItem.SongItem(it.toNativeSong())) }
+                top10Songs.forEach { topSongs.add(SearchResultItem.SongItem(it.toNativeSong())) }
 
-                // Mix remaining categories in interleaving order (1 Artist, 1 Album, 1 non-ATV Song)
+                // Interleave Artists, Albums, Playlists, and remaining Songs (1 of each per iteration)
                 val artistIterator = artistsList.iterator()
                 val albumIterator = albumsList.iterator()
-                val songIterator = nonAtvSongs.iterator()
+                val playlistIterator = playlistsList.iterator()
+                val songIterator = remainingSongs.iterator()
 
-                while (artistIterator.hasNext() || albumIterator.hasNext() || songIterator.hasNext()) {
+                while (artistIterator.hasNext() || albumIterator.hasNext() || playlistIterator.hasNext() || songIterator.hasNext()) {
                     if (artistIterator.hasNext()) {
                         val artist = artistIterator.next()
                         mixedItems.add(SearchResultItem.ArtistItem(
@@ -332,13 +337,19 @@ class SearchStateHolder @Inject constructor(
                                 albumArtUriString = album.thumbnail, songCount = 0)
                         ))
                     }
+                    if (playlistIterator.hasNext()) {
+                        val playlist = playlistIterator.next()
+                        mixedItems.add(SearchResultItem.PlaylistItem(
+                            Playlist(id = playlist.id, name = playlist.title, songIds = emptyList(), coverImageUri = playlist.thumbnail, source = "YOUTUBE")
+                        ))
+                    }
                     if (songIterator.hasNext()) {
                         val song = songIterator.next()
                         mixedItems.add(SearchResultItem.SongItem(song.toNativeSong()))
                     }
                 }
 
-                items.addAll(popularSongs)
+                items.addAll(topSongs)
                 items.addAll(mixedItems)
             }
             SearchFilterType.SONGS -> {
