@@ -201,7 +201,7 @@ fun HomeScreen(
             null
         }
     }
-    val dailyMixSongs by playerViewModel.dailyMixSongs.collectAsStateWithLifecycle()
+    val dailyMixSongs = dailyMixSongsRaw  // reuse the already-collected state from line 176
     val curatedYourMixSongs by playerViewModel.yourMixSongs.collectAsStateWithLifecycle()
     val homeMixPreviewSongs by playerViewModel.homeMixPreviewSongs.collectAsStateWithLifecycle()
     val playbackHistory by playerViewModel.playbackHistory.collectAsStateWithLifecycle()

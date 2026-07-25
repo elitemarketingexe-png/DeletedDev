@@ -567,7 +567,7 @@ private fun QuickPickPortraitCard(
                     )
             )
             
-            // 3. Top-Right Pill Badge
+            // 3. Top-Right Pill Badge — only runs if this card is the active song
             if (isPlaying) {
                 val transition = rememberInfiniteTransition(label = "pulse")
                 val badgeAlpha by transition.animateFloat(
@@ -779,9 +779,10 @@ private fun QuickPickClassicCard(
         label = "ClassicCardBg"
     )
     
-    val transition = rememberInfiniteTransition(label = "pulse")
+    // Only run the infinite border-glow animation for the actively playing card.
+    // Creating rememberInfiniteTransition on every card item (up to 20) is expensive.
     val borderGlowAlpha by if (isPlaying) {
-        transition.animateFloat(
+        rememberInfiniteTransition(label = "pulse").animateFloat(
             initialValue = 0.3f,
             targetValue = 0.7f,
             animationSpec = infiniteRepeatable(
