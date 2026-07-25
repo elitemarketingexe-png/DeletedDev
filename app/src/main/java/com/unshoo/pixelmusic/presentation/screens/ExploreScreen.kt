@@ -360,12 +360,16 @@ fun ExploreScreen(
                         homeSectionsFiltered.filter { section ->
                             val isBento = isBentoSection(section.title, section.items.size)
                             val title = section.title.lowercase()
-                            val isSug = !isBento && (title.contains("mix") || title.contains("listen again") || 
+                            val isRecentlyPlayedOrOnline = title.contains("recently played") ||
+                                        title.contains("recently") ||
+                                        title.contains("online") ||
+                                        title.contains("stream")
+                            val isSug = !isBento && !isRecentlyPlayedOrOnline &&
+                                        (title.contains("mix") || title.contains("listen again") || 
                                         title.contains("favorites") || title.contains("suggest") || 
                                         title.contains("recommend") || title.contains("radio") || 
-                                        title.contains("similar") || title.contains("played") ||
-                                        title.contains("liked") || title.contains("cached") ||
-                                        title.contains("you might like") || title.contains("recently") ||
+                                        title.contains("similar") || title.contains("liked") ||
+                                        title.contains("cached") || title.contains("you might like") ||
                                         title.contains("most"))
                             val hasSongs = section.items.filterIsInstance<SongItem>().isNotEmpty()
                             isSug && hasSongs
