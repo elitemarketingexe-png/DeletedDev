@@ -1077,8 +1077,10 @@ fun FullPlayerContent(
         }
 
         val sheetShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
             onDismissRequest = { showSongInfoBottomSheet = false },
+            sheetState = sheetState,
             dragHandle = null,
             containerColor = LocalMaterialTheme.current.surfaceContainerHigh,
             shape = sheetShape,
