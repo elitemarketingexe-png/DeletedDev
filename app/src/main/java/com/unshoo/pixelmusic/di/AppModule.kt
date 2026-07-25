@@ -274,7 +274,7 @@ object AppModule {
 
         return ImageLoader.Builder(context)
             .okHttpClient(okHttpClient)
-            .dispatcher(Dispatchers.Default.limitedParallelism(2)) // Bound concurrent decodes to prevent OOM on large libraries
+            .dispatcher(Dispatchers.IO.limitedParallelism(6)) // Smooth parallel image lazy-loading without main thread bottlenecks
             .allowHardware(true) // Hardware bitmaps reduce Java heap pressure for UI album art
             .memoryCache {
                 MemoryCache.Builder(context)

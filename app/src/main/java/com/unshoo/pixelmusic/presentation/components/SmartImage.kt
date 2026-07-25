@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.MaterialTheme
@@ -105,20 +106,24 @@ fun SmartImage(
         albumArtQualityWifi
     }
 
+    val density = LocalDensity.current.density
     val clippedModifier = modifier.clip(shape)
-    val requestTargetSize = remember(targetSize, effectiveQuality) {
+    val requestTargetSize = remember(targetSize, effectiveQuality, density) {
         val baseSize = safeAlbumArtTargetSize(targetSize)
         val maxSize = effectiveQuality.maxSize
+        val rawW = (baseSize.width as? coil.size.Dimension.Pixels)?.px
+        val rawH = (baseSize.height as? coil.size.Dimension.Pixels)?.px
+        val scaledW = if (rawW != null) (rawW * density).toInt() else maxSize
+        val scaledH = if (rawH != null) (rawH * density).toInt() else maxSize
         if (maxSize > 0) {
-            val widthPx = (baseSize.width as? coil.size.Dimension.Pixels)?.px ?: maxSize
-            val heightPx = (baseSize.height as? coil.size.Dimension.Pixels)?.px ?: maxSize
-            val clampedW = if (widthPx > maxSize) maxSize else widthPx
-            val clampedH = if (heightPx > maxSize) maxSize else heightPx
+            val clampedW = if (scaledW > maxSize) maxSize else scaledW
+            val clampedH = if (scaledH > maxSize) maxSize else scaledH
             Size(clampedW, clampedH)
         } else {
-            // Never request unbounded ORIGINAL in scrolling UI. Huge embedded/remote artwork
-            // can decode multi-megabyte bitmaps and exhaust the 256 MB heap after long use.
-            SafeOriginalAlbumArtSize
+            val limit = MaxSafeAlbumArtDimensionPx
+            val clampedW = if (scaledW > limit) limit else scaledW
+            val clampedH = if (scaledH > limit) limit else scaledH
+            Size(clampedW, clampedH)
         }
     }
 
@@ -189,69 +194,19 @@ fun SmartImage(
         }
     }
 
-    if (onState != null || placeholderModel != null) {
-        SubcomposeAsyncImage(
-            model = request,
-            contentDescription = contentDescription,
-            modifier = clippedModifier,
-            contentScale = contentScale,
-            colorFilter = colorFilter,
-            alpha = alpha
-        ) {
-            val state = painter.state
-            LaunchedEffect(state) {
-                onState?.invoke(state)
-            }
-
-            when (state) {
-                is AsyncImagePainter.State.Success -> {
-                    SubcomposeAsyncImageContent()
-                }
-                is AsyncImagePainter.State.Loading -> {
-                    if (placeholderModel != null) {
-                        AsyncImage(
-                            model = placeholderModel,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = contentScale,
-                            colorFilter = colorFilter,
-                            alpha = alpha
-                        )
-                    } else {
-                        Placeholder(
-                            modifier = Modifier.fillMaxSize(),
-                            drawableResId = placeholderResId,
-                            contentDescription = contentDescription,
-                            containerColor = placeHolderBackgroundColor,
-                            iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            alpha = alpha
-                        )
-                    }
-                }
-                else -> {
-                    Placeholder(
-                        modifier = Modifier.fillMaxSize(),
-                        drawableResId = if (state is AsyncImagePainter.State.Error) errorResId else placeholderResId,
-                        contentDescription = contentDescription,
-                        containerColor = placeHolderBackgroundColor,
-                        iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        alpha = alpha
-                    )
-                }
-            }
-        }
-    } else {
-        AsyncImage(
-            model = request,
-            contentDescription = contentDescription,
-            modifier = clippedModifier,
-            contentScale = contentScale,
-            colorFilter = colorFilter,
-            alpha = alpha,
-            placeholder = painterResource(placeholderResId),
-            error = painterResource(errorResId)
-        )
-    }
+    AsyncImage(
+        model = request,
+        contentDescription = contentDescription,
+        modifier = clippedModifier,
+        contentScale = contentScale,
+        colorFilter = colorFilter,
+        alpha = alpha,
+        placeholder = painterResource(placeholderResId),
+        error = painterResource(errorResId),
+        onLoading = { state -> onState?.invoke(state) },
+        onSuccess = { state -> onState?.invoke(state) },
+        onError = { state -> onState?.invoke(state) }
+    )
 }
 
 @Composable

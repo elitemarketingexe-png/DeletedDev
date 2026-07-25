@@ -24,7 +24,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import coil.annotation.ExperimentalCoilApi
+import androidx.compose.ui.platform.LocalDensity
+import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import coil.memory.MemoryCache
@@ -41,7 +42,7 @@ import com.unshoo.pixelmusic.utils.LocalArtworkUri
 internal const val MaxSafeAlbumArtDimensionPx = 1280
 internal val SafeOriginalAlbumArtSize = Size(MaxSafeAlbumArtDimensionPx, MaxSafeAlbumArtDimensionPx)
 
-@OptIn(ExperimentalCoilApi::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun OptimizedAlbumArt(
     uri: Any?,
@@ -51,8 +52,18 @@ fun OptimizedAlbumArt(
     placeholderModel: Any? = null
 ) {
     val context = LocalContext.current
-    val requestTargetSize = remember(targetSize) {
-        safeAlbumArtTargetSize(targetSize)
+    val density = LocalDensity.current.density
+    val requestTargetSize = remember(targetSize, density) {
+        val safeSize = safeAlbumArtTargetSize(targetSize)
+        val w = (safeSize.width as? Dimension.Pixels)?.px
+        val h = (safeSize.height as? Dimension.Pixels)?.px
+        if (w != null && h != null) {
+            val scaledW = (w * density).toInt().coerceAtMost(MaxSafeAlbumArtDimensionPx)
+            val scaledH = (h * density).toInt().coerceAtMost(MaxSafeAlbumArtDimensionPx)
+            Size(scaledW, scaledH)
+        } else {
+            safeSize
+        }
     }
     val isStableLocalArtwork = remember(uri) {
         when (uri) {
@@ -100,6 +111,7 @@ fun OptimizedAlbumArt(
                 .data(uri)
                 .crossfade(350) // Use Coil's native crossfade
                 .error(R.drawable.ic_music_placeholder)
+                .placeholder(R.drawable.ic_music_placeholder)
                 .size(requestTargetSize)
                 .memoryCachePolicy(CachePolicy.ENABLED)
                 .diskCachePolicy(if (isStableLocalArtwork) CachePolicy.DISABLED else CachePolicy.ENABLED)
@@ -114,46 +126,14 @@ fun OptimizedAlbumArt(
                 .build()
         }
     }
-    var lastSuccessPainter by remember(requestModel.data) { mutableStateOf<Painter?>(null) }
 
-    // Use SubcomposeAsyncImage with Coil's native crossfade instead of Crossfade wrapper
-    // This avoids recompositions on painter.state changes during scroll.
-    SubcomposeAsyncImage(
+    AsyncImage(
         model = requestModel,
         contentDescription = "Album art of $title",
         modifier = modifier,
         contentScale = ContentScale.Crop,
-        onSuccess = { state ->
-            lastSuccessPainter = state.painter
-        },
-        loading = { state ->
-            val cachedPainter = state.painter ?: lastSuccessPainter
-            if (cachedPainter != null) {
-                SubcomposeAsyncImageContent(painter = cachedPainter)
-            } else if (placeholderModel != null) {
-                 SubcomposeAsyncImage(
-                    model = placeholderModel,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    loading = { PlaceholderContent(title = title) },
-                    error = { PlaceholderContent(title = title) }
-                )
-            } else {
-                PlaceholderContent(title = title)
-            }
-        },
-        error = {
-            val cachedPainter = lastSuccessPainter
-            if (cachedPainter != null) {
-                SubcomposeAsyncImageContent(painter = cachedPainter)
-            } else {
-                PlaceholderContent(title = title)
-            }
-        },
-        success = {
-            SubcomposeAsyncImageContent()
-        }
+        placeholder = painterResource(R.drawable.ic_music_placeholder),
+        error = painterResource(R.drawable.ic_music_placeholder)
     )
 }
 
