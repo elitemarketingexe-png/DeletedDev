@@ -1,5 +1,6 @@
 package com.unshoo.pixelmusic.presentation.components
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -105,18 +106,19 @@ fun HomeGradientTopBar(
     onMenuClick: () -> Unit = {},
     isScrolled: Boolean = false,
 ) {
-    val surfaceContainerHigh = MaterialTheme.colorScheme.surfaceContainerHighest
-
-    PixelMusicStatusBarStyle(color = surfaceContainerHigh)
-
-    val animatedAlpha by animateFloatAsState(
-        targetValue = if (isScrolled) 1f else 0f,
-        animationSpec = tween(durationMillis = 300),
-        label = "topbar_alpha_transition"
+    val containerColor = if (isScrolled) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+    }
+    val animatedContainerColor by animateColorAsState(
+        targetValue = containerColor,
+        animationSpec = tween(durationMillis = 250),
+        label = "home_topbar_color"
     )
 
     TopAppBar(
-        modifier = Modifier.background(surfaceContainerHigh.copy(alpha = animatedAlpha)),
+        modifier = Modifier.background(animatedContainerColor),
         title = { /* nada, usamos solo acciones */ },
         navigationIcon = {
             Row(

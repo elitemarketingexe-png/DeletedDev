@@ -8,12 +8,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,6 +43,12 @@ fun AdSupportCard(
     val textColor = MaterialTheme.colorScheme.onPrimaryContainer
     val iconColor = MaterialTheme.colorScheme.onPrimaryContainer
 
+    var isDismissed by remember {
+        mutableStateOf(AdManager.isSupportCardDismissed(context))
+    }
+
+    if (isDismissed) return
+
     Card(
         modifier = modifier.clickable {
             if (activity != null) {
@@ -51,6 +59,7 @@ fun AdSupportCard(
                             Toast.makeText(context, "Thank you for supporting PixelMusic!", Toast.LENGTH_LONG).show()
                             // Force-refresh local watch state
                             AdManager.recordAdWatched(context.applicationContext)
+                            isDismissed = true
                         } else {
                             Toast.makeText(context, "Ad was closed early. Support incomplete.", Toast.LENGTH_SHORT).show()
                         }
@@ -111,13 +120,21 @@ fun AdSupportCard(
                 )
             }
 
-            // Play icon
-            Icon(
-                imageVector = Icons.Rounded.PlayArrow,
-                contentDescription = "Watch Ad",
-                tint = iconColor,
-                modifier = Modifier.size(18.dp)
-            )
+            // Close (Cross) Icon
+            IconButton(
+                onClick = {
+                    AdManager.recordSupportCardDismissed(context)
+                    isDismissed = true
+                },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = "Dismiss",
+                    tint = iconColor.copy(alpha = 0.7f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }

@@ -184,4 +184,30 @@ object AdManager {
             return false
         }
     }
+
+    private const val KEY_LAST_CARD_DISMISS_TIME = "last_card_dismiss_time"
+
+    fun recordSupportCardDismissed(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putLong(KEY_LAST_CARD_DISMISS_TIME, System.currentTimeMillis()).apply()
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to record card dismiss time", e)
+        }
+    }
+
+    fun isSupportCardDismissed(context: Context): Boolean {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val lastDismissTime = prefs.getLong(KEY_LAST_CARD_DISMISS_TIME, 0L)
+            if (lastDismissTime == 0L) return false
+            val elapsedTime = System.currentTimeMillis() - lastDismissTime
+            // 3 hours = 3 * 60 * 60 * 1000 = 10,800,000 ms
+            val threshold = 3 * 60 * 60 * 1000L
+            return elapsedTime < threshold
+        } catch (e: Throwable) {
+            Log.e(TAG, "Failed to check card dismiss status", e)
+            return false
+        }
+    }
 }
