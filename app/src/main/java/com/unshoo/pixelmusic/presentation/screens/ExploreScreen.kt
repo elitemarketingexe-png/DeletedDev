@@ -1407,7 +1407,7 @@ fun ExploreTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(start = 24.dp, top = 11.dp, end = 20.dp, bottom = 13.dp),
+                .padding(start = 24.dp, top = 12.dp, end = 20.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
