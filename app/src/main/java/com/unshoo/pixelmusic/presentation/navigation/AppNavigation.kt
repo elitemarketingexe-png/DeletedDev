@@ -81,9 +81,7 @@ fun AppNavigation(
     var startDestination by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        startDestination = userPreferencesRepository.launchTabFlow
-            .first()
-            .toRoute()
+        startDestination = launchTabToRoute(userPreferencesRepository.launchTabFlow.first())
     }
 
     startDestination?.let { initialRoute ->
@@ -647,7 +645,7 @@ fun AppNavigation(
     }
 }
 
-private fun String.toRoute(): String = when (this) {
+private fun launchTabToRoute(tab: String): String = when (tab) {
     LaunchTab.EXPLORE -> Screen.Explore.route
     LaunchTab.SEARCH -> Screen.Search.route
     LaunchTab.LIBRARY -> Screen.Library.route
@@ -659,7 +657,7 @@ private enum class MainRootDirection {
     BACKWARD
 }
 
-private const val BOTTOM_NAV_TRANSITION_DURATION = 380
+private const val BOTTOM_NAV_TRANSITION_DURATION = 280
 
 // Material 3 Emphasized Decelerate / Accelerate easing curves for premium look
 private val BottomNavEnterEasing = CubicBezierEasing(0.2f, 0.85f, 0.7f, 1f)
@@ -692,6 +690,8 @@ private fun mainRootDirection(
     if (fromIndex == toIndex) return null
     return if (toIndex > fromIndex) MainRootDirection.FORWARD else MainRootDirection.BACKWARD
 }
+
+
 
 private fun mainRootEnterTransition(
     fromRoute: String?,

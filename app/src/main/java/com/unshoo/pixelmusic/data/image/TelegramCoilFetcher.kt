@@ -23,21 +23,17 @@ import javax.inject.Inject
 import com.unshoo.pixelmusic.data.network.deezer.DeezerApiService
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.Dispatchers
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Custom Coil Fetcher for Telegram album art.
  * Handles URIs in format: telegram_art://chatId/messageId
  * 
- * Priority chain (Nekogram-style):
- * 1. Embedded art from downloaded audio file (MediaMetadataRetriever)
- * 2. TDLib albumCoverThumbnail (from message)
- * 3. TDLib externalAlbumCovers (Spotify/Apple Music metadata)
- * 
- * Log levels:
- * - VERBOSE: Per-request fetch attempts (very frequent, disabled by default)
- * - DEBUG: Success paths, significant state changes
- * - WARN/ERROR: Failures that need attention (logged sparingly to avoid spam)
+ * Optimized to prevent blocking the UI thread for high-quality art downloads/searches.
+ * Returns minithumbnail immediately and upgrades to high-quality in background.
  */
 class TelegramCoilFetcher(
     private val context: Context,
@@ -49,11 +45,8 @@ class TelegramCoilFetcher(
 ) : Fetcher {
 
     companion object {
-        // Track recent failures to avoid spamming logs
         private val recentlyLoggedFailures = ConcurrentHashMap<String, Long>()
-        private const val LOG_FAILURE_COOLDOWN_MS = 60_000L // Only log same failure once per minute
-        
-        // Locking mechanism to prevent redundant extractions
+        private const val LOG_FAILURE_COOLDOWN_MS = 60_000L
         private val extractionMapMutex = Mutex()
         private val extractionLocks = ConcurrentHashMap<String, Mutex>()
 
@@ -62,157 +55,150 @@ class TelegramCoilFetcher(
             val lastLogged = recentlyLoggedFailures[key]
             return if (lastLogged == null || now - lastLogged > LOG_FAILURE_COOLDOWN_MS) {
                 recentlyLoggedFailures[key] = now
-                // Cleanup old entries periodically
-                if (recentlyLoggedFailures.size > 100) {
-                    recentlyLoggedFailures.entries.removeIf { now - it.value > LOG_FAILURE_COOLDOWN_MS }
-                }
                 true
-            } else {
-                false
-            }
+            } else false
         }
     }
 
     override suspend fun fetch(): FetchResult? {
-        // Use VERBOSE for per-request logging (can be filtered out in production)
-        Timber.v("TelegramCoilFetcher: Fetching $uri")
-
-        // Parse URI: telegram_art://chatId/messageId
         val chatId = uri.host?.toLongOrNull()
         val messageId = uri.pathSegments.firstOrNull()?.toLongOrNull()
+        if (chatId == null || messageId == null) return null
 
-        if (chatId == null || messageId == null) {
-            return null
-        }
-
-        // 1. Try to load high-quality cover from Deezer first
         val key = "${chatId}_${messageId}"
         val cachedDeezerFile = File(cacheDir, "telegram_deezer_art_${key}.jpg")
-        val noDeezerMarker = File(cacheDir, "telegram_deezer_art_${key}_none")
+        val cachedArtFile = File(cacheDir, "telegram_embedded_art_${key}.jpg")
+        val persistentArtFile = telegramCacheManager?.getPersistentArtFile(chatId, messageId)
 
-        if (cachedDeezerFile.exists() && cachedDeezerFile.length() > 0) {
+        // 1. FAST PATH: Return cached high-quality files immediately
+        if (persistentArtFile?.exists() == true && persistentArtFile.length() > 0) {
             return SourceResult(
-                source = coil.decode.ImageSource(
-                    file = cachedDeezerFile.absolutePath.toPath(),
-                    fileSystem = okio.FileSystem.SYSTEM
-                ),
+                source = coil.decode.ImageSource(persistentArtFile.absolutePath.toPath(), okio.FileSystem.SYSTEM),
                 mimeType = "image/jpeg",
                 dataSource = DataSource.DISK
             )
         }
 
+        if (cachedDeezerFile.exists() && cachedDeezerFile.length() > 0) {
+            return SourceResult(
+                source = coil.decode.ImageSource(cachedDeezerFile.absolutePath.toPath(), okio.FileSystem.SYSTEM),
+                mimeType = "image/jpeg",
+                dataSource = DataSource.DISK
+            )
+        }
+
+        if (cachedArtFile.exists() && cachedArtFile.length() > 0) {
+            return SourceResult(
+                source = coil.decode.ImageSource(cachedArtFile.absolutePath.toPath(), okio.FileSystem.SYSTEM),
+                mimeType = "image/jpeg",
+                dataSource = DataSource.DISK
+            )
+        }
+
+        // 2. CHECK TDLib: If high-quality thumbnail is already downloaded
+        val message = telegramRepository.getMessage(chatId, messageId)
+        if (message != null) {
+            val fileId = extractFileIdFromContent(message.content)
+            if (fileId != null) {
+                val file = telegramRepository.getFile(fileId)
+                if (file?.local?.isDownloadingCompleted == true && !file.local.path.isNullOrEmpty()) {
+                    return SourceResult(
+                        source = coil.decode.ImageSource(file.local.path.toPath(), okio.FileSystem.SYSTEM),
+                        mimeType = null,
+                        dataSource = DataSource.DISK
+                    )
+                }
+            }
+        }
+
+        // 3. FALLBACK: Return minithumbnail immediately if available
+        if (message != null) {
+            val minithumbnailData = extractMinithumbnail(message.content)
+            if (minithumbnailData != null) {
+                val bitmap = BitmapFactory.decodeByteArray(minithumbnailData, 0, minithumbnailData.size)
+                if (bitmap != null) {
+                    // Trigger background refinement now that we've committed to a low-res preview
+                    telegramRepository.enqueueHighQualityArtFetch(chatId, messageId)
+                    
+                    return DrawableResult(
+                        drawable = BitmapDrawable(context.resources, bitmap),
+                        isSampled = true,
+                        dataSource = DataSource.MEMORY
+                    )
+                }
+            }
+        }
+
+        // 4. DEEP FETCH: Only for first load without even a minithumbnail
+        // We'll allow a short 2s window for a quick Deezer or Embedded search.
+        val result = withTimeoutOrNull(2000L) {
+             performDeepFetch(chatId, messageId, key, cachedDeezerFile, cachedArtFile)
+        }
+        
+        // If deep fetch failed/timed out, still ensure background task is running
+        if (result == null) {
+            telegramRepository.enqueueHighQualityArtFetch(chatId, messageId)
+        }
+
+        return result
+    }
+
+    private suspend fun performDeepFetch(
+        chatId: Long,
+        messageId: Long,
+        key: String,
+        cachedDeezerFile: File,
+        cachedArtFile: File
+    ): FetchResult? {
+        val noDeezerMarker = File(cacheDir, "telegram_deezer_art_${key}_none")
         if (!noDeezerMarker.exists()) {
             val message = telegramRepository.getMessage(chatId, messageId)
             if (message != null) {
-                var title = ""
-                var artist = ""
-                when (val content = message.content) {
-                    is TdApi.MessageAudio -> {
-                        title = content.audio.title ?: ""
-                        artist = content.audio.performer ?: ""
-                    }
-                    is TdApi.MessageDocument -> {
-                        title = content.document.fileName ?: ""
-                    }
+                val title = when (val content = message.content) {
+                    is TdApi.MessageAudio -> content.audio.title ?: ""
+                    is TdApi.MessageDocument -> content.document.fileName ?: ""
+                    else -> ""
                 }
-
+                val artist = (message.content as? TdApi.MessageAudio)?.audio?.performer ?: ""
+                
                 val cleanedTitle = cleanTitle(title)
                 if (cleanedTitle.isNotBlank()) {
                     try {
                         val query = if (artist.isNotBlank() && artist != "Unknown Artist") {
                             "track:\"$cleanedTitle\" artist:\"$artist\""
-                        } else {
-                            cleanedTitle
-                        }
+                        } else cleanedTitle
+                        
                         val searchResponse = deezerApiService.searchTrack(query, limit = 1)
-                        val track = searchResponse.data.firstOrNull()
-                        val coverUrl = track?.album?.coverXl
-                            ?: track?.album?.coverBig
-                            ?: track?.album?.coverMedium
-                            ?: track?.album?.cover
+                        val coverUrl = searchResponse.data.firstOrNull()?.album?.let { 
+                            it.coverXl ?: it.coverBig ?: it.coverMedium ?: it.cover
+                        }
 
                         if (coverUrl != null) {
-                            val upgradedCoverUrl = upgradeToHighResDeezerUrl(coverUrl)
-                            val success = downloadDeezerCover(upgradedCoverUrl, cachedDeezerFile)
-                            if (success) {
+                            val upgradedUrl = upgradeToHighResDeezerUrl(coverUrl)
+                            if (downloadDeezerCover(upgradedUrl, cachedDeezerFile)) {
                                 return SourceResult(
-                                    source = coil.decode.ImageSource(
-                                        file = cachedDeezerFile.absolutePath.toPath(),
-                                        fileSystem = okio.FileSystem.SYSTEM
-                                    ),
+                                    source = coil.decode.ImageSource(cachedDeezerFile.absolutePath.toPath(), okio.FileSystem.SYSTEM),
                                     mimeType = "image/jpeg",
                                     dataSource = DataSource.NETWORK
                                 )
                             }
                         }
-                        // Create failed marker if Deezer couldn't find a cover
                         noDeezerMarker.createNewFile()
-                    } catch (e: Exception) {
-                        Timber.d("TelegramCoilFetcher: Deezer search failed for $artist - $cleanedTitle: ${e.message}")
-                    }
+                    } catch (_: Exception) {}
                 }
             }
         }
 
+        // Try embedded art extraction
         val embeddedArtPath = tryExtractEmbeddedArtIfSafe(chatId, messageId)
         if (embeddedArtPath != null) {
             return SourceResult(
-                source = coil.decode.ImageSource(
-                    file = embeddedArtPath.toPath(),
-                    fileSystem = okio.FileSystem.SYSTEM
-                ),
+                source = coil.decode.ImageSource(embeddedArtPath.toPath(), okio.FileSystem.SYSTEM),
                 mimeType = "image/jpeg",
                 dataSource = DataSource.DISK
             )
         }
-        
-        val message = telegramRepository.getMessage(chatId, messageId) ?: return null
-        val fileId = extractFileIdFromContent(message.content)
 
-        if (fileId != null) {
-            val file = telegramRepository.getFile(fileId)
-            if (file?.local?.isDownloadingCompleted == true && !file.local.path.isNullOrEmpty()) {
-                return SourceResult(
-                    source = coil.decode.ImageSource(
-                        file = file.local.path.toPath(),
-                        fileSystem = okio.FileSystem.SYSTEM
-                    ),
-                    mimeType = null,
-                    dataSource = DataSource.DISK
-                )
-            }
-        }
-
-        var downloadPath: String? = null
-        val isRecentlyFailed = telegramCacheManager?.isArtFailed(chatId, messageId) == true
-
-        if (!isRecentlyFailed && fileId != null) {
-            downloadPath = downloadWithRetry(fileId, chatId, messageId)
-        }
-
-        if (downloadPath != null) {
-            return SourceResult(
-                source = coil.decode.ImageSource(
-                    file = downloadPath.toPath(),
-                    fileSystem = okio.FileSystem.SYSTEM
-                ),
-                mimeType = null,
-                dataSource = DataSource.DISK
-            )
-        }
-        
-        val minithumbnailData = extractMinithumbnail(message.content)
-        if (minithumbnailData != null) {
-            val bitmap = BitmapFactory.decodeByteArray(minithumbnailData, 0, minithumbnailData.size)
-            if (bitmap != null) {
-                return DrawableResult(
-                    drawable = BitmapDrawable(context.resources, bitmap),
-                    isSampled = true,
-                    dataSource = DataSource.MEMORY
-                )
-            }
-        }
-        
         return null
     }
 
@@ -224,101 +210,49 @@ class TelegramCoilFetcher(
         }
     }
 
-    /**
-     * Tries to extract embedded album art from the downloaded audio file.
-     * SAFETY: Only extracts if file is fully downloaded to avoid IO contention during streaming.
-     * Returns the path to the cached art file if successful, null otherwise.
-     */
     private suspend fun tryExtractEmbeddedArtIfSafe(chatId: Long, messageId: Long): String? {
         val key = "${chatId}_${messageId}"
         val cachedArtFile = File(cacheDir, "telegram_embedded_art_${key}.jpg")
         val noArtMarker = File(cacheDir, "telegram_embedded_art_${key}_none")
 
-        // 1. Fast Check (No Lock): If already cached, return immediately
         if (cachedArtFile.exists() && cachedArtFile.length() > 0) return cachedArtFile.absolutePath
-        if (noArtMarker.exists()) return noArtMarker.lastModified().let { 
-             // Optional: Cache negative result for a while? For now, trust the marker.
-             null 
-        }
+        if (noArtMarker.exists()) return null
 
-        // 2. Acquire Lock for this specific art
-        val lock = extractionMapMutex.withLock {
-            extractionLocks.getOrPut(key) { Mutex() }
-        }
+        val lock = extractionMapMutex.withLock { extractionLocks.getOrPut(key) { Mutex() } }
 
         return lock.withLock {
-            // 3. Double-Check inside lock (in case another thread finished it while we waited)
-            if (cachedArtFile.exists() && cachedArtFile.length() > 0) {
-                return cachedArtFile.absolutePath
-            }
-            if (noArtMarker.exists()) {
-                return null
-            }
+            if (cachedArtFile.exists() && cachedArtFile.length() > 0) return@withLock cachedArtFile.absolutePath
             
-            // 4. Proceed with Extraction
-            // Get the message to find the audio file ID
-            val message = telegramRepository.getMessage(chatId, messageId) ?: return null
-            val audioFileId = extractAudioFileId(message.content) ?: return null
+            val message = telegramRepository.getMessage(chatId, messageId) ?: return@withLock null
+            val audioFileId = when (val c = message.content) {
+                is TdApi.MessageAudio -> c.audio.audio.id
+                is TdApi.MessageDocument -> c.document.document.id
+                else -> null
+            } ?: return@withLock null
 
-            // Check if the audio file is already downloaded
             val audioFile = telegramRepository.getFile(audioFileId)
-            if (audioFile?.local?.isDownloadingCompleted != true || audioFile.local.path.isNullOrEmpty()) {
-                // Audio not downloaded yet - don't wait
-                return null
-            }
+            if (audioFile?.local?.isDownloadingCompleted != true || audioFile.local.path.isNullOrEmpty()) return@withLock null
 
-            val audioFilePath = audioFile.local.path
-            Timber.v("TelegramCoilFetcher: Extracting embedded art from: $audioFilePath")
-
-            // Extract embedded art using MediaMetadataRetriever
-            val extractedPath = extractAndCacheEmbeddedArt(audioFilePath, cachedArtFile, noArtMarker)
-            
-            // Notify that embedded art was extracted (for UI color refresh)
+            val extractedPath = extractAndCacheEmbeddedArt(audioFile.local.path, cachedArtFile, noArtMarker)
             if (extractedPath != null) {
                 telegramCacheManager?.notifyEmbeddedArtExtracted(chatId, messageId)
-                Timber.d("TelegramCoilFetcher: Cached embedded art for $chatId/$messageId")
             }
-            
             extractedPath
         }
     }
 
-    /**
-     * Extracts the audio file ID from message content.
-     */
-    private fun extractAudioFileId(content: TdApi.MessageContent?): Int? {
-        return when (content) {
-            is TdApi.MessageAudio -> content.audio.audio.id
-            is TdApi.MessageDocument -> content.document.document.id
-            else -> null
-        }
-    }
-
-    /**
-     * Extracts embedded art from an audio file and caches it.
-     * Creates a marker file if no art is found to avoid repeated extraction attempts.
-     */
-    private fun extractAndCacheEmbeddedArt(
-        audioFilePath: String,
-        cacheFile: File,
-        noArtMarker: File
-    ): String? {
+    private fun extractAndCacheEmbeddedArt(audioFilePath: String, cacheFile: File, noArtMarker: File): String? {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(audioFilePath)
-            val embeddedPicture = retriever.embeddedPicture
-
-            if (embeddedPicture != null && embeddedPicture.isNotEmpty()) {
-                // Validate that it's actually an image
-                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeByteArray(embeddedPicture, 0, embeddedPicture.size, options)
-                
-                if (options.outWidth > 0 && options.outHeight > 0) {
-                    // Valid image - save to cache
-                    FileOutputStream(cacheFile).use { fos ->
-                        fos.write(embeddedPicture)
-                    }
-                    Timber.v("TelegramCoilFetcher: Extracted embedded art (${options.outWidth}x${options.outHeight})")
+            val pic = retriever.embeddedPicture
+            if (pic != null && pic.isNotEmpty()) {
+                // Validate image data before caching: inJustDecodeBounds only reads
+                // dimensions without loading pixels — zero memory overhead.
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(pic, 0, pic.size, opts)
+                if (opts.outWidth > 0 && opts.outHeight > 0) {
+                    FileOutputStream(cacheFile).use { it.write(pic) }
                     cacheFile.absolutePath
                 } else {
                     noArtMarker.createNewFile()
@@ -329,169 +263,59 @@ class TelegramCoilFetcher(
                 null
             }
         } catch (e: Exception) {
-            // Only log extraction failures once per file
-            if (shouldLogFailure("extract_$audioFilePath")) {
-                Timber.w("TelegramCoilFetcher: Failed to extract embedded art from $audioFilePath: ${e.message}")
-            }
             noArtMarker.createNewFile()
             null
         } finally {
-            try {
-                retriever.release()
-            } catch (e: Exception) {
-                // Ignore release errors
-            }
+            try { retriever.release() } catch (_: Exception) {}
         }
     }
 
-    /**
-     * Extracts the thumbnail file ID from a message.
-     * Supports MessageAudio and MessageDocument content types.
-     */
-    private suspend fun extractThumbnailFileId(chatId: Long, messageId: Long): Int? {
-        val message = telegramRepository.getMessage(chatId, messageId) ?: return null
-        return extractFileIdFromContent(message.content)
-    }
-
-    /**
-     * Extracts the file ID from message content (audio thumbnail or document thumbnail).
-     * Priority: albumCoverThumbnail > externalAlbumCovers > document thumbnail
-     */
     private fun extractFileIdFromContent(content: TdApi.MessageContent?): Int? {
         return when (content) {
             is TdApi.MessageAudio -> {
                 val audio = content.audio
-                // Prefer the highest-resolution cover TDLib exposes. albumCoverThumbnail is
-                // often tiny; externalAlbumCovers can contain original/large provider art.
                 val candidates = buildList {
                     audio.albumCoverThumbnail?.let(::add)
                     audio.externalAlbumCovers?.let(::addAll)
                 }
                 candidates.maxByOrNull { it.width * it.height }?.file?.id
             }
-            is TdApi.MessageDocument -> {
-                content.document.thumbnail?.file?.id
-            }
+            is TdApi.MessageDocument -> content.document.thumbnail?.file?.id
             else -> null
         }
     }
 
-    /**
-     * Downloads a file with automatic retry using refreshed message data.
-     * If the first download fails (stale reference), it refreshes the message
-     * from the server and retries with the new file ID.
-     */
-    private suspend fun downloadWithRetry(
-        initialFileId: Int,
-        chatId: Long,
-        messageId: Long
-    ): String? {
-        // Attempt 1: Download with initial file ID
-        try {
-            // Priority 1 (Min) to avoid starving audio streaming (Priority 32)
-            val path = telegramRepository.downloadFileAwait(initialFileId, 1)
-            if (path != null) return path
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // Don't log cancellations - they're normal during fast scrolling
-            throw e
-        } catch (e: Exception) {
-            // Only log first attempt failures with sampling
-            Timber.v("TelegramCoilFetcher: First download attempt failed for fileId: $initialFileId")
-        }
-
-        // Attempt 2: Refresh message and retry with fresh file ID
-        val refreshedMessage = telegramRepository.refreshMessage(chatId, messageId)
-        val refreshedFileId = extractFileIdFromContent(refreshedMessage?.content)
-
-        if (refreshedFileId == null) {
-            // Log refresh failures with sampling to avoid spam
-            if (shouldLogFailure("refresh_$chatId/$messageId")) {
-                Timber.w("TelegramCoilFetcher: Refresh failed - no thumbnail in message $messageId")
-            }
-            telegramCacheManager?.markArtFailed(chatId, messageId)
-            return null
-        }
-
-        // Retry with refreshed file ID
-        Timber.v("TelegramCoilFetcher: Retrying with ${if (refreshedFileId == initialFileId) "same" else "new"} fileId")
-
-        return try {
-            val result = telegramRepository.downloadFileAwait(refreshedFileId, 1)
-            if (result == null) {
-                telegramCacheManager?.markArtFailed(chatId, messageId)
-            }
-            result
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            // Log retry failures with sampling
-            if (shouldLogFailure("retry_$refreshedFileId")) {
-                Timber.w("TelegramCoilFetcher: Retry download failed for fileId: $refreshedFileId")
-            }
-            telegramCacheManager?.markArtFailed(chatId, messageId)
-            null
-        }
-    }
-
-    private fun cleanTitle(title: String): String {
-        return title
-            .replace(Regex("\\.mp3$", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("^\\[\\d+]"), "")
-            .replace(Regex("^\\d+\\s*-\\s*"), "")
-            .trim()
-    }
+    private fun cleanTitle(title: String): String = title
+        .replace(Regex("\\.mp3$", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("^\\[\\d+]"), "")
+        .replace(Regex("^\\d+\\s*-\\s*"), "")
+        .trim()
 
     private val deezerSizeRegex = Regex("/\\d{2,4}x\\d{2,4}([\\-.])")
-    private fun upgradeToHighResDeezerUrl(url: String): String {
-        return deezerSizeRegex.replace(url, "/1000x1000$1")
+    private fun upgradeToHighResDeezerUrl(url: String): String = deezerSizeRegex.replace(url, "/1000x1000$1")
+
+    private suspend fun downloadDeezerCover(url: String, outputFile: File): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+            if (conn.responseCode == 200) {
+                conn.inputStream.use { input -> FileOutputStream(outputFile).use { output -> input.copyTo(output) } }
+                true
+            } else false
+        } catch (_: Exception) { false }
     }
 
-    private suspend fun downloadDeezerCover(url: String, outputFile: File): Boolean {
-        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                connection.connectTimeout = 10000
-                connection.readTimeout = 10000
-                connection.requestMethod = "GET"
-                connection.doInput = true
-                connection.connect()
-
-                if (connection.responseCode == java.net.HttpURLConnection.HTTP_OK) {
-                    connection.inputStream.use { input ->
-                        FileOutputStream(outputFile).use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    true
-                } else {
-                    false
-                }
-            } catch (e: Exception) {
-                Timber.d("TelegramCoilFetcher: Failed to download Deezer cover: ${e.message}")
-                false
-            }
-        }
-    }
-
-    /**
-     * Factory for creating TelegramCoilFetcher instances.
-     * Registered with Coil's ImageLoader to handle telegram_art:// URIs.
-     */
     class Factory @Inject constructor(
         private val telegramRepository: TelegramRepository,
         private val telegramCacheManager: com.unshoo.pixelmusic.data.telegram.TelegramCacheManager,
         private val deezerApiService: DeezerApiService
     ) : Fetcher.Factory<Uri> {
-        
         private var cacheDir: File? = null
-        
         override fun create(data: Uri, options: Options, imageLoader: ImageLoader): Fetcher? {
-            return if (data.scheme == "telegram_art") {
-                val cache = cacheDir ?: options.context.cacheDir.also { cacheDir = it }
-                TelegramCoilFetcher(options.context, data, telegramRepository, cache, telegramCacheManager, deezerApiService)
-            } else {
-                null
-            }
+            if (data.scheme != "telegram_art") return null
+            val cache = cacheDir ?: options.context.cacheDir.also { cacheDir = it }
+            return TelegramCoilFetcher(options.context, data, telegramRepository, cache, telegramCacheManager, deezerApiService)
         }
     }
 }

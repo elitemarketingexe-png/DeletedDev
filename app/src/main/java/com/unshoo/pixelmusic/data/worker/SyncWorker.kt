@@ -90,7 +90,8 @@ constructor(
         private val telegramDao: TelegramDao,
         private val playlistPreferencesRepository: PlaylistPreferencesRepository,
         private val youtubeDatastoreRepository: com.unshoo.pixelmusic.data.remote.youtube.DatastoreRepository,
-        private val favoritesDao: FavoritesDao
+        private val favoritesDao: FavoritesDao,
+        private val telegramRepository: com.unshoo.pixelmusic.data.telegram.TelegramRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
     private val contentResolver: ContentResolver = appContext.contentResolver
@@ -411,7 +412,9 @@ constructor(
                     }
 
                     if (hasTelegramChannels) {
-                        syncTelegramData()
+                        syncTelegramData { current, total ->
+                            reportProgressThrottled(current, total, SyncProgress.SyncPhase.SYNCING_TELEGRAM_ART.ordinal)
+                        }
                     } else {
                         Log.d(TAG, "Skipping Telegram sync — no channels configured.")
                     }
@@ -1416,7 +1419,7 @@ constructor(
     }
     
     // Logic to sync Telegram songs into main DB with Unified Library Support
-    private suspend fun syncTelegramData() {
+    private suspend fun syncTelegramData(onArtProgress: suspend (Int, Int) -> Unit) {
         Log.i(TAG, "Syncing Telegram songs to main database (Unified Mode)...")
         try {
             val rawTelegramSongs = telegramDao.getAllTelegramSongs().first()
@@ -1651,7 +1654,26 @@ constructor(
                 crossRefs = crossRefsToInsert,
                 deletedSongIds = deletedUnifiedSongIds
             )
-            Log.i(TAG, "Synced ${songsToInsert.size} Telegram songs with Unified Metadata.")
+            
+            // 6. Artwork Warmup with Progress
+            Log.i(TAG, "Warming up artwork for Telegram songs...")
+            val artTargets = rawTelegramSongs.asSequence()
+                .map { it.chatId to it.messageId }
+                .distinct()
+                .toList()
+            
+            val totalArt = artTargets.size
+            artTargets.forEachIndexed { index, (chatId, messageId) ->
+                try {
+                    telegramRepository.warmUpArtwork(chatId, messageId)
+                } catch (e: Exception) {
+                    // Ignore non-fatal errors
+                }
+                onArtProgress(index + 1, totalArt)
+                if (index % 10 == 0) yield()
+            }
+            
+            Log.i(TAG, "Synced ${songsToInsert.size} Telegram songs and processed $totalArt artworks.")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to sync Telegram data", e)
         }

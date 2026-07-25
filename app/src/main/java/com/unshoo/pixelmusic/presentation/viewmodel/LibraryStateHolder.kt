@@ -25,7 +25,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -142,7 +144,11 @@ class LibraryStateHolder @Inject constructor(
         .flatMapLatest { filter -> musicRepository.getFavoriteSongCountFlow(filter) }
         .flowOn(Dispatchers.IO)
 
-    val genres: Flow<ImmutableList<Genre>> = flowOf(persistentListOf())
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val genres: Flow<ImmutableList<Genre>> = musicRepository.getGenres()
+        .map { it.toImmutableList() }
+        .distinctUntilChanged()
+        .flowOn(Dispatchers.Default)
 
     private var foldersJob: kotlinx.coroutines.Job? = null
     private var scope: CoroutineScope? = null
@@ -252,7 +258,34 @@ class LibraryStateHolder @Inject constructor(
         _currentStorageFilter.value = filter
     }
 
-    fun trimMemory(level: Int) {}
+    private var isTrimmed = false
 
-    fun restoreAfterTrimIfNeeded() {}
+    fun trimMemory(level: Int) {
+        if (
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND ||
+            level == android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN
+        ) {
+            if (_allSongs.value.isNotEmpty()) {
+                Timber.d("LibraryStateHolder: trimming memory, clearing in-memory collections")
+                _allSongs.value = persistentListOf()
+                _allSongsById.value = emptyMap()
+                _albums.value = persistentListOf()
+                _artists.value = persistentListOf()
+                _musicFolders.value = persistentListOf()
+                isTrimmed = true
+            }
+        }
+    }
+
+    fun restoreAfterTrimIfNeeded() {
+        if (isTrimmed) {
+            Timber.d("LibraryStateHolder: restoring after trim")
+            isTrimmed = false
+            loadSongsFromRepository()
+            loadAlbumsFromRepository()
+            loadArtistsFromRepository()
+            loadFoldersFromRepository()
+        }
+    }
 }

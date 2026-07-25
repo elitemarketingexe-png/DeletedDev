@@ -516,22 +516,7 @@ fun UnifiedPlayerSheetV2(
     val miniReadyAlpha = sheetThemeState.miniReadyAlpha
     val miniAppearScale = sheetThemeState.miniAppearScale
     val playerAreaBackground = sheetThemeState.playerAreaBackground
-    // Elevation is only visible in the mini/collapsed state (expansion < 0.18).
-    // miniReadyAlpha fades the shadow in during the initial song-appear animation.
-    val visualCardShadowElevation by remember(showQueueSheet, miniReadyAlpha) {
-        derivedStateOf {
-            if (
-                showQueueSheet ||
-                playerContentExpansionFraction.isRunning ||
-                playerContentExpansionFraction.value > 0.18f
-            ) {
-                0.dp
-            } else {
-                (3f * miniReadyAlpha.value).dp
-            }
-        }
-    }
-
+    
     val sheetInteractionState = rememberSheetInteractionState(
         scope = scope,
         velocityTracker = velocityTracker,
@@ -627,17 +612,18 @@ fun UnifiedPlayerSheetV2(
                                 scaleY = visualOvershootScaleY.value * miniAppearScale.value
                                 alpha = miniReadyAlpha.value
                                 transformOrigin = TransformOrigin(0.5f, 1f)
-                            }
-                            // Always apply Modifier.shadow with the dynamic elevation
-                            // (0.dp renders nothing). Keeping the modifier chain
-                            // structurally stable avoids the costly relayout/redraw
-                            // restructure when the elevation crosses 0.dp during
-                            // expand/collapse or right after play/pause.
-                            .shadow(
-                                elevation = visualCardShadowElevation,
-                                shape = sheetInteractionState.playerShadowShape,
+                                
+                                // Shadow optimization: apply elevation in the draw phase to avoid recomposition
+                                val expansion = playerContentExpansionFraction.value
+                                val shadowAlpha = miniReadyAlpha.value
+                                shadowElevation = if (showQueueSheet || expansion > 0.18f) {
+                                    0f
+                                } else {
+                                    3f * shadowAlpha * density.density
+                                }
+                                shape = sheetInteractionState.playerShadowShape
                                 clip = false
-                            )
+                            }
                             .background(
                                 color = playerAreaBackground,
                                 shape = sheetInteractionState.playerShadowShape

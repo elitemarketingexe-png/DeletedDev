@@ -481,6 +481,13 @@ class PlayerViewModel @Inject constructor(
             }
 
             launch {
+                telegramRepository.artworkUpdated.collect { updatedArtUri ->
+                    Timber.d("PlayerViewModel: Telegram high-quality artwork ready for $updatedArtUri")
+                    refreshArtwork(updatedArtUri)
+                }
+            }
+
+            launch {
                 telegramRepository.downloadCompleted.collect {
                     val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
                     if (currentSong != null && currentSong.contentUriString.startsWith("telegram:")) {
@@ -566,6 +573,7 @@ class PlayerViewModel @Inject constructor(
                 }
             }
         }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _sheetState = MutableStateFlow(PlayerSheetState.COLLAPSED)

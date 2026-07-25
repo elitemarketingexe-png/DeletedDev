@@ -275,13 +275,6 @@ class SearchStateHolder @Inject constructor(
         lastContinuationToken = null
 
         when (filter) {
-            // BUGFIX (search): previously this fired 3 parallel category searches
-            // (song/artist/album) and hand-interleaved them 1-1-1 into a list - a
-            // homemade ranking that doesn't match YouTube Music's own relevance
-            // ordering. ArchiveTune instead calls YouTube's actual search-summary
-            // endpoint, which already returns a single, YouTube-ranked "Top results"
-            // shelf followed by category shelves. This does the same thing here, so
-            // the All tab's ordering matches what YouTube Music itself would show.
             SearchFilterType.ALL -> coroutineScope {
                 val songsDeferred = async { YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull() }
                 val artistsDeferred = async { YouTube.search(query, YouTube.SearchFilter.FILTER_ARTIST).getOrNull() }
@@ -303,54 +296,57 @@ class SearchStateHolder @Inject constructor(
                 val albumsList = albumsResult?.items?.filterIsInstance<AlbumItem>().orEmpty()
                 val playlistsList = playlistsResult?.items?.filterIsInstance<PlaylistItem>().orEmpty()
 
-                // Top 10 Songs
-                val (top10Songs, remainingSongs) = if (songsList.size > 10) {
-                    songsList.take(10) to songsList.drop(10)
-                } else {
-                    songsList to emptyList()
+                // Optimization: Pre-calculate search items off-main
+                withContext(Dispatchers.Default) {
+                    // Top 10 Songs
+                    val (top10Songs, remainingSongs) = if (songsList.size > 10) {
+                        songsList.take(10) to songsList.drop(10)
+                    } else {
+                        songsList to emptyList()
+                    }
+
+                    top10Songs.forEach { topSongs.add(SearchResultItem.SongItem(it.toNativeSong())) }
+
+                    // Interleave Artists, Albums, Playlists, and remaining Songs (1 of each per iteration)
+                    val artistIterator = artistsList.iterator()
+                    val albumIterator = albumsList.iterator()
+                    val playlistIterator = playlistsList.iterator()
+                    val songIterator = remainingSongs.iterator()
+
+                    while (artistIterator.hasNext() || albumIterator.hasNext() || playlistIterator.hasNext() || songIterator.hasNext()) {
+                        if (artistIterator.hasNext()) {
+                            val artist = artistIterator.next()
+                            mixedItems.add(SearchResultItem.ArtistItem(
+                                Artist(id = ytArtistId(artist.title), name = artist.title, songCount = 0, imageUrl = artist.thumbnail, channelId = artist.id)
+                            ))
+                        }
+                        if (albumIterator.hasNext()) {
+                            val album = albumIterator.next()
+                            val longId = album.browseId.hashCode().toLong()
+                            albumIdMap[longId] = album.browseId
+                            AlbumIdMapper.putMapping(appContext, longId, album.browseId)
+                            mixedItems.add(SearchResultItem.AlbumItem(
+                                Album(id = longId, title = album.title,
+                                    artist = album.artists?.joinToString { it.name }.orEmpty(),
+                                    year = album.year ?: 0, dateAdded = System.currentTimeMillis(),
+                                    albumArtUriString = album.thumbnail, songCount = 0)
+                            ))
+                        }
+                        if (playlistIterator.hasNext()) {
+                            val playlist = playlistIterator.next()
+                            mixedItems.add(SearchResultItem.PlaylistItem(
+                                Playlist(id = playlist.id, name = playlist.title, songIds = emptyList(), coverImageUri = playlist.thumbnail, source = "YOUTUBE")
+                            ))
+                        }
+                        if (songIterator.hasNext()) {
+                            val song = songIterator.next()
+                            mixedItems.add(SearchResultItem.SongItem(song.toNativeSong()))
+                        }
+                    }
+
+                    items.addAll(topSongs)
+                    items.addAll(mixedItems)
                 }
-
-                top10Songs.forEach { topSongs.add(SearchResultItem.SongItem(it.toNativeSong())) }
-
-                // Interleave Artists, Albums, Playlists, and remaining Songs (1 of each per iteration)
-                val artistIterator = artistsList.iterator()
-                val albumIterator = albumsList.iterator()
-                val playlistIterator = playlistsList.iterator()
-                val songIterator = remainingSongs.iterator()
-
-                while (artistIterator.hasNext() || albumIterator.hasNext() || playlistIterator.hasNext() || songIterator.hasNext()) {
-                    if (artistIterator.hasNext()) {
-                        val artist = artistIterator.next()
-                        mixedItems.add(SearchResultItem.ArtistItem(
-                            Artist(id = ytArtistId(artist.title), name = artist.title, songCount = 0, imageUrl = artist.thumbnail, channelId = artist.id)
-                        ))
-                    }
-                    if (albumIterator.hasNext()) {
-                        val album = albumIterator.next()
-                        val longId = album.browseId.hashCode().toLong()
-                        albumIdMap[longId] = album.browseId
-                        AlbumIdMapper.putMapping(appContext, longId, album.browseId)
-                        mixedItems.add(SearchResultItem.AlbumItem(
-                            Album(id = longId, title = album.title,
-                                artist = album.artists?.joinToString { it.name }.orEmpty(),
-                                year = album.year ?: 0, dateAdded = System.currentTimeMillis(),
-                                albumArtUriString = album.thumbnail, songCount = 0)
-                        ))
-                    }
-                    if (playlistIterator.hasNext()) {
-                        val playlist = playlistIterator.next()
-                        mixedItems.add(SearchResultItem.PlaylistItem(
-                            Playlist(id = playlist.id, name = playlist.title, songIds = emptyList(), coverImageUri = playlist.thumbnail, source = "YOUTUBE")
-                        ))
-                    }
-                    if (songIterator.hasNext()) {
-                        val song = songIterator.next()
-                        mixedItems.add(SearchResultItem.SongItem(song.toNativeSong()))
-                    }
-                }
-
-                items.addAll(topSongs)
-                items.addAll(mixedItems)
             }
             SearchFilterType.SONGS -> {
                 val result = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()

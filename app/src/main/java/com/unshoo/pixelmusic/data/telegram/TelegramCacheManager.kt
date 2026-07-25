@@ -47,6 +47,21 @@ class TelegramCacheManager @Inject constructor(
     // PlayerViewModel observes this to refresh album colors
     private val _embeddedArtUpdated = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val embeddedArtUpdated: SharedFlow<String> = _embeddedArtUpdated.asSharedFlow()
+
+    /**
+     * Persistent directory for high-quality Telegram artwork.
+     * Stored in filesDir to prevent being cleared by the OS.
+     */
+    val persistentArtDir: File by lazy {
+        File(context.filesDir, "telegram_art").apply { if (!exists()) mkdirs() }
+    }
+
+    /**
+     * Gets a persistent file for high-quality artwork.
+     */
+    fun getPersistentArtFile(chatId: Long, messageId: Long, type: String = "thumb"): File {
+        return File(persistentArtDir, "art_${chatId}_${messageId}_${type}.jpg")
+    }
     
     /**
      * Called when embedded art is successfully extracted for a Telegram song.

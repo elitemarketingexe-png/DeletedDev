@@ -569,6 +569,8 @@ private fun syncPhaseLabel(phase: SyncProgress.SyncPhase): String =
                             R.string.presentation_batch_f_sync_phase_cleaning_cache
                     SyncProgress.SyncPhase.SYNCING_CLOUD ->
                             R.string.presentation_batch_f_sync_phase_syncing_cloud
+                    SyncProgress.SyncPhase.SYNCING_TELEGRAM_ART ->
+                            R.string.presentation_batch_f_sync_phase_syncing_cloud
                     SyncProgress.SyncPhase.COMPLETING -> R.string.presentation_batch_f_sync_phase_completing
                 }
         )

@@ -39,6 +39,7 @@ data class SyncProgress(
         SCANNING_LRC,
         CLEANING_CACHE,
         SYNCING_CLOUD,
+        SYNCING_TELEGRAM_ART,
         COMPLETING
     }
 
@@ -265,6 +266,7 @@ class SyncManager @Inject constructor(
             SyncProgress.SyncPhase.SCANNING_LRC,
             SyncProgress.SyncPhase.CLEANING_CACHE,
             SyncProgress.SyncPhase.SYNCING_CLOUD,
+            SyncProgress.SyncPhase.SYNCING_TELEGRAM_ART,
             SyncProgress.SyncPhase.COMPLETING
         )
     }

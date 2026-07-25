@@ -1,6 +1,7 @@
 package com.unshoo.pixelmusic.presentation.components.subcomps
 
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -110,53 +111,49 @@ fun EnhancedSongListItem(
 
     val albumArtTargetSizePx = with(LocalDensity.current) { albumArtSize.roundToPx() }
     val isHighlighted = isCurrentSong && !isLoading
-    val isNormalStaticRow = !isHighlighted && !isSelected && !isSelectionMode
+    
+    val transition = updateTransition(
+        targetState = EnhancedSongAnimationTarget(
+            isHighlighted = isHighlighted,
+            isSelected = isSelected
+        ),
+        label = "EnhancedSongListItemTransition"
+    )
 
-    val highlightProgress: Float
-    val selectionVisualProgress: Float
-    val selectionScaleProgress: Float
-
-    if (performanceModeEnabled || isNormalStaticRow) {
-        highlightProgress = if (isHighlighted) 1f else 0f
-        selectionVisualProgress = if (isSelected) 1f else 0f
-        selectionScaleProgress = if (isSelected) 1f else 0f
-    } else {
-        val transition = updateTransition(
-            targetState = EnhancedSongAnimationTarget(
-                isHighlighted = isHighlighted,
-                isSelected = isSelected
-            ),
-            label = "EnhancedSongListItemTransition"
-        )
-        highlightProgress = transition.animateFloat(
-            transitionSpec = { tween(durationMillis = 400) },
-            label = "highlightProgress"
-        ) { state ->
-            if (state.isHighlighted) 1f else 0f
-        }.value
-        selectionVisualProgress = transition.animateFloat(
-            transitionSpec = { tween(durationMillis = 250) },
-            label = "selectionVisualProgress"
-        ) { state ->
-            if (state.isSelected) 1f else 0f
-        }.value
-        selectionScaleProgress = transition.animateFloat(
-            transitionSpec = {
-                spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
-                )
-            },
-            label = "selectionScaleProgress"
-        ) { state ->
-            if (state.isSelected) 1f else 0f
-        }.value
+    val highlightProgress by transition.animateFloat(
+        transitionSpec = { 
+            if (performanceModeEnabled) snap() else tween(durationMillis = 400) 
+        },
+        label = "highlightProgress"
+    ) { state ->
+        if (state.isHighlighted) 1f else 0f
     }
 
-    val animatedCornerRadius = if (isNormalStaticRow) 22.dp else lerpDp(22.dp, 50.dp, highlightProgress)
-    val animatedAlbumCornerRadius = if (isNormalStaticRow) 10.dp else lerpDp(10.dp, 50.dp, highlightProgress)
-    val selectionScale = if (isNormalStaticRow) 1f else lerpFloat(1f, 0.98f, selectionScaleProgress)
-    val selectionBorderWidth = if (isNormalStaticRow) 0.dp else lerpDp(0.dp, 2.5.dp, selectionVisualProgress)
+    val selectionVisualProgress by transition.animateFloat(
+        transitionSpec = { 
+            if (performanceModeEnabled) snap() else tween(durationMillis = 250) 
+        },
+        label = "selectionVisualProgress"
+    ) { state ->
+        if (state.isSelected) 1f else 0f
+    }
+
+    val selectionScaleProgress by transition.animateFloat(
+        transitionSpec = {
+            if (performanceModeEnabled) snap() else spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow
+            )
+        },
+        label = "selectionScaleProgress"
+    ) { state ->
+        if (state.isSelected) 1f else 0f
+    }
+
+    val animatedCornerRadius = lerpDp(22.dp, 50.dp, highlightProgress)
+    val animatedAlbumCornerRadius = lerpDp(10.dp, 50.dp, highlightProgress)
+    val selectionScale = lerpFloat(1f, 0.98f, selectionScaleProgress)
+    val selectionBorderWidth = lerpDp(0.dp, 2.5.dp, selectionVisualProgress)
 
     val surfaceShape = remember(animatedCornerRadius, customShape, isHighlighted) {
         if (customShape != null && !isHighlighted) {
@@ -173,31 +170,41 @@ fun EnhancedSongListItem(
     val colors = MaterialTheme.colorScheme
     val baseContainerColor = containerColorOverride ?: colors.surfaceContainerLow
     
-    val containerColor = if (isNormalStaticRow) baseContainerColor else {
+    val containerColor = remember(baseContainerColor, colors.primaryContainer, colors.secondaryContainer, highlightProgress, selectionVisualProgress) {
         val playbackContainerColor = lerpColor(baseContainerColor, colors.primaryContainer, highlightProgress)
         lerpColor(playbackContainerColor, colors.secondaryContainer, selectionVisualProgress)
     }
 
     val baseContentColor = colors.onSurface
     
-    val contentColor = if (isNormalStaticRow) baseContentColor else {
+    val contentColor = remember(baseContentColor, colors.onPrimaryContainer, colors.onSecondaryContainer, highlightProgress, selectionVisualProgress) {
         val playbackContentColor = lerpColor(baseContentColor, colors.onPrimaryContainer, highlightProgress)
         lerpColor(playbackContentColor, colors.onSecondaryContainer, selectionVisualProgress)
     }
 
-    val selectionBorderColor = if (isNormalStaticRow) colors.primary.copy(alpha = 0f) else lerpColor(colors.primary.copy(alpha = 0f), colors.primary, selectionVisualProgress)
-    val mvContainerColor = if (isNormalStaticRow) colors.onSurface else lerpColor(colors.onSurface, colors.primaryContainer, highlightProgress)
-    val mvContentColor = if (isNormalStaticRow) colors.surfaceContainerHigh else lerpColor(colors.surfaceContainerHigh, colors.onPrimaryContainer, highlightProgress)
-    val selectionOverlayColor = if (isNormalStaticRow) Color.Transparent else lerpColor(
-        Color.Transparent,
-        colors.primary.copy(alpha = 0.7f),
-        selectionVisualProgress
-    )
-    val selectionOverlayContentColor = if (isNormalStaticRow) Color.Transparent else lerpColor(
-        Color.Transparent,
-        colors.onPrimary,
-        selectionVisualProgress
-    )
+    val selectionBorderColor = remember(colors.primary, selectionVisualProgress) {
+        lerpColor(colors.primary.copy(alpha = 0f), colors.primary, selectionVisualProgress)
+    }
+    val mvContainerColor = remember(colors.onSurface, colors.primaryContainer, highlightProgress) {
+        lerpColor(colors.onSurface, colors.primaryContainer, highlightProgress)
+    }
+    val mvContentColor = remember(colors.surfaceContainerHigh, colors.onPrimaryContainer, highlightProgress) {
+        lerpColor(colors.surfaceContainerHigh, colors.onPrimaryContainer, highlightProgress)
+    }
+    val selectionOverlayColor = remember(colors.primary, selectionVisualProgress) {
+        lerpColor(
+            Color.Transparent,
+            colors.primary.copy(alpha = 0.7f),
+            selectionVisualProgress
+        )
+    }
+    val selectionOverlayContentColor = remember(colors.onPrimary, selectionVisualProgress) {
+        lerpColor(
+            Color.Transparent,
+            colors.onPrimary,
+            selectionVisualProgress
+        )
+    }
     val showSelectionDecoration = selectionVisualProgress > 0.001f
 
     if (isLoading) {

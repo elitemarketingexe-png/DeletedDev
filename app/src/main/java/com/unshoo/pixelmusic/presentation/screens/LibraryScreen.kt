@@ -438,6 +438,39 @@ private fun PlayerUiState.toLibraryScreenProjection(): LibraryScreenPlayerProjec
         hideLocalMedia = hideLocalMedia
     )
 
+private data class SongsTabSlice(
+    val currentSongSortOption: SortOption = SortOption.SongTitleAZ,
+    val currentStorageFilter: StorageFilter = StorageFilter.ALL,
+    val hideLocalMedia: Boolean = false
+)
+
+private data class AlbumsTabSlice(
+    val isAlbumsListView: Boolean = false,
+    val currentAlbumSortOption: SortOption = SortOption.AlbumTitleAZ,
+    val currentStorageFilter: StorageFilter = StorageFilter.ALL,
+    val hideLocalMedia: Boolean = false
+)
+
+private data class ArtistsTabSlice(
+    val currentArtistSortOption: SortOption = SortOption.ArtistNameAZ,
+    val currentStorageFilter: StorageFilter = StorageFilter.ALL,
+    val hideLocalMedia: Boolean = false
+)
+
+private data class FavoritesTabSlice(
+    val currentFavoriteSortOption: SortOption = SortOption.LikedSongDateLiked,
+    val currentStorageFilter: StorageFilter = StorageFilter.ALL,
+    val hideLocalMedia: Boolean = false
+)
+
+private data class FoldersTabSlice(
+    val musicFolders: ImmutableList<MusicFolder> = persistentListOf(),
+    val currentFolder: MusicFolder? = null,
+    val isFoldersPlaylistView: Boolean = false,
+    val currentFolderSortOption: SortOption = SortOption.FolderNameAZ,
+    val isLoadingLibraryCategories: Boolean = true
+)
+
 @RequiresApi(Build.VERSION_CODES.R)
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -1574,6 +1607,18 @@ fun LibraryScreen(
                                 ) {
                                     when (tabTitles.getOrNull(tabIndex)?.toLibraryTabIdOrNull()) {
                                     LibraryTabId.SONGS -> {
+                                        val songsTabSlice by remember(playerViewModel) {
+                                            playerViewModel.playerUiState
+                                                .map { uiState ->
+                                                    SongsTabSlice(
+                                                        currentSongSortOption = uiState.currentSongSortOption,
+                                                        currentStorageFilter = uiState.currentStorageFilter,
+                                                        hideLocalMedia = uiState.hideLocalMedia
+                                                    )
+                                                }
+                                                .distinctUntilChanged()
+                                        }.collectAsStateWithLifecycle(initialValue = SongsTabSlice())
+
                                         LibrarySongsTab(
                                             songs = allSongsLazyPagingItems,
                                             isLoading = isLibraryLoading,
@@ -1592,12 +1637,25 @@ fun LibraryScreen(
                                             getSelectionIndex = playerViewModel.multiSelectionStateHolder::getSelectionIndex,
                                             onLocateCurrentSongVisibilityChanged = { songsShowLocateButton = it },
                                             onRegisterLocateCurrentSongAction = { songsLocateAction = it },
-                                            sortOption = playerUiState.currentSongSortOption,
-                                            storageFilter = playerUiState.currentStorageFilter,
+                                            sortOption = songsTabSlice.currentSongSortOption,
+                                            storageFilter = if (songsTabSlice.hideLocalMedia) StorageFilter.ONLINE else songsTabSlice.currentStorageFilter,
                                             hasCurrentSong = hasCurrentSong
                                         )
                                     }
                                     LibraryTabId.ALBUMS -> {
+                                        val albumsTabSlice by remember(playerViewModel) {
+                                            playerViewModel.playerUiState
+                                                .map { uiState ->
+                                                    AlbumsTabSlice(
+                                                        isAlbumsListView = uiState.isAlbumsListView,
+                                                        currentAlbumSortOption = uiState.currentAlbumSortOption,
+                                                        currentStorageFilter = uiState.currentStorageFilter,
+                                                        hideLocalMedia = uiState.hideLocalMedia
+                                                    )
+                                                }
+                                                .distinctUntilChanged()
+                                        }.collectAsStateWithLifecycle(initialValue = AlbumsTabSlice())
+
                                         val isLoading = playerUiState.isLoadingLibraryCategories
 
                                         val stableOnAlbumClick: (Long) -> Unit = remember(navController) {
@@ -1613,8 +1671,8 @@ fun LibraryScreen(
                                             isLoading = isLoading,
                                             playerViewModel = playerViewModel,
                                             bottomBarHeight = bottomBarHeightDp,
-                                            isListView = playerUiState.isAlbumsListView,
-                                            currentAlbumSortOption = playerUiState.currentAlbumSortOption,
+                                            isListView = albumsTabSlice.isAlbumsListView,
+                                            currentAlbumSortOption = albumsTabSlice.currentAlbumSortOption,
                                             onAlbumClick = stableOnAlbumClick,
                                             isRefreshing = isRefreshing,
                                             onRefresh = onRefresh,
@@ -1623,11 +1681,23 @@ fun LibraryScreen(
                                             onAlbumLongPress = onAlbumLongPress,
                                             onAlbumSelectionToggle = onAlbumSelectionToggle,
                                             getSelectionIndex = getAlbumSelectionIndex,
-                                            storageFilter = playerUiState.currentStorageFilter
+                                            storageFilter = if (albumsTabSlice.hideLocalMedia) StorageFilter.ONLINE else albumsTabSlice.currentStorageFilter
                                         )
                                     }
 
                                     LibraryTabId.ARTISTS -> {
+                                        val artistsTabSlice by remember(playerViewModel) {
+                                            playerViewModel.playerUiState
+                                                .map { uiState ->
+                                                    ArtistsTabSlice(
+                                                        currentArtistSortOption = uiState.currentArtistSortOption,
+                                                        currentStorageFilter = uiState.currentStorageFilter,
+                                                        hideLocalMedia = uiState.hideLocalMedia
+                                                    )
+                                                }
+                                                .distinctUntilChanged()
+                                        }.collectAsStateWithLifecycle(initialValue = ArtistsTabSlice())
+
                                         val isLoading = playerUiState.isLoadingLibraryCategories
 
                                         LibraryArtistsTab(
@@ -1635,7 +1705,7 @@ fun LibraryScreen(
                                             isLoading = isLoading,
                                             playerViewModel = playerViewModel,
                                             bottomBarHeight = bottomBarHeightDp,
-                                            currentArtistSortOption = playerUiState.currentArtistSortOption,
+                                            currentArtistSortOption = artistsTabSlice.currentArtistSortOption,
                                             onArtistClick = { artistId ->
                                                 navController.navigateSafelyReplacing(
                                                     route = Screen.ArtistDetail.createRoute(artistId),
@@ -1644,7 +1714,7 @@ fun LibraryScreen(
                                             },
                                             isRefreshing = isRefreshing,
                                             onRefresh = onRefresh,
-                                            storageFilter = playerUiState.currentStorageFilter
+                                            storageFilter = if (artistsTabSlice.hideLocalMedia) StorageFilter.ONLINE else artistsTabSlice.currentStorageFilter
                                         )
                                     }
 
@@ -1667,6 +1737,18 @@ fun LibraryScreen(
                                     }
 
                                     LibraryTabId.LIKED -> {
+                                        val favoritesTabSlice by remember(playerViewModel) {
+                                            playerViewModel.playerUiState
+                                                .map { uiState ->
+                                                    FavoritesTabSlice(
+                                                        currentFavoriteSortOption = uiState.currentFavoriteSortOption,
+                                                        currentStorageFilter = uiState.currentStorageFilter,
+                                                        hideLocalMedia = uiState.hideLocalMedia
+                                                    )
+                                                }
+                                                .distinctUntilChanged()
+                                        }.collectAsStateWithLifecycle(initialValue = FavoritesTabSlice())
+
                                         LibraryFavoritesTab(
                                             favoriteSongs = favoritePagingItems,
                                             playerViewModel = playerViewModel,
@@ -1682,18 +1764,32 @@ fun LibraryScreen(
                                             onSongLongPress = onSongLongPress,
                                             onSongSelectionToggle = onSongSelectionToggle,
                                             getSelectionIndex = playerViewModel.multiSelectionStateHolder::getSelectionIndex,
-                                            sortOption = playerUiState.currentFavoriteSortOption,
+                                            sortOption = favoritesTabSlice.currentFavoriteSortOption,
                                             onLocateCurrentSongVisibilityChanged = { likedShowLocateButton = it },
                                             onRegisterLocateCurrentSongAction = { likedLocateAction = it },
-                                            storageFilter = playerUiState.currentStorageFilter,
+                                            storageFilter = if (favoritesTabSlice.hideLocalMedia) StorageFilter.ONLINE else favoritesTabSlice.currentStorageFilter,
                                             hasCurrentSong = hasCurrentSong
                                         )
                                     }
 
                                     LibraryTabId.FOLDERS -> {
-                                        val folders = playerUiState.musicFolders
-                                        val currentFolder = playerUiState.currentFolder
-                                        val isLoading = playerUiState.isLoadingLibraryCategories
+                                        val foldersTabSlice by remember(playerViewModel) {
+                                            playerViewModel.playerUiState
+                                                .map { uiState ->
+                                                    FoldersTabSlice(
+                                                        musicFolders = uiState.musicFolders,
+                                                        currentFolder = uiState.currentFolder,
+                                                        isFoldersPlaylistView = uiState.isFoldersPlaylistView,
+                                                        currentFolderSortOption = uiState.currentFolderSortOption,
+                                                        isLoadingLibraryCategories = uiState.isLoadingLibraryCategories
+                                                    )
+                                                }
+                                                .distinctUntilChanged()
+                                        }.collectAsStateWithLifecycle(initialValue = FoldersTabSlice())
+
+                                        val folders = foldersTabSlice.musicFolders
+                                        val currentFolder = foldersTabSlice.currentFolder
+                                        val isLoading = foldersTabSlice.isLoadingLibraryCategories
                                         val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
                                         val defaultFolderName = stringResource(R.string.presentation_batch_d_folder_name_fallback)
 
@@ -1723,8 +1819,8 @@ fun LibraryScreen(
                                                 )
                                             },
                                             onMoreOptionsClick = stableOnMoreOptionsClick,
-                                            isPlaylistView = playerUiState.isFoldersPlaylistView,
-                                            currentSortOption = playerUiState.currentFolderSortOption,
+                                            isPlaylistView = foldersTabSlice.isFoldersPlaylistView,
+                                            currentSortOption = foldersTabSlice.currentFolderSortOption,
                                             isRefreshing = isRefreshing,
                                             onRefresh = onRefresh,
                                             isSelectionMode = isSelectionMode,

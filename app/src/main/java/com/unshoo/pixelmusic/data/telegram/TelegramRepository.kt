@@ -31,6 +31,8 @@ import org.drinkless.tdlib.TdApi
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.absoluteValue
+import java.io.File
+import kotlinx.coroutines.Job
 
 import timber.log.Timber
 
@@ -38,7 +40,8 @@ import timber.log.Timber
 class TelegramRepository @Inject constructor(
     private val clientManager: TelegramClientManager,
     private val dao: TelegramDao,
-    private val playlistPreferencesRepository: PlaylistPreferencesRepository
+    private val playlistPreferencesRepository: PlaylistPreferencesRepository,
+    private val telegramCacheManager: TelegramCacheManager
 ) {
     private companion object {
         private const val AUTH_REQUEST_TIMEOUT_MS = 20_000L
@@ -487,6 +490,53 @@ class TelegramRepository @Inject constructor(
         }
     }
 
+    private val _artworkUpdated = MutableSharedFlow<String>(extraBufferCapacity = 16)
+    val artworkUpdated: SharedFlow<String> = _artworkUpdated.asSharedFlow()
+
+    /**
+     * Enqueues a background task to fetch high-quality artwork for a Telegram message.
+     * This includes Deezer search and/or thumbnail download.
+     * Emits to [artworkUpdated] when a high-quality version is ready.
+     */
+    fun enqueueHighQualityArtFetch(chatId: Long, messageId: Long) {
+        val uri = "telegram_art://$chatId/$messageId"
+        if (activeArtFetches.containsKey(uri)) return
+
+        val job = repositoryScope.launch {
+            try {
+                // 1. Check persistent storage first
+                val persistentFile = telegramCacheManager.getPersistentArtFile(chatId, messageId)
+                if (persistentFile.exists() && persistentFile.length() > 0) {
+                    _artworkUpdated.emit(uri)
+                    return@launch
+                }
+
+                // 2. TDLib Thumbnail download (Highest Priority)
+                val message = getMessage(chatId, messageId) ?: return@launch
+                val fileId = extractArtworkFileId(message.content)
+                if (fileId != null) {
+                    val path = downloadFileAwait(fileId, priority = 32)
+                    if (path != null) {
+                        // Save to persistent storage for Library use
+                        val sourceFile = File(path)
+                        if (sourceFile.exists()) {
+                            sourceFile.copyTo(persistentFile, overwrite = true)
+                            _artworkUpdated.emit(uri)
+                            _downloadCompleted.emit(fileId) // Legacy compatibility
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.v("enqueueHighQualityArtFetch failed for $uri: ${e.message}")
+            } finally {
+                activeArtFetches.remove(uri)
+            }
+        }
+        activeArtFetches[uri] = job
+    }
+
+    private val activeArtFetches = java.util.concurrent.ConcurrentHashMap<String, Job>()
+
     suspend fun downloadFile(fileId: Int, priority: Int = 1): TdApi.File? {
         return try {
             clientManager.sendRequest(TdApi.DownloadFile(fileId, priority, 0, 0, false))
@@ -581,7 +631,7 @@ class TelegramRepository @Inject constructor(
 
     fun warmUpArtworkForSongs(
         songs: List<TelegramSongEntity>,
-        maxSongs: Int = 24
+        maxSongs: Int = 100
     ) {
         val targets = songs.asSequence()
             .map { it.chatId to it.messageId }
@@ -604,15 +654,29 @@ class TelegramRepository @Inject constructor(
         }
     }
 
-    private suspend fun warmUpArtwork(chatId: Long, messageId: Long) {
+    suspend fun warmUpArtwork(chatId: Long, messageId: Long) {
+        val uri = "telegram_art://$chatId/$messageId"
+        val persistentFile = telegramCacheManager.getPersistentArtFile(chatId, messageId)
+        if (persistentFile.exists() && persistentFile.length() > 0) return
+
         val message = getMessage(chatId, messageId) ?: return
         val fileId = extractArtworkFileId(message.content) ?: return
         val existingFile = getFile(fileId)
-        if (existingFile?.local?.isDownloadingCompleted == true && existingFile.local.path.isNotEmpty()) {
+        
+        val path = if (existingFile?.local?.isDownloadingCompleted == true && existingFile.local.path.isNotEmpty()) {
             resolvedPathCache[fileId] = existingFile.local.path
-            return
+            existingFile.local.path
+        } else {
+            downloadFileAwait(fileId, priority = 1)
         }
-        downloadFileAwait(fileId, priority = 1)
+
+        if (path != null) {
+            val sourceFile = File(path)
+            if (sourceFile.exists()) {
+                sourceFile.copyTo(persistentFile, overwrite = true)
+                _artworkUpdated.emit(uri)
+            }
+        }
     }
 
     private fun extractArtworkFileId(content: TdApi.MessageContent?): Int? {

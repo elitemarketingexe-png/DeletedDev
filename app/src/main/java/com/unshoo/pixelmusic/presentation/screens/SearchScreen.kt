@@ -897,26 +897,26 @@ fun SearchResultsList(
         )
     ) {
         if (currentFilter == SearchFilterType.ALL) {
-            items(
-                count = results.size,
-                key = { index ->
-                    val item = results[index]
-                    when (item) {
-                        is SearchResultItem.SongItem -> "song_${item.song.id}_$index"
-                        is SearchResultItem.AlbumItem -> "album_${item.album.id}_$index"
-                        is SearchResultItem.ArtistItem -> "artist_${item.artist.id}_$index"
-                        is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}_$index"
-                    }
-                },
-                contentType = { index ->
-                    when (results[index]) {
-                        is SearchResultItem.SongItem -> "search_song"
-                        is SearchResultItem.AlbumItem -> "search_album"
-                        is SearchResultItem.ArtistItem -> "search_artist"
-                        is SearchResultItem.PlaylistItem -> "search_playlist"
-                    }
-                }
-            ) { index ->
+                    items(
+                        count = results.size,
+                        key = { index ->
+                            val item = results[index]
+                            when (item) {
+                                is SearchResultItem.SongItem -> "song_${item.song.id}_$index"
+                                is SearchResultItem.AlbumItem -> "album_${item.album.id}_$index"
+                                is SearchResultItem.ArtistItem -> "artist_${item.artist.id}_$index"
+                                is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}_$index"
+                            }
+                        },
+                        contentType = { index ->
+                            when (results[index]) {
+                                is SearchResultItem.SongItem -> "search_song"
+                                is SearchResultItem.AlbumItem -> "search_album"
+                                is SearchResultItem.ArtistItem -> "search_artist"
+                                is SearchResultItem.PlaylistItem -> "search_playlist"
+                            }
+                        }
+                    ) { index ->
                 val item = results[index]
                 Box(modifier = Modifier.padding(bottom = 12.dp)) {
                     when (item) {

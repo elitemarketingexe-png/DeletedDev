@@ -26,6 +26,10 @@ fun mapRecentlyPlayedSongs(
 
     val songById = songs.associateBy { it.id }
     val songByYoutubeId = songs.filter { it.youtubeId != null }.associateBy { it.youtubeId }
+    
+    // Optimization: Assume playbackHistory is already sorted by timestamp DESC from repository.
+    // This removes redundant sorting in UI mapping.
+
     val recentSongIds = collectRecentlyPlayedSongIds(
         playbackHistory = playbackHistory,
         range = range,
@@ -44,12 +48,7 @@ fun mapRecentlyPlayedSongs(
     val seenSongIds = HashSet<String>()
     val deduped = ArrayList<RecentlyPlayedSongUiModel>(maxItems.coerceAtMost(playbackHistory.size))
 
-    val sortedHistory = playbackHistory.sortedWith(
-        compareByDescending<PlaybackStatsRepository.PlaybackHistoryEntry> { it.timestamp }
-            .thenBy { it.songId }
-    )
-
-    for (entry in sortedHistory) {
+    for (entry in playbackHistory) {
         if (deduped.size >= maxItems) break
         val safeTimestamp = entry.timestamp.coerceAtLeast(0L)
         if (safeTimestamp > endBound) continue
@@ -98,12 +97,8 @@ fun collectRecentlyPlayedSongIds(
     )
 
     val seenSongIds = LinkedHashSet<String>()
-    val sortedHistory = playbackHistory.sortedWith(
-        compareByDescending<PlaybackStatsRepository.PlaybackHistoryEntry> { it.timestamp }
-            .thenBy { it.songId }
-    )
 
-    for (entry in sortedHistory) {
+    for (entry in playbackHistory) {
         if (seenSongIds.size >= maxItems) break
         val safeTimestamp = entry.timestamp.coerceAtLeast(0L)
         if (safeTimestamp > endBound) continue

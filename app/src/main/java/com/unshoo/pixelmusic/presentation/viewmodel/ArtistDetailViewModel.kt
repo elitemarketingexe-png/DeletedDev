@@ -196,100 +196,102 @@ class ArtistDetailViewModel @Inject constructor(
                     }
 
                     artistPageResult.onSuccess { artistPage ->
-                        val artistItem = artistPage.artist
+                        withContext(Dispatchers.Default) {
+                            val artistItem = artistPage.artist
 
-                        // ── Popular Songs: extract from the "Songs" section ──
-                        val ytSongsSection = artistPage.sections.find {
-                            it.title.contains("Songs", ignoreCase = true) ||
-                            it.title.contains("Popular", ignoreCase = true)
-                        }
-                        val popularSongs = ytSongsSection?.items?.mapNotNull { item ->
-                            (item as? SongItem)?.toNativeSong()
-                        }?.take(10) ?: emptyList()
+                            // ── Popular Songs: extract from the "Songs" section ──
+                            val ytSongsSection = artistPage.sections.find {
+                                it.title.contains("Songs", ignoreCase = true) ||
+                                it.title.contains("Popular", ignoreCase = true)
+                            }
+                            val popularSongs = ytSongsSection?.items?.mapNotNull { item ->
+                                (item as? SongItem)?.toNativeSong()
+                            }?.take(10) ?: emptyList()
 
-                        val localCount = withContext(Dispatchers.IO) {
-                            runCatching {
+                            val localCount = runCatching {
                                 musicDao.getLocalSongCountByArtistName(artistItem.title)
                             }.getOrDefault(0)
-                        }
 
-                        val artistModel = Artist(
-                            id = browseId.hashCode().toLong(),
-                            name = artistItem.title,
-                            songCount = if (localCount > 0) localCount else popularSongs.size,
-                            imageUrl = artistItem.thumbnail
-                        )
-
-                        // ── Albums: sections titled "Albums" or "Releases" ──
-                        fun AlbumItem.toAlbumSection(artistTitle: String, artistIdHash: Long): ArtistAlbumSection {
-                            return ArtistAlbumSection(
-                                albumId = this.browseId.hashCode().toLong(),
-                                title = this.title,
-                                year = this.year,
-                                albumArtUriString = this.thumbnail,
-                                browseId = this.browseId,
-                                songs = emptyList(), // Albums shown as cards; songs loaded on album detail
-                                sectionType = ArtistSectionType.ALBUM
+                            val artistModel = Artist(
+                                id = browseId.hashCode().toLong(),
+                                name = artistItem.title,
+                                songCount = if (localCount > 0) localCount else popularSongs.size,
+                                imageUrl = artistItem.thumbnail
                             )
-                        }
 
-                        val albumsSection = artistPage.sections.firstOrNull { section ->
-                            section.title.contains("Albums", ignoreCase = true) ||
-                            section.title.contains("Releases", ignoreCase = true)
-                        }
-                        val albumSections = albumsSection?.items?.mapNotNull { item ->
-                            when (item) {
-                                is AlbumItem -> item.toAlbumSection(artistItem.title, browseId.hashCode().toLong())
-                                else -> null
-                            }
-                        }.orEmpty()
-
-                        // ── Singles & EPs: sections titled "Singles", "EP", or "EPs" ──
-                        val singlesSection = artistPage.sections.firstOrNull { section ->
-                            section.title.contains("Single", ignoreCase = true) ||
-                            section.title.contains("EP", ignoreCase = true)
-                        }
-                        val singlesAndEPs = singlesSection?.items?.mapNotNull { item ->
-                            when (item) {
-                                is AlbumItem -> ArtistAlbumSection(
-                                    albumId = item.browseId.hashCode().toLong(),
-                                    title = item.title,
-                                    year = item.year,
-                                    albumArtUriString = item.thumbnail,
-                                    browseId = item.browseId,
-                                    songs = emptyList(),
-                                    sectionType = ArtistSectionType.SINGLE_EP
+                            // ── Albums: sections titled "Albums" or "Releases" ──
+                            fun AlbumItem.toAlbumSection(): ArtistAlbumSection {
+                                return ArtistAlbumSection(
+                                    albumId = this.browseId.hashCode().toLong(),
+                                    title = this.title,
+                                    year = this.year,
+                                    albumArtUriString = this.thumbnail,
+                                    browseId = this.browseId,
+                                    songs = emptyList(), // Albums shown as cards; songs loaded on album detail
+                                    sectionType = ArtistSectionType.ALBUM
                                 )
-                                else -> null
                             }
-                        }.orEmpty()
 
-                        val effectiveImageUrl = artistItem.thumbnail
-                        val newScheme = if (!effectiveImageUrl.isNullOrBlank()) {
-                            try {
-                                themeStateHolder.getOrGenerateColorScheme(effectiveImageUrl)
-                            } catch (e: Exception) {
-                                null
+                            val albumsSection = artistPage.sections.firstOrNull { section ->
+                                section.title.contains("Albums", ignoreCase = true) ||
+                                section.title.contains("Releases", ignoreCase = true)
                             }
-                        } else null
+                            val albumSections = albumsSection?.items?.mapNotNull { item ->
+                                when (item) {
+                                    is AlbumItem -> item.toAlbumSection()
+                                    else -> null
+                                }
+                            }.orEmpty()
 
-                        _artistColorScheme.value = newScheme
-                        _uiState.value = ArtistDetailUiState(
-                            artist = artistModel,
-                            songs = popularSongs,
-                            popularSongs = popularSongs,
-                            albumSections = albumSections,
-                            singlesAndEPs = singlesAndEPs,
-                            effectiveImageUrl = effectiveImageUrl,
-                            isLoading = false,
-                            isOnlineArtist = true,
-                            artistDescription = artistPage.description,
-                            subscriberCount = artistItem.subscriberCountText,
-                            browseId = browseId,
-                            albumsMoreEndpoint = albumsSection?.moreEndpoint,
-                            singlesMoreEndpoint = singlesSection?.moreEndpoint,
-                            songsMoreEndpoint = ytSongsSection?.moreEndpoint
-                        )
+                            // ── Singles & EPs: sections titled "Singles", "EP", or "EPs" ──
+                            val singlesSection = artistPage.sections.firstOrNull { section ->
+                                section.title.contains("Single", ignoreCase = true) ||
+                                section.title.contains("EP", ignoreCase = true)
+                            }
+                            val singlesAndEPs = singlesSection?.items?.mapNotNull { item ->
+                                when (item) {
+                                    is AlbumItem -> ArtistAlbumSection(
+                                        albumId = item.browseId.hashCode().toLong(),
+                                        title = item.title,
+                                        year = item.year,
+                                        albumArtUriString = item.thumbnail,
+                                        browseId = item.browseId,
+                                        songs = emptyList(),
+                                        sectionType = ArtistSectionType.SINGLE_EP
+                                    )
+                                    else -> null
+                                }
+                            }.orEmpty()
+
+                            val effectiveImageUrl = artistItem.thumbnail
+                            val newScheme = if (!effectiveImageUrl.isNullOrBlank()) {
+                                try {
+                                    themeStateHolder.getOrGenerateColorScheme(effectiveImageUrl)
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            } else null
+
+                            withContext(Dispatchers.Main) {
+                                _artistColorScheme.value = newScheme
+                                _uiState.value = ArtistDetailUiState(
+                                    artist = artistModel,
+                                    songs = popularSongs,
+                                    popularSongs = popularSongs,
+                                    albumSections = albumSections,
+                                    singlesAndEPs = singlesAndEPs,
+                                    effectiveImageUrl = effectiveImageUrl,
+                                    isLoading = false,
+                                    isOnlineArtist = true,
+                                    artistDescription = artistPage.description,
+                                    subscriberCount = artistItem.subscriberCountText,
+                                    browseId = browseId,
+                                    albumsMoreEndpoint = albumsSection?.moreEndpoint,
+                                    singlesMoreEndpoint = singlesSection?.moreEndpoint,
+                                    songsMoreEndpoint = ytSongsSection?.moreEndpoint
+                                )
+                            }
+                        }
                     }.onFailure { e ->
                         _uiState.update {
                             it.copy(
@@ -316,48 +318,52 @@ class ArtistDetailViewModel @Inject constructor(
                             }
                         }
                         .collect { (artist, songs) ->
-                            if (artist == null) {
-                                _uiState.update {
-                                    it.copy(error = context.getString(R.string.could_not_find_artist), isLoading = false)
+                            withContext(Dispatchers.Default) {
+                                if (artist == null) {
+                                    _uiState.update {
+                                        it.copy(error = context.getString(R.string.could_not_find_artist), isLoading = false)
+                                    }
+                                    return@withContext
                                 }
-                                return@collect
-                            }
 
-                            val albumSections = buildAlbumSections(songs)
-                            val orderedSongs = albumSections.flatMap { it.songs }
+                                val albumSections = buildAlbumSections(songs)
+                                val orderedSongs = albumSections.flatMap { it.songs }
 
-                            val effectiveUrl = try {
-                                artistImageRepository.getEffectiveArtistImageUrl(
-                                    artistId = artist.id,
-                                    artistName = artist.name
-                                )
-                            } catch (e: Exception) {
-                                Log.w("ArtistDebug", "Failed to resolve effective artist image: ${e.message}")
-                                artist.effectiveImageUrl
-                            }
-
-                            val newScheme = if (!effectiveUrl.isNullOrBlank()) {
-                                try {
-                                    themeStateHolder.getOrGenerateColorScheme(effectiveUrl)
+                                val effectiveUrl = try {
+                                    artistImageRepository.getEffectiveArtistImageUrl(
+                                        artistId = artist.id,
+                                        artistName = artist.name
+                                    )
                                 } catch (e: Exception) {
-                                    Log.w("ArtistDebug", "Color scheme pre-warm failed: ${e.message}")
-                                    null
+                                    Log.w("ArtistDebug", "Failed to resolve effective artist image: ${e.message}")
+                                    artist.effectiveImageUrl
                                 }
-                            } else null
 
-                            _artistColorScheme.value = newScheme
-                            _uiState.value = ArtistDetailUiState(
-                                artist = artist.copy(
-                                    imageUrl = if (artist.customImageUri.isNullOrBlank()) effectiveUrl else artist.imageUrl
-                                ),
-                                songs = orderedSongs,
-                                popularSongs = emptyList(),
-                                albumSections = albumSections,
-                                singlesAndEPs = emptyList(),
-                                effectiveImageUrl = effectiveUrl,
-                                isLoading = false,
-                                isOnlineArtist = false
-                            )
+                                val newScheme = if (!effectiveUrl.isNullOrBlank()) {
+                                    try {
+                                        themeStateHolder.getOrGenerateColorScheme(effectiveUrl)
+                                    } catch (e: Exception) {
+                                        Log.w("ArtistDebug", "Color scheme pre-warm failed: ${e.message}")
+                                        null
+                                    }
+                                } else null
+
+                                withContext(Dispatchers.Main) {
+                                    _artistColorScheme.value = newScheme
+                                    _uiState.value = ArtistDetailUiState(
+                                        artist = artist.copy(
+                                            imageUrl = if (artist.customImageUri.isNullOrBlank()) effectiveUrl else artist.imageUrl
+                                        ),
+                                        songs = orderedSongs,
+                                        popularSongs = emptyList(),
+                                        albumSections = albumSections,
+                                        singlesAndEPs = emptyList(),
+                                        effectiveImageUrl = effectiveUrl,
+                                        isLoading = false,
+                                        isOnlineArtist = false
+                                    )
+                                }
+                            }
                         }
                 }
             } catch (e: Exception) {

@@ -786,6 +786,7 @@ fun YourMixHeader(
 ) {
     val colors = MaterialTheme.colorScheme
     val titleStyle = rememberYourMixTitleStyle()
+    val playShuffledLabel = stringResource(R.string.cd_shuffle_play)
 
     Box(
         modifier = Modifier
@@ -830,7 +831,7 @@ fun YourMixHeader(
         ) {
             Icon(
                 painter = painterResource(R.drawable.rounded_shuffle_24),
-                contentDescription = stringResource(R.string.cd_shuffle_play),
+                contentDescription = playShuffledLabel,
                 modifier = Modifier.size(36.dp)
             )
         }
@@ -970,9 +971,10 @@ private fun rememberYourMixTitleStyle(): TextStyle {
 
 @Composable
 fun HomeGreetingHeader(userName: String?) {
-    val greeting = remember(userName) {
-        val calendar = java.util.Calendar.getInstance()
-        val hour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+    val calendar = remember { java.util.Calendar.getInstance() }
+    val hour = remember(calendar) { calendar.get(java.util.Calendar.HOUR_OF_DAY) }
+    
+    val greeting = remember(userName, hour) {
         val greetings = when (hour) {
             in 5..11 -> if (userName != null) {
                 listOf(

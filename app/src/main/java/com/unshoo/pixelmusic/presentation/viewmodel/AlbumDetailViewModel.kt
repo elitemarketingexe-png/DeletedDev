@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
@@ -127,35 +128,37 @@ class AlbumDetailViewModel @Inject constructor(
                 val albumDetailsFlow = musicRepository.getAlbumById(id)
                 val albumSongsFlow = musicRepository.getSongsForAlbum(id)
 
-                combine(albumDetailsFlow, albumSongsFlow) { album, songs ->
-                    if (album != null) {
-                        AlbumDetailUiState(
-                            album = album,
-                            songs = songs.sortedWith(
+                    combine(albumDetailsFlow, albumSongsFlow) { album, songs ->
+                        if (album != null) {
+                            val sortedSongs = songs.sortedWith(
                                 compareBy<Song> { it.discNumber ?: 1 }
                                     .thenBy { if (it.trackNumber > 0) it.trackNumber else Int.MAX_VALUE }
                                     .thenBy { it.title.lowercase() }
-                            ),
-                            isLoading = false
-                        )
-                    } else {
-                        AlbumDetailUiState(
-                            error = context.getString(R.string.album_not_found),
-                            isLoading = false
-                        )
-                    }
-                }
-                    .catch { e ->
-                        emit(
+                            )
                             AlbumDetailUiState(
-                                error = context.getString(R.string.error_loading_album, e.localizedMessage ?: ""),
+                                album = album,
+                                songs = sortedSongs,
                                 isLoading = false
                             )
-                        )
+                        } else {
+                            AlbumDetailUiState(
+                                error = context.getString(R.string.album_not_found),
+                                isLoading = false
+                            )
+                        }
                     }
-                    .collect { newState ->
-                        _uiState.value = newState
-                    }
+                        .catch { e ->
+                            emit(
+                                AlbumDetailUiState(
+                                    error = context.getString(R.string.error_loading_album, e.localizedMessage ?: ""),
+                                    isLoading = false
+                                )
+                            )
+                        }
+                        .flowOn(Dispatchers.Default)
+                        .collect { newState ->
+                            _uiState.value = newState
+                        }
 
             } catch (e: Exception) {
                 _uiState.update {

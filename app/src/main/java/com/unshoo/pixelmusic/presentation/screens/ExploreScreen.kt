@@ -150,6 +150,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.compositeOver
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import unshoo.ianshulyadav.pixelmusic.innertube.pages.ChartsPage
 import androidx.compose.runtime.snapshotFlow
 
 private fun isBentoSection(title: String, itemSize: Int): Boolean {
@@ -165,6 +167,20 @@ private fun isBentoSection(title: String, itemSize: Int): Boolean {
     )
 }
 
+private data class ExploreFilterSlice(
+    val selectedFilter: String = "All",
+    val activeMoodChip: unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Chip? = null
+)
+
+private data class ExploreContentSlice(
+    val homePageSections: List<HomePage.Section> = emptyList(),
+    val explorePageSections: List<HomePage.Section> = emptyList(),
+    val newReleaseAlbums: List<AlbumItem> = emptyList(),
+    val chartsPage: ChartsPage? = null,
+    val recentMixes: List<Playlist> = emptyList(),
+    val libraryPlaylists: List<Playlist> = emptyList()
+)
+
 @UnstableApi
 @Composable
 fun ExploreScreen(
@@ -174,7 +190,55 @@ fun ExploreScreen(
     exploreViewModel: ExploreViewModel = hiltViewModel(),
     quickPicksViewModel: QuickPicksViewModel = hiltViewModel()
 ) {
-    val uiState by exploreViewModel.uiState.collectAsStateWithLifecycle()
+    val filterSlice by remember(exploreViewModel) {
+        exploreViewModel.uiState
+            .map { ExploreFilterSlice(it.selectedFilter, it.activeMoodChip) }
+            .distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = ExploreFilterSlice())
+
+    val contentSlice by remember(exploreViewModel) {
+        exploreViewModel.uiState
+            .map { 
+                ExploreContentSlice(
+                    it.homePageSections,
+                    it.explorePageSections,
+                    it.newReleaseAlbums,
+                    it.chartsPage,
+                    it.recentMixes,
+                    it.libraryPlaylists
+                )
+            }
+            .distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = ExploreContentSlice())
+
+    val moodChips by remember(exploreViewModel) {
+        exploreViewModel.uiState.map { it.moodChips }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
+
+    val isLoading by remember(exploreViewModel) {
+        exploreViewModel.uiState.map { it.isLoading }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = true)
+
+    val isRefreshing by remember(exploreViewModel) {
+        exploreViewModel.uiState.map { it.isRefreshing }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = false)
+
+    val error by remember(exploreViewModel) {
+        exploreViewModel.uiState.map { it.error }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null)
+
+    val homePageContinuation by remember(exploreViewModel) {
+        exploreViewModel.uiState.map { it.homePageContinuation }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null)
+
+    val isContinuationLoading by remember(exploreViewModel) {
+        exploreViewModel.uiState.map { it.isContinuationLoading }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = false)
+
+    val localSongs by remember(exploreViewModel) {
+        exploreViewModel.uiState.map { it.localSongs }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = emptyMap())
+
     val quickPicks by quickPicksViewModel.quickPicks.collectAsStateWithLifecycle()
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
     val isPlaying by remember { derivedStateOf { stablePlayerState.isPlaying } }
@@ -221,7 +285,7 @@ fun ExploreScreen(
         }
     ) { innerPadding ->
         PullToRefreshBox(
-            isRefreshing = uiState.isRefreshing,
+            isRefreshing = isRefreshing,
             onRefresh = {
                 exploreViewModel.loadData(forceRefresh = true)
                 quickPicksViewModel.refresh()
@@ -231,7 +295,7 @@ fun ExploreScreen(
             indicator = {
                 PullToRefreshDefaults.LoadingIndicator(
                     state = pullRefreshState,
-                    isRefreshing = uiState.isRefreshing,
+                    isRefreshing = isRefreshing,
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
             }
@@ -241,14 +305,14 @@ fun ExploreScreen(
                     .fillMaxSize()
                     .background(backgroundBrush)
             ) {
-                if (uiState.isLoading && uiState.homePageSections.isEmpty() && uiState.newReleaseAlbums.isEmpty() && uiState.chartsPage == null) {
+                if (isLoading && contentSlice.homePageSections.isEmpty() && contentSlice.newReleaseAlbums.isEmpty() && contentSlice.chartsPage == null) {
                     com.unshoo.pixelmusic.presentation.components.ExploreSkeletonGrid(
                         paddingValues = PaddingValues(
                             top = innerPadding.calculateTopPadding(),
                             bottom = paddingValuesParent.calculateBottomPadding() + 24.dp + (if (currentSongId != null) com.unshoo.pixelmusic.presentation.components.MiniPlayerHeight else 0.dp)
                         )
                     )
-                } else if (uiState.error != null && uiState.homePageSections.isEmpty()) {
+                } else if (error != null && contentSlice.homePageSections.isEmpty()) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -257,7 +321,7 @@ fun ExploreScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = uiState.error!!,
+                            text = error!!,
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(bottom = 16.dp)
@@ -272,14 +336,14 @@ fun ExploreScreen(
                         }
                     }
                 } else {
-                    val homeSectionsRaw = if (uiState.selectedFilter == "All") {
-                        if (uiState.activeMoodChip != null) {
-                            uiState.explorePageSections
+                    val homeSectionsRaw = if (filterSlice.selectedFilter == "All") {
+                        if (filterSlice.activeMoodChip != null) {
+                            contentSlice.explorePageSections
                         } else {
-                            uiState.homePageSections.ifEmpty { uiState.explorePageSections }
+                            contentSlice.homePageSections.ifEmpty { contentSlice.explorePageSections }
                         }
                     } else {
-                        uiState.homePageSections
+                        contentSlice.homePageSections
                     }
                     val homeSectionsFiltered = remember(homeSectionsRaw) {
                         homeSectionsRaw.filter { section ->
@@ -349,7 +413,7 @@ fun ExploreScreen(
                                         val categories = listOf("All", "Smart Mix", "For You", "Charts", "Recap")
                                         categories.forEach { category ->
                                             FilterChip(
-                                                selected = uiState.selectedFilter == category,
+                                                selected = filterSlice.selectedFilter == category,
                                                 onClick = { exploreViewModel.setSelectedFilter(category) },
                                                 label = { Text(category) },
                                                 colors = FilterChipDefaults.filterChipColors(
@@ -365,7 +429,7 @@ fun ExploreScreen(
                                     }
                                     
                                     // Mood chip dropdown arrow
-                                    if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") && uiState.moodChips.isNotEmpty()) {
+                                    if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && moodChips.isNotEmpty()) {
                                         androidx.compose.material3.IconButton(
                                             onClick = { showMoodRow = !showMoodRow },
                                             modifier = Modifier.size(36.dp)
@@ -380,7 +444,7 @@ fun ExploreScreen(
                                 }
 
                                 // Mood / Genre Chips (When All or For You is active and arrow clicked)
-                                if (showMoodRow && (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") && uiState.moodChips.isNotEmpty()) {
+                                if (showMoodRow && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && moodChips.isNotEmpty()) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -388,8 +452,8 @@ fun ExploreScreen(
                                             .padding(horizontal = 16.dp, vertical = 4.dp),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        uiState.moodChips.forEach { chip ->
-                                            val isSelected = uiState.activeMoodChip == chip
+                                        moodChips.forEach { chip ->
+                                            val isSelected = filterSlice.activeMoodChip == chip
                                             FilterChip(
                                                 selected = isSelected,
                                                 onClick = {
@@ -412,7 +476,7 @@ fun ExploreScreen(
                             }
                         }
 
-                        if (uiState.selectedFilter == "Recap") {
+                        if (filterSlice.selectedFilter == "Recap") {
                             item(key = "explore_recap_view") {
                                 RecapScreen(
                                     navController = navController,
@@ -422,7 +486,7 @@ fun ExploreScreen(
                         }
 
                         // 3. AI Smart Mix Studio Card (Hero CTA)
-                        val showSmartMixCard = when (uiState.selectedFilter) {
+                        val showSmartMixCard = when (filterSlice.selectedFilter) {
                             "Smart Mix" -> true
                             "All" -> AdManager.hasRecentlySupported(context)
                             else -> false
@@ -438,9 +502,9 @@ fun ExploreScreen(
                             }
                         }
 
-                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "Charts") &&
-                            uiState.chartsPage != null && uiState.chartsPage!!.sections.isNotEmpty()) {
-                            uiState.chartsPage!!.sections.forEachIndexed { index, chartSection ->
+                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "Charts") &&
+                            contentSlice.chartsPage != null && contentSlice.chartsPage!!.sections.isNotEmpty()) {
+                            contentSlice.chartsPage!!.sections.forEachIndexed { index, chartSection ->
                                 item(key = "chart_${chartSection.title}_${index}_header") {
                                     SectionHeader(title = chartSection.title)
                                 }
@@ -517,7 +581,7 @@ fun ExploreScreen(
                             }
                         }
 
-                        val showSupportCard = uiState.selectedFilter == "All" && !com.unshoo.pixelmusic.data.ads.AdManager.hasRecentlySupported(context)
+                        val showSupportCard = filterSlice.selectedFilter == "All" && !com.unshoo.pixelmusic.data.ads.AdManager.hasRecentlySupported(context)
                         if (showSupportCard) {
                             item(key = "explore_ad_support_card") {
                                 AdSupportCard(
@@ -530,7 +594,7 @@ fun ExploreScreen(
 
 
 
-                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") &&
+                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") &&
                             quickPicks.isNotEmpty()
                         ) {
                             item(key = "quick_picks_section") {
@@ -549,8 +613,8 @@ fun ExploreScreen(
                             }
                         }
 
-                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "Smart Mix" || uiState.selectedFilter == "For You") &&
-                            uiState.recentMixes.isNotEmpty()
+                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "Smart Mix" || filterSlice.selectedFilter == "For You") &&
+                            contentSlice.recentMixes.isNotEmpty()
                         ) {
                             item(key = "recent_mixes_header") {
                                 SectionHeader(title = "Recent Mixes")
@@ -560,7 +624,7 @@ fun ExploreScreen(
                                     contentPadding = PaddingValues(horizontal = 16.dp),
                                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    items(items = uiState.recentMixes, key = { playlist -> "recent_mix_${playlist.id}" }) { playlist ->
+                                    items(items = contentSlice.recentMixes, key = { playlist -> "recent_mix_${playlist.id}" }) { playlist ->
                                         RecentMixCardItem(
                                             playlist = playlist,
                                             playerViewModel = playerViewModel,
@@ -573,8 +637,8 @@ fun ExploreScreen(
                             }
                         }
 
-                        val hasLibraryContent = uiState.libraryPlaylists.isNotEmpty() || fromYourLibraryAlbums.isNotEmpty()
-                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") && hasLibraryContent) {
+                        val hasLibraryContent = contentSlice.libraryPlaylists.isNotEmpty() || fromYourLibraryAlbums.isNotEmpty()
+                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && hasLibraryContent) {
                             item(key = "your_library_header") {
                                 SectionHeader(
                                     title = "Your Library",
@@ -598,7 +662,7 @@ fun ExploreScreen(
                                             }
                                         )
                                     }
-                                    items(items = uiState.libraryPlaylists, key = { playlist -> "library_playlist_${playlist.id}" }) { playlist ->
+                                    items(items = contentSlice.libraryPlaylists, key = { playlist -> "library_playlist_${playlist.id}" }) { playlist ->
                                         LibraryPlaylistCard(
                                             playlist = playlist,
                                             playerViewModel = playerViewModel,
@@ -612,15 +676,15 @@ fun ExploreScreen(
                         }
 
                         // Standalone Mixed For You Section (Rendered once)
-                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") && cardShelfSections.isNotEmpty()) {
+                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && cardShelfSections.isNotEmpty()) {
                             item(key = "mixed_for_you_section") {
-                                MixedForYouSection(cardShelfSections, playerViewModel, navController, uiState.localSongs)
+                                MixedForYouSection(cardShelfSections, playerViewModel, navController, localSongs)
                             }
                         }
 
                         // Move New Releases here (4th row) - shown under New Releases filter or main All/For You filters
-                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "New Releases" || uiState.selectedFilter == "For You") &&
-                            uiState.newReleaseAlbums.isNotEmpty()
+                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "New Releases" || filterSlice.selectedFilter == "For You") &&
+                            contentSlice.newReleaseAlbums.isNotEmpty()
                         ) {
                             item(key = "new_releases_header") {
                                 SectionHeader(
@@ -635,7 +699,7 @@ fun ExploreScreen(
                                     contentPadding = PaddingValues(horizontal = 16.dp),
                                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    items(items = uiState.newReleaseAlbums, key = { album -> "new_release_${album.browseId}" }) { album ->
+                                    items(items = contentSlice.newReleaseAlbums, key = { album -> "new_release_${album.browseId}" }) { album ->
                                         AlbumCarouselItem(
                                             album = album,
                                             onClick = {
@@ -648,7 +712,7 @@ fun ExploreScreen(
                         }
 
                         // Smart Mix Horizontal List for Smart Mix Filter
-                        if (uiState.selectedFilter == "Smart Mix" && uiState.recentMixes.isNotEmpty()) {
+                        if (filterSlice.selectedFilter == "Smart Mix" && contentSlice.recentMixes.isNotEmpty()) {
                             item(key = "smart_mix_header") {
                                 SectionHeader(title = "Your Smart Mixes")
                             }
@@ -657,7 +721,7 @@ fun ExploreScreen(
                                     contentPadding = PaddingValues(horizontal = 16.dp),
                                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
-                                    items(items = uiState.recentMixes, key = { playlist -> "smart_mix_${playlist.id}" }) { playlist ->
+                                    items(items = contentSlice.recentMixes, key = { playlist -> "smart_mix_${playlist.id}" }) { playlist ->
                                         RecentMixCardItem(
                                             playlist = playlist,
                                             playerViewModel = playerViewModel,
@@ -670,7 +734,7 @@ fun ExploreScreen(
                             }
                         }
 
-                        if (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") {
+                        if (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") {
 
                             remainingSections.forEachIndexed { index, section ->
                                 val isShelf = section.title.contains("recently played", ignoreCase = true) ||
@@ -689,7 +753,10 @@ fun ExploreScreen(
                                               isBentoSection(section.title, section.items.size)
 
                                 if (isShelf && section.items.isNotEmpty()) {
-                                    item(key = "shelf_${section.title}_$index") {
+                                    item(
+                                        key = "shelf_${section.title}_$index",
+                                        contentType = "mixed_for_you_card"
+                                    ) {
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -703,11 +770,17 @@ fun ExploreScreen(
                                         }
                                     }
                                 } else if (isBento) {
-                                    item(key = "bento_${section.title}_$index") {
+                                    item(
+                                        key = "bento_${section.title}_$index",
+                                        contentType = "swipeable_carousel"
+                                    ) {
                                         LibrarySwipeableCarousel(section, navController, playerViewModel)
                                     }
                                 } else {
-                                    item(key = "home_section_${section.title}_${index}_header") {
+                                    item(
+                                        key = "home_section_${section.title}_${index}_header",
+                                        contentType = "section_header"
+                                    ) {
                                         val isSectionQuickPicks = section.title.contains("quick picks", ignoreCase = true)
                                         val quickPicksSongs = remember(section.items) {
                                             section.items.filterIsInstance<SongItem>().map { it.toNativeSong() }
@@ -726,7 +799,10 @@ fun ExploreScreen(
                                             actionLabel = if (isSectionQuickPicks && quickPicksSongs.isNotEmpty()) "Play All" else null
                                         )
                                     }
-                                    item(key = "home_section_${section.title}_${index}_carousel") {
+                                    item(
+                                        key = "home_section_${section.title}_${index}_carousel",
+                                        contentType = "yt_item_carousel"
+                                    ) {
                                         if (isSimilar) {
                                             SimilarArtistsCarousel(
                                                 artists = section.items.filterIsInstance<ArtistItem>(),
@@ -745,7 +821,7 @@ fun ExploreScreen(
                                 }
                             }
 
-                            if (uiState.homePageContinuation != null && uiState.isContinuationLoading) {
+                            if (homePageContinuation != null && isContinuationLoading) {
                                 item(key = "load_more_indicator_inline") {
                                     Box(
                                         modifier = Modifier
@@ -760,8 +836,8 @@ fun ExploreScreen(
                         }
 
                         // Infinite scroll: load more when user scrolls near the bottom
-                        if (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") {
-                            if (uiState.homePageContinuation != null || !uiState.homePageSections.any { it.title == "Recently Played (Local)" }) {
+                        if (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") {
+                            if (homePageContinuation != null || !remainingSections.any { it.title == "Recently Played (Local)" }) {
                                 item(key = "load_more_trigger") {
                                     LaunchedEffect(listState) {
                                         snapshotFlow {
@@ -776,7 +852,7 @@ fun ExploreScreen(
                                                 exploreViewModel.loadMore()
                                             }
                                     }
-                                    if (uiState.isContinuationLoading) {
+                                    if (isContinuationLoading) {
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
