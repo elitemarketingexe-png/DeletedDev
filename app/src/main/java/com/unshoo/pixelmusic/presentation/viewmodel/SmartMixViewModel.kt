@@ -376,43 +376,47 @@ class SmartMixViewModel @Inject constructor(
     }
 
     private fun generatePlaylistName(mode: String, state: SmartMixUiState, tracks: List<LastFmTrack>): String {
-        val topArtist = tracks.firstOrNull()?.artist?.takeIf { it.isNotBlank() }
-        val topTrack = tracks.firstOrNull()?.name?.takeIf { it.isNotBlank() }
+        val topArtistRaw = tracks.firstOrNull()?.artist?.takeIf { it.isNotBlank() }
+            ?: state.seedArtistInput.takeIf { it.isNotBlank() }
+            ?: state.seedArtistName.takeIf { it.isNotBlank() }
+            ?: "Artist"
+        
+        val artistClean = topArtistRaw
+            .replace(Regex("[^a-zA-Z0-9]"), "")
+            .let { if (it.length > 10) it.take(10) else it }
+            .replaceFirstChar { it.uppercase() }
+
+        val trackRaw = state.seedTrackName.ifBlank { tracks.firstOrNull()?.name ?: "Track" }
+        val trackClean = trackRaw
+            .replace(Regex("[^a-zA-Z0-9]"), "")
+            .let { if (it.length > 10) it.take(10) else it }
+            .replaceFirstChar { it.uppercase() }
+
+        val tagClean = state.tagInput.ifBlank { "Vibe" }
+            .replace(Regex("[^a-zA-Z0-9]"), "")
+            .let { if (it.length > 10) it.take(10) else it }
+            .replaceFirstChar { it.uppercase() }
 
         return when (mode) {
             "top" -> {
                 when (state.timePeriod) {
-                    "overall" -> "SonicEra"
-                    "12month" -> "YearlyFlow"
-                    "6month" -> "HalfYearPulse"
-                    "3month" -> "SeasonVibe"
-                    "1month" -> "MonthlyWave"
-                    "7day" -> "WeeklyDrift"
-                    else -> "AudioSphere"
+                    "overall" -> "${artistClean}Era"
+                    "12month" -> "${artistClean}Yearly"
+                    "6month" -> "${artistClean}Pulse"
+                    "3month" -> "${artistClean}Vibe"
+                    "1month" -> "${artistClean}Wave"
+                    "7day" -> "${artistClean}Drift"
+                    else -> "${artistClean}Sphere"
                 }
             }
-            "library" -> "VaultCraft"
-            "recent" -> "HeavyRotation"
-            "similar-tracks" -> {
-                val seed = state.seedTrackName.ifBlank { topTrack ?: "Track" }
-                val shortName = if (seed.length > 12) seed.take(12).trim() + "…" else seed.trim()
-                "${shortName}Echo"
-            }
-            "similar-artists" -> {
-                val seed = state.seedArtistInput.ifBlank { topArtist ?: "Artist" }
-                val shortName = if (seed.length > 12) seed.take(12).trim() + "…" else seed.trim()
-                "${shortName}Radio"
-            }
-            "tag" -> {
-                val seed = state.tagInput.ifBlank { "Genre" }
-                val shortName = if (seed.length > 12) seed.take(12).trim() + "…" else seed.trim()
-                "${shortName.replaceFirstChar { it.uppercase() }}Groove"
-            }
-            "mix" -> "AlgorhythmFlow"
-            "recommendations" -> {
-                if (topArtist != null) "${topArtist.take(12).trim()}Mix" else "SoundSpectrum"
-            }
-            else -> "SmartAudio"
+            "library" -> "${artistClean}Vault"
+            "recent" -> "${artistClean}Rotation"
+            "similar-tracks" -> "${trackClean}Echo"
+            "similar-artists" -> "${artistClean}Radio"
+            "tag" -> "${tagClean}Hood"
+            "mix" -> "${artistClean}Algo"
+            "recommendations" -> "${artistClean}Mix"
+            else -> "${artistClean}Flow"
         }
     }
 
