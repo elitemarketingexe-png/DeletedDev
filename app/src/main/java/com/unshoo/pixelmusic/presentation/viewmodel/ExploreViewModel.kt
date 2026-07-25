@@ -205,7 +205,7 @@ class ExploreViewModel @Inject constructor(
                 val homeDeferred = async(Dispatchers.IO) { runCatching { YouTube.home().getOrNull() }.getOrNull() }
                 val chartsDeferred = async(Dispatchers.IO) { runCatching { YouTube.getChartsPage().getOrNull() }.getOrNull() }
                 val newReleasesDeferred = async(Dispatchers.IO) {
-                    if (!YouTube.hasLoginCookie()) runCatching { YouTube.newReleaseAlbums().getOrNull() }.getOrNull() else null
+                    if (YouTube.hasLoginCookie()) runCatching { YouTube.newReleaseAlbums().getOrNull() }.getOrNull() else null
                 }
                 val exploreDeferred = async(Dispatchers.IO) { runCatching { YouTube.explore().getOrNull() }.getOrNull() }
 
@@ -218,7 +218,9 @@ class ExploreViewModel @Inject constructor(
                     val filterSections = { sections: List<unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Section> ->
                         sections.filter { section ->
                             val title = section.title.lowercase()
-                            !title.contains("new music videos") && !title.contains("new albums & singles")
+                            !title.contains("new music videos") &&
+                            !title.contains("new albums & singles") &&
+                            !title.contains("trending")
                         }
                     }
                     val filteredHomeSections = filterSections(home?.sections.orEmpty())
@@ -476,7 +478,7 @@ class ExploreViewModel @Inject constructor(
                                     .distinctBy { it.browseId }
                                     .take(15)
                             } else {
-                                null
+                                emptyList()
                             }
 
                             val renderedLocalEntities = (
