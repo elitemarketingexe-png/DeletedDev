@@ -119,6 +119,7 @@ import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.ThumbDown
+import androidx.compose.material.icons.rounded.ThumbDownOffAlt
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material3.IconButton
@@ -1156,46 +1157,60 @@ fun FullPlayerContent(
                                 }
                                 
                                 // Paired Button Group for Like & Dislike
+                                var isDisliked by remember { mutableStateOf(false) }
                                 Surface(
                                     shape = CircleShape,
                                     color = LocalMaterialTheme.current.surfaceContainerHighest,
-                                    modifier = Modifier.height(40.dp)
+                                    modifier = Modifier.height(48.dp)
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                        modifier = Modifier.padding(horizontal = 6.dp)
                                     ) {
+                                        // Like Button
                                         IconButton(
-                                            onClick = onFavoriteToggle,
-                                            modifier = Modifier.size(32.dp)
+                                            onClick = {
+                                                if (isDisliked) {
+                                                    isDisliked = false
+                                                }
+                                                onFavoriteToggle()
+                                            },
+                                            modifier = Modifier.size(40.dp)
                                         ) {
                                             Icon(
                                                 imageVector = if (isFavoriteProvider()) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                                                 contentDescription = "Like",
                                                 tint = if (isFavoriteProvider()) LocalMaterialTheme.current.primary else LocalMaterialTheme.current.onSurfaceVariant,
-                                                modifier = Modifier.size(20.dp)
+                                                modifier = Modifier.size(24.dp)
                                             )
                                         }
                                         Box(
                                             modifier = Modifier
-                                                .width(1.dp)
-                                                .height(18.dp)
-                                                .background(LocalMaterialTheme.current.onSurfaceVariant.copy(alpha = 0.2f))
+                                                .width(1.5.dp)
+                                                .height(22.dp)
+                                                .background(LocalMaterialTheme.current.onSurfaceVariant.copy(alpha = 0.25f))
                                         )
+                                        // Dislike Button
                                         IconButton(
                                             onClick = {
-                                                if (isFavoriteProvider()) {
-                                                    onFavoriteToggle()
+                                                if (!isDisliked) {
+                                                    isDisliked = true
+                                                    if (isFavoriteProvider()) {
+                                                        onFavoriteToggle()
+                                                    }
+                                                    Toast.makeText(context, "Marked as disliked", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    isDisliked = false
+                                                    Toast.makeText(context, "Removed dislike", Toast.LENGTH_SHORT).show()
                                                 }
-                                                Toast.makeText(context, "Marked as disliked", Toast.LENGTH_SHORT).show()
                                             },
-                                            modifier = Modifier.size(32.dp)
+                                            modifier = Modifier.size(40.dp)
                                         ) {
                                             Icon(
-                                                imageVector = Icons.Rounded.ThumbDown,
+                                                imageVector = if (isDisliked) Icons.Rounded.ThumbDown else Icons.Rounded.ThumbDownOffAlt,
                                                 contentDescription = "Dislike",
-                                                tint = LocalMaterialTheme.current.onSurfaceVariant,
-                                                modifier = Modifier.size(18.dp)
+                                                tint = if (isDisliked) LocalMaterialTheme.current.error else LocalMaterialTheme.current.onSurfaceVariant,
+                                                modifier = Modifier.size(22.dp)
                                             )
                                         }
                                     }
