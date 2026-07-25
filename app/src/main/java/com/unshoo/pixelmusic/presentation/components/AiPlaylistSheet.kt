@@ -57,8 +57,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
@@ -307,7 +305,9 @@ fun AiPlaylistSheet(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Number inputs
+            // Interactive Track Count Slider
+            var trackCount by remember { mutableStateOf(25) }
+
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = smoothCornerShape,
@@ -316,39 +316,78 @@ fun AiPlaylistSheet(
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "Playlist size",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontFamily = GoogleSansRounded,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.onSurface
-                    )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        OutlinedTextField(
-                            value = minLength,
-                            onValueChange = { minLength = it.filter { char -> char.isDigit() } },
-                            label = { Text("Min songs") },
-                            modifier = Modifier.weight(1f),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            shape = smoothCornerShape,
-                            colors = textFieldColors,
-                        )
-                        OutlinedTextField(
-                            value = maxLength,
-                            onValueChange = { maxLength = it.filter { char -> char.isDigit() } },
-                            label = { Text("Max songs") },
-                            modifier = Modifier.weight(1f),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            shape = smoothCornerShape,
-                            colors = textFieldColors,
-                        )
+                        Column {
+                            Text(
+                                text = "Playlist size",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontFamily = GoogleSansRounded,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.onSurface
+                            )
+                            Text(
+                                text = "Number of songs to generate",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = GoogleSansRounded,
+                                color = colors.onSurfaceVariant
+                            )
+                        }
+
+                        Surface(
+                            shape = AbsoluteSmoothCornerShape(12.dp, 60),
+                            color = colors.primaryContainer
+                        ) {
+                            Text(
+                                text = "$trackCount songs",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = GoogleSansRounded,
+                                color = colors.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+
+                    androidx.compose.material3.Slider(
+                        value = trackCount.toFloat(),
+                        onValueChange = { trackCount = it.toInt() },
+                        valueRange = 5f..50f,
+                        steps = 44,
+                        colors = androidx.compose.material3.SliderDefaults.colors(
+                            thumbColor = colors.primary,
+                            activeTrackColor = colors.primary,
+                            inactiveTrackColor = colors.surfaceContainerHighest
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        listOf(10, 20, 30, 40, 50).forEach { preset ->
+                            val isSelected = trackCount == preset
+                            Surface(
+                                shape = AbsoluteSmoothCornerShape(8.dp, 60),
+                                color = if (isSelected) colors.primary else colors.surfaceContainerHigh,
+                                modifier = Modifier.clickable { trackCount = preset }
+                            ) {
+                                Text(
+                                    text = "$preset",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontFamily = GoogleSansRounded,
+                                    color = if (isSelected) colors.onPrimary else colors.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -716,64 +755,6 @@ fun AiPlaylistSheet(
                 }
             }
 
-            // Track Count Slider Card
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = promptFieldShape,
-                color = colors.surfaceContainerLow,
-                border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.35f))
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = "Track Count",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = GoogleSansRounded,
-                                color = colors.onSurface
-                            )
-                            Text(
-                                text = "How many songs to generate",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.onSurfaceVariant
-                            )
-                        }
-                        
-                        Surface(
-                            shape = AbsoluteSmoothCornerShape(12.dp, 60),
-                            color = colors.primaryContainer,
-                            modifier = Modifier.padding(start = 8.dp)
-                        ) {
-                            Text(
-                                text = "${maxLength.toIntOrNull() ?: 25}",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontFamily = GoogleSansRounded,
-                                color = colors.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Slider(
-                        value = (maxLength.toFloatOrNull() ?: 25f).coerceIn(5f, 50f),
-                        onValueChange = { maxLength = it.toInt().toString() },
-                        valueRange = 5f..50f,
-                        steps = 45,
-                        colors = SliderDefaults.colors(
-                            thumbColor = colors.primary,
-                            activeTrackColor = colors.primary,
-                            inactiveTrackColor = colors.outlineVariant
-                        )
-                    )
-                }
-            }
-
             // Error message with Retry
             AnimatedVisibility(
                 visible = error != null,
@@ -878,8 +859,7 @@ fun AiPlaylistSheet(
                                     isPressed = true
                                     tryAwaitRelease()
                                     isPressed = false
-                                    val count = maxLength.toIntOrNull() ?: 30
-                                    onGenerateClick(selectedMode, count, timePeriod, seedTrackName, seedArtistName, seedArtistInput, tagInput)
+                                    onGenerateClick(selectedMode, trackCount, timePeriod, seedTrackName, seedArtistName, seedArtistInput, tagInput)
                                 }
                             }
                         )
