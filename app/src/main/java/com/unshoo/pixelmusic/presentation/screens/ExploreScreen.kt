@@ -1380,7 +1380,7 @@ fun ExploreTopBar(
     isScrolled: Boolean = false,
 ) {
     val targetContainerColor = if (isScrolled) {
-        MaterialTheme.colorScheme.primaryContainer
+        MaterialTheme.colorScheme.surfaceContainerHigh
     } else {
         MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
     }
