@@ -118,6 +118,7 @@ import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.ThumbDown
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material3.IconButton
@@ -1114,28 +1115,22 @@ fun FullPlayerContent(
                                 )
                             }
                             
-                            // Material 3 Expressive Header: Cover + Metadata + Like/Dislike Actions
+                            // Material 3 Expressive Header: Cover + Metadata + Paired Like/Dislike Button Group
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 20.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(
+                                SmartImage(
+                                    model = song.albumArtUriString,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
                                     modifier = Modifier
-                                        .shadow(10.dp, AbsoluteSmoothCornerShape(22.dp, 60))
-                                        .background(LocalMaterialTheme.current.surfaceContainerHighest, AbsoluteSmoothCornerShape(22.dp, 60))
-                                ) {
-                                    SmartImage(
-                                        model = song.albumArtUriString,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .size(64.dp)
-                                            .clip(AbsoluteSmoothCornerShape(22.dp, 60))
-                                    )
-                                }
+                                        .size(60.dp)
+                                        .clip(AbsoluteSmoothCornerShape(14.dp, 60))
+                                )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = song.title,
@@ -1157,17 +1152,50 @@ fun FullPlayerContent(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    IconButton(
-                                        onClick = onFavoriteToggle,
-                                        modifier = Modifier.size(36.dp)
+                                
+                                // Paired Button Group for Like & Dislike
+                                Surface(
+                                    shape = CircleShape,
+                                    color = LocalMaterialTheme.current.surfaceContainerHighest,
+                                    modifier = Modifier.height(40.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 4.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = if (isFavoriteProvider()) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                            contentDescription = "Like",
-                                            tint = if (isFavoriteProvider()) LocalMaterialTheme.current.primary else LocalMaterialTheme.current.onSurfaceVariant,
-                                            modifier = Modifier.size(22.dp)
+                                        IconButton(
+                                            onClick = onFavoriteToggle,
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isFavoriteProvider()) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                                contentDescription = "Like",
+                                                tint = if (isFavoriteProvider()) LocalMaterialTheme.current.primary else LocalMaterialTheme.current.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .width(1.dp)
+                                                .height(18.dp)
+                                                .background(LocalMaterialTheme.current.onSurfaceVariant.copy(alpha = 0.2f))
                                         )
+                                        IconButton(
+                                            onClick = {
+                                                if (isFavoriteProvider()) {
+                                                    onFavoriteToggle()
+                                                }
+                                                Toast.makeText(context, "Marked as disliked", Toast.LENGTH_SHORT).show()
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.ThumbDown,
+                                                contentDescription = "Dislike",
+                                                tint = LocalMaterialTheme.current.onSurfaceVariant,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
