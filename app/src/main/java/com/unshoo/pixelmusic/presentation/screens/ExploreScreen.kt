@@ -1379,10 +1379,20 @@ fun ExploreTopBar(
     onCreateClick: () -> Unit,
     isScrolled: Boolean = false,
 ) {
+    val baseContainerColor = MaterialTheme.colorScheme.primaryContainer
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val solidTintedColor = remember(baseContainerColor, surfaceColor) {
+        androidx.compose.ui.graphics.Color(
+            red = (baseContainerColor.red * 0.45f) + (surfaceColor.red * 0.55f),
+            green = (baseContainerColor.green * 0.45f) + (surfaceColor.green * 0.55f),
+            blue = (baseContainerColor.blue * 0.45f) + (surfaceColor.blue * 0.55f),
+            alpha = 1f
+        )
+    }
     val targetContainerColor = if (isScrolled) {
-        MaterialTheme.colorScheme.surfaceContainerHigh
+        solidTintedColor
     } else {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+        baseContainerColor.copy(alpha = 0.4f)
     }
     val animatedContainerColor by animateColorAsState(
         targetValue = targetContainerColor,
@@ -1398,16 +1408,7 @@ fun ExploreTopBar(
     )
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
-                        Color.Transparent
-                    )
-                )
-            ),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(bottomStart = animatedCornerRadius, bottomEnd = animatedCornerRadius),
         color = animatedContainerColor,
         contentColor = MaterialTheme.colorScheme.onSurface
