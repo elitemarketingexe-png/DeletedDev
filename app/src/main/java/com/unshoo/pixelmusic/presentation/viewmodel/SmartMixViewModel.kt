@@ -382,37 +382,37 @@ class SmartMixViewModel @Inject constructor(
         return when (mode) {
             "top" -> {
                 when (state.timePeriod) {
-                    "overall" -> "My All-Time Era"
-                    "12month" -> "Yearly Frequency"
-                    "6month" -> "Mid-Year Mix"
-                    "3month" -> "Quarterly Echo"
-                    "1month" -> "Monthly Spectrum"
-                    "7day" -> "Weekly Pulse"
-                    else -> "Personal Era"
+                    "overall" -> "SonicEra"
+                    "12month" -> "YearlyFlow"
+                    "6month" -> "HalfYearPulse"
+                    "3month" -> "SeasonVibe"
+                    "1month" -> "MonthlyWave"
+                    "7day" -> "WeeklyDrift"
+                    else -> "AudioSphere"
                 }
             }
-            "library" -> "Vault Selects"
-            "recent" -> "Current Rotation"
+            "library" -> "VaultCraft"
+            "recent" -> "HeavyRotation"
             "similar-tracks" -> {
                 val seed = state.seedTrackName.ifBlank { topTrack ?: "Track" }
-                val shortName = if (seed.length > 14) seed.take(14).trim() + "…" else seed.trim()
-                "$shortName Echo"
+                val shortName = if (seed.length > 12) seed.take(12).trim() + "…" else seed.trim()
+                "${shortName}Echo"
             }
             "similar-artists" -> {
                 val seed = state.seedArtistInput.ifBlank { topArtist ?: "Artist" }
-                val shortName = if (seed.length > 14) seed.take(14).trim() + "…" else seed.trim()
-                "Radio $shortName"
+                val shortName = if (seed.length > 12) seed.take(12).trim() + "…" else seed.trim()
+                "${shortName}Radio"
             }
             "tag" -> {
                 val seed = state.tagInput.ifBlank { "Genre" }
-                val shortName = if (seed.length > 14) seed.take(14).trim() + "…" else seed.trim()
-                "${shortName.replaceFirstChar { it.uppercase() }} Groove"
+                val shortName = if (seed.length > 12) seed.take(12).trim() + "…" else seed.trim()
+                "${shortName.replaceFirstChar { it.uppercase() }}Groove"
             }
-            "mix" -> "Algorhythm Mix"
+            "mix" -> "AlgorhythmFlow"
             "recommendations" -> {
-                if (topArtist != null) "Daily Mix: $topArtist" else "For You"
+                if (topArtist != null) "${topArtist.take(12).trim()}Mix" else "SoundSpectrum"
             }
-            else -> "Smart Mix"
+            else -> "SmartAudio"
         }
     }
 
