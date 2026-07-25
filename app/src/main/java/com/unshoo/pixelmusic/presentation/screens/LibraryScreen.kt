@@ -919,7 +919,7 @@ fun LibraryScreen(
         }
     }
 
-    val headerContainerColor = Color.Transparent
+    val headerContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
 
     Scaffold(
         modifier = Modifier.background(brush = gradientBrush),
@@ -1700,22 +1700,18 @@ fun LibraryScreen(
 
                                         val isLoading = playerUiState.isLoadingLibraryCategories
 
-                                        val stableOnArtistClick: (Long) -> Unit = remember(navController) {
-                                            { artistId: Long ->
-                                                navController.navigateSafelyReplacing(
-                                                    route = Screen.ArtistDetail.createRoute(artistId),
-                                                    patternToPop = Screen.ArtistDetail.route
-                                                )
-                                            }
-                                        }
-
                                         LibraryArtistsTab(
                                             artists = artistsLazyPagingItems,
                                             isLoading = isLoading,
                                             playerViewModel = playerViewModel,
                                             bottomBarHeight = bottomBarHeightDp,
                                             currentArtistSortOption = artistsTabSlice.currentArtistSortOption,
-                                            onArtistClick = stableOnArtistClick,
+                                            onArtistClick = { artistId ->
+                                                navController.navigateSafelyReplacing(
+                                                    route = Screen.ArtistDetail.createRoute(artistId),
+                                                    patternToPop = Screen.ArtistDetail.route
+                                                )
+                                            },
                                             isRefreshing = isRefreshing,
                                             onRefresh = onRefresh,
                                             storageFilter = if (artistsTabSlice.hideLocalMedia) StorageFilter.ONLINE else artistsTabSlice.currentStorageFilter
@@ -4756,5 +4752,28 @@ private fun LazyPage(
     pagerState: PagerState,
     content: @Composable () -> Unit
 ) {
-    content()
+    var hasBeenLoaded by remember { mutableStateOf(false) }
+
+    val shouldLoad = remember(pagerState.currentPage, pagerState.targetPage, page) {
+        pagerState.currentPage == page || pagerState.targetPage == page
+    }
+
+    LaunchedEffect(shouldLoad) {
+        if (shouldLoad && !hasBeenLoaded) {
+            // Calm loading transition: wait ~180ms so fast tab transitions/swiping animations finish cleanly
+            kotlinx.coroutines.delay(180L)
+            hasBeenLoaded = true
+        }
+    }
+
+    if (hasBeenLoaded) {
+        content()
+    } else {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            M3MicroAnimatedLoader(color = MaterialTheme.colorScheme.primary)
+        }
+    }
 }
