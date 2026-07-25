@@ -376,47 +376,54 @@ class SmartMixViewModel @Inject constructor(
     }
 
     private fun generatePlaylistName(mode: String, state: SmartMixUiState, tracks: List<LastFmTrack>): String {
-        val topArtistRaw = tracks.firstOrNull()?.artist?.takeIf { it.isNotBlank() }
+        val artistRaw = tracks.firstOrNull()?.artist?.takeIf { it.isNotBlank() }
             ?: state.seedArtistInput.takeIf { it.isNotBlank() }
             ?: state.seedArtistName.takeIf { it.isNotBlank() }
-            ?: "Artist"
         
-        val artistClean = topArtistRaw
-            .replace(Regex("[^a-zA-Z0-9]"), "")
-            .let { if (it.length > 10) it.take(10) else it }
-            .replaceFirstChar { it.uppercase() }
+        val artistClean = artistRaw?.replace(Regex("[^a-zA-Z0-9]"), "")
+            ?.let { if (it.length > 9) it.take(9) else it }
+            ?.replaceFirstChar { it.uppercase() }
 
-        val trackRaw = state.seedTrackName.ifBlank { tracks.firstOrNull()?.name ?: "Track" }
-        val trackClean = trackRaw
-            .replace(Regex("[^a-zA-Z0-9]"), "")
-            .let { if (it.length > 10) it.take(10) else it }
-            .replaceFirstChar { it.uppercase() }
+        val trackRaw = state.seedTrackName.takeIf { it.isNotBlank() } ?: tracks.firstOrNull()?.name
+        val trackClean = trackRaw?.replace(Regex("[^a-zA-Z0-9]"), "")
+            ?.let { if (it.length > 9) it.take(9) else it }
+            ?.replaceFirstChar { it.uppercase() }
 
-        val tagClean = state.tagInput.ifBlank { "Vibe" }
-            .replace(Regex("[^a-zA-Z0-9]"), "")
-            .let { if (it.length > 10) it.take(10) else it }
-            .replaceFirstChar { it.uppercase() }
+        val tagClean = state.tagInput.takeIf { it.isNotBlank() }
+            ?.replace(Regex("[^a-zA-Z0-9]"), "")
+            ?.let { if (it.length > 9) it.take(9) else it }
+            ?.replaceFirstChar { it.uppercase() }
 
         return when (mode) {
             "top" -> {
+                val prefix = artistClean ?: "Sonic"
                 when (state.timePeriod) {
-                    "overall" -> "${artistClean}Era"
-                    "12month" -> "${artistClean}Yearly"
-                    "6month" -> "${artistClean}Pulse"
-                    "3month" -> "${artistClean}Vibe"
-                    "1month" -> "${artistClean}Wave"
-                    "7day" -> "${artistClean}Drift"
-                    else -> "${artistClean}Sphere"
+                    "overall" -> "${prefix}Era"
+                    "12month" -> "${prefix}Spectrum"
+                    "6month" -> "${prefix}Pulse"
+                    "3month" -> "${prefix}Drift"
+                    "1month" -> "${prefix}Wave"
+                    "7day" -> "${prefix}Flow"
+                    else -> "${prefix}Sphere"
                 }
             }
-            "library" -> "${artistClean}Vault"
-            "recent" -> "${artistClean}Rotation"
-            "similar-tracks" -> "${trackClean}Echo"
-            "similar-artists" -> "${artistClean}Radio"
-            "tag" -> "${tagClean}Hood"
-            "mix" -> "${artistClean}Algo"
-            "recommendations" -> "${artistClean}Mix"
-            else -> "${artistClean}Flow"
+            "library" -> if (artistClean != null) "${artistClean}Vault" else "VaultCraft"
+            "recent" -> if (artistClean != null) "${artistClean}Rotation" else "HeavyRotation"
+            "similar-tracks" -> {
+                val seed = trackClean ?: artistClean ?: "Track"
+                "${seed}Echo"
+            }
+            "similar-artists" -> {
+                val seed = artistClean ?: "Artist"
+                "${seed}Radio"
+            }
+            "tag" -> {
+                val seed = tagClean ?: artistClean ?: "Genre"
+                "${seed}Hood"
+            }
+            "mix" -> if (artistClean != null) "${artistClean}Algo" else "AlgorhythmFlow"
+            "recommendations" -> if (artistClean != null) "${artistClean}Mix" else "AstroPulse"
+            else -> if (artistClean != null) "${artistClean}Flow" else "CyberVibe"
         }
     }
 
