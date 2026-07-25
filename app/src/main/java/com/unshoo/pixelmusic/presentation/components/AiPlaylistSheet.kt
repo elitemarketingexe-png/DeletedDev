@@ -57,6 +57,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
@@ -711,6 +713,64 @@ fun AiPlaylistSheet(
                             )
                         }
                     }
+                }
+            }
+
+            // Track Count Slider Card
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = promptFieldShape,
+                color = colors.surfaceContainerLow,
+                border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.35f))
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Track Count",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = GoogleSansRounded,
+                                color = colors.onSurface
+                            )
+                            Text(
+                                text = "How many songs to generate",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant
+                            )
+                        }
+                        
+                        Surface(
+                            shape = AbsoluteSmoothCornerShape(12.dp, 60),
+                            color = colors.primaryContainer,
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Text(
+                                text = "${maxLength.toIntOrNull() ?: 25}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = GoogleSansRounded,
+                                color = colors.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Slider(
+                        value = (maxLength.toFloatOrNull() ?: 25f).coerceIn(5f, 50f),
+                        onValueChange = { maxLength = it.toInt().toString() },
+                        valueRange = 5f..50f,
+                        steps = 45,
+                        colors = SliderDefaults.colors(
+                            thumbColor = colors.primary,
+                            activeTrackColor = colors.primary,
+                            inactiveTrackColor = colors.outlineVariant
+                        )
+                    )
                 }
             }
 
