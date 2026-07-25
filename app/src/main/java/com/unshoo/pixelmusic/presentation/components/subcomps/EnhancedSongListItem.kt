@@ -1,11 +1,6 @@
 package com.unshoo.pixelmusic.presentation.components.subcomps
 
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -115,78 +110,54 @@ fun EnhancedSongListItem(
 
     val albumArtTargetSizePx = with(LocalDensity.current) { albumArtSize.roundToPx() }
     val isHighlighted = isCurrentSong && !isLoading
-    
-    val transition = updateTransition(
-        targetState = EnhancedSongAnimationTarget(
-            isHighlighted = isHighlighted,
-            isSelected = isSelected
-        ),
-        label = "EnhancedSongListItemTransition"
-    )
 
-    val highlightProgress by transition.animateFloat(
-        transitionSpec = { 
-            if (performanceModeEnabled) snap() else tween(durationMillis = 400) 
-        },
-        label = "highlightProgress"
-    ) { state ->
-        if (state.isHighlighted) 1f else 0f
+    val highlightProgress: Float
+    val selectionVisualProgress: Float
+    val selectionScaleProgress: Float
+
+    if (performanceModeEnabled) {
+        highlightProgress = if (isHighlighted) 1f else 0f
+        selectionVisualProgress = if (isSelected) 1f else 0f
+        selectionScaleProgress = if (isSelected) 1f else 0f
+    } else {
+        val transition = updateTransition(
+            targetState = EnhancedSongAnimationTarget(
+                isHighlighted = isHighlighted,
+                isSelected = isSelected
+            ),
+            label = "EnhancedSongListItemTransition"
+        )
+        highlightProgress = transition.animateFloat(
+            transitionSpec = { tween(durationMillis = 400) },
+            label = "highlightProgress"
+        ) { state ->
+            if (state.isHighlighted) 1f else 0f
+        }.value
+        selectionVisualProgress = transition.animateFloat(
+            transitionSpec = { tween(durationMillis = 250) },
+            label = "selectionVisualProgress"
+        ) { state ->
+            if (state.isSelected) 1f else 0f
+        }.value
+        selectionScaleProgress = transition.animateFloat(
+            transitionSpec = {
+                spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            },
+            label = "selectionScaleProgress"
+        ) { state ->
+            if (state.isSelected) 1f else 0f
+        }.value
     }
-
-    val selectionVisualProgress by transition.animateFloat(
-        transitionSpec = { 
-            if (performanceModeEnabled) snap() else tween(durationMillis = 250) 
-        },
-        label = "selectionVisualProgress"
-    ) { state ->
-        if (state.isSelected) 1f else 0f
-    }
-
-    val selectionScaleProgress by transition.animateFloat(
-        transitionSpec = {
-            if (performanceModeEnabled) snap() else spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessLow
-            )
-        },
-        label = "selectionScaleProgress"
-    ) { state ->
-        if (state.isSelected) 1f else 0f
-    }
-
-    val playingScale by animateFloatAsState(
-        targetValue = if (isHighlighted && isPlaying) 1.025f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "playingScale"
-    )
-
-    // Only run the infinite pulse animation when this specific item is highlighted+playing.
-    // Running rememberInfiniteTransition on every list row (50+) simultaneously is very expensive.
-    val shouldPulse = isHighlighted && isPlaying && !performanceModeEnabled
-    val pulseTransition = if (shouldPulse) rememberInfiniteTransition(label = "pulseTransition") else null
-    val pulseAlpha by (pulseTransition?.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = androidx.compose.animation.core.FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseAlpha"
-    ) ?: androidx.compose.runtime.derivedStateOf { 0.7f })
 
     val animatedCornerRadius = lerpDp(22.dp, 50.dp, highlightProgress)
     val animatedAlbumCornerRadius = lerpDp(10.dp, 50.dp, highlightProgress)
     val selectionScale = lerpFloat(1f, 0.98f, selectionScaleProgress)
     val selectionBorderWidth = lerpDp(0.dp, 2.5.dp, selectionVisualProgress)
 
-    // Use integer-rounded dp values as remember keys so shapes are only recreated when the
-    // animation meaningfully changes corner size, not on every sub-dp float tick.
-    val surfaceCornerRounded = (animatedCornerRadius.value * 2).toInt() // 0.5dp granularity
-    val albumCornerRounded = (animatedAlbumCornerRadius.value * 2).toInt()
-    val surfaceShape = remember(surfaceCornerRounded, customShape, isHighlighted) {
+    val surfaceShape = remember(animatedCornerRadius, customShape, isHighlighted) {
         if (customShape != null && !isHighlighted) {
             customShape
         } else {
@@ -194,33 +165,33 @@ fun EnhancedSongListItem(
         }
     }
 
-    val albumShape = remember(albumCornerRounded) {
+    val albumShape = remember(animatedAlbumCornerRadius) {
         RoundedCornerShape(animatedAlbumCornerRadius)
     }
 
     val colors = MaterialTheme.colorScheme
     val baseContainerColor = containerColorOverride ?: colors.surfaceContainerLow
     
-    val containerColor = remember(baseContainerColor, colors.primary, colors.secondaryContainer, highlightProgress, selectionVisualProgress) {
-        val playbackContainerColor = lerpColor(baseContainerColor, colors.primary, highlightProgress)
+    val containerColor = remember(baseContainerColor, colors.primaryContainer, colors.secondaryContainer, highlightProgress, selectionVisualProgress) {
+        val playbackContainerColor = lerpColor(baseContainerColor, colors.primaryContainer, highlightProgress)
         lerpColor(playbackContainerColor, colors.secondaryContainer, selectionVisualProgress)
     }
 
     val baseContentColor = colors.onSurface
     
-    val contentColor = remember(baseContentColor, colors.onPrimary, colors.onSecondaryContainer, highlightProgress, selectionVisualProgress) {
-        val playbackContentColor = lerpColor(baseContentColor, colors.onPrimary, highlightProgress)
+    val contentColor = remember(baseContentColor, colors.onPrimaryContainer, colors.onSecondaryContainer, highlightProgress, selectionVisualProgress) {
+        val playbackContentColor = lerpColor(baseContentColor, colors.onPrimaryContainer, highlightProgress)
         lerpColor(playbackContentColor, colors.onSecondaryContainer, selectionVisualProgress)
     }
 
     val selectionBorderColor = remember(colors.primary, selectionVisualProgress) {
         lerpColor(colors.primary.copy(alpha = 0f), colors.primary, selectionVisualProgress)
     }
-    val mvContainerColor = remember(colors.surfaceContainerHigh, colors.primary, highlightProgress) {
-        lerpColor(colors.surfaceContainerHigh, colors.primary, highlightProgress)
+    val mvContainerColor = remember(colors.onSurface, colors.primaryContainer, highlightProgress) {
+        lerpColor(colors.onSurface, colors.primaryContainer, highlightProgress)
     }
-    val mvContentColor = remember(colors.onSurface, colors.onPrimary, highlightProgress) {
-        lerpColor(colors.onSurface, colors.onPrimary, highlightProgress)
+    val mvContentColor = remember(colors.surfaceContainerHigh, colors.onPrimaryContainer, highlightProgress) {
+        lerpColor(colors.surfaceContainerHigh, colors.onPrimaryContainer, highlightProgress)
     }
     val selectionOverlayColor = remember(colors.primary, selectionVisualProgress) {
         lerpColor(
@@ -229,13 +200,11 @@ fun EnhancedSongListItem(
             selectionVisualProgress
         )
     }
-    val selectionOverlayContentColor = remember(colors.onPrimary, selectionVisualProgress) {
-        lerpColor(
-            Color.Transparent,
-            colors.onPrimary,
-            selectionVisualProgress
-        )
-    }
+    val selectionOverlayContentColor = lerpColor(
+        Color.Transparent,
+        colors.onPrimary,
+        selectionVisualProgress
+    )
     val showSelectionDecoration = selectionVisualProgress > 0.001f
 
     if (isLoading) {
@@ -303,19 +272,13 @@ fun EnhancedSongListItem(
         Surface(
             modifier = modifier
                 .fillMaxWidth()
-                .scale(selectionScale * playingScale)
+                .scale(selectionScale)
                 .clip(surfaceShape)
                 .then(
                     if (showSelectionDecoration) {
                         Modifier.border(
                             width = selectionBorderWidth,
                             color = selectionBorderColor,
-                            shape = surfaceShape
-                        )
-                    } else if (shouldPulse) {
-                        Modifier.border(
-                            width = 2.dp,
-                            color = colors.primary.copy(alpha = pulseAlpha),
                             shape = surfaceShape
                         )
                     } else {
@@ -360,15 +323,6 @@ fun EnhancedSongListItem(
                     Box(
                         modifier = Modifier
                             .size(albumArtSize)
-                            .then(
-                                if (shouldPulse) {
-                                    Modifier.border(
-                                        width = 2.dp,
-                                        color = colors.primary.copy(alpha = pulseAlpha),
-                                        shape = albumShape
-                                    )
-                                } else Modifier
-                            )
                             .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
                     ) {
                         SmartImage(
