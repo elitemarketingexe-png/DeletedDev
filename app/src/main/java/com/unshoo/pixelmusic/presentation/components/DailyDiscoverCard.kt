@@ -306,26 +306,8 @@ fun DailyDiscoverSection(
 ) {
     if (sections.isEmpty()) return
 
-    // Filter sections to only include songs that are 1000% offline (local, downloaded, or cached)
-    val offlineSections = remember(sections, localSongs) {
-        sections.mapNotNull { section ->
-            val offlineSongs = section.items.filterIsInstance<SongItem>().filter { songItem ->
-                val nativeSong = songItem.toNativeSong()
-                val isLocalPath = !nativeSong.path.isNullOrEmpty() && (nativeSong.path.startsWith("/") || nativeSong.path.contains(":") || nativeSong.path.startsWith("content://") || nativeSong.path.startsWith("file://"))
-                val isContentUri = nativeSong.contentUriString.startsWith("content://") || nativeSong.contentUriString.startsWith("file://")
-                val isOnlineNetworkStream = nativeSong.telegramFileId != null || nativeSong.contentUriString.startsWith("tg://") || nativeSong.path.startsWith("tg://") || nativeSong.contentUriString.startsWith("http")
-                (isLocalPath || isContentUri) && !isOnlineNetworkStream
-            }
-            if (offlineSongs.isNotEmpty()) {
-                section.copy(items = offlineSongs)
-            } else null
-        }
-    }
-
-    if (offlineSections.isEmpty()) return
-
-    val shuffledSections = remember(offlineSections) {
-        offlineSections.shuffled()
+    val shuffledSections = remember(sections) {
+        sections.shuffled()
     }
 
     val pagerState = androidx.compose.foundation.pager.rememberPagerState { shuffledSections.size }
