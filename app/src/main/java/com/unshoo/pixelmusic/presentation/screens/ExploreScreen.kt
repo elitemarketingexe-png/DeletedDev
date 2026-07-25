@@ -360,8 +360,8 @@ fun ExploreScreen(
                         homeSectionsFiltered.filter { section ->
                             val isBento = isBentoSection(section.title, section.items.size)
                             val title = section.title.lowercase()
-                            val isRecentlyPlayedLocal = title.contains("recently played (local)") || (title.contains("recently played") && title.contains("local"))
-                            val isSug = !isBento && !isRecentlyPlayedLocal &&
+                            val isLocalDuplicate = title.contains("local")
+                            val isSug = !isBento && !isLocalDuplicate &&
                                         (title.contains("mix") || title.contains("listen again") || 
                                         title.contains("favorites") || title.contains("suggest") || 
                                         title.contains("recommend") || title.contains("radio") || 
@@ -772,7 +772,7 @@ fun ExploreScreen(
 
                             remainingSections.forEachIndexed { index, section ->
                                 val titleLower = section.title.lowercase()
-                                if (titleLower.contains("recently played (local)") || (titleLower.contains("recently played") && titleLower.contains("local"))) return@forEachIndexed
+                                if (titleLower.contains("local")) return@forEachIndexed
 
                                 val isShelf = section.title.contains("recently played", ignoreCase = true) ||
                                               section.title.contains("most played", ignoreCase = true) ||
@@ -2142,24 +2142,7 @@ fun MixedForYouCard(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val rawSongs = section.items.filterIsInstance<SongItem>()
-                    val isOfflineShelf = remember(section.title) {
-                        val t = section.title.lowercase()
-                        t.contains("cached") || t.contains("downloaded")
-                    }
-                    val songs = remember(rawSongs, isOfflineShelf) {
-                        if (isOfflineShelf) {
-                            rawSongs.filter { songItem ->
-                                val nativeSong = songItem.toNativeSong()
-                                val isLocalOrContent = !nativeSong.path.isNullOrEmpty() && (nativeSong.path.startsWith("/") || nativeSong.path.contains(":") || nativeSong.path.startsWith("content://") || nativeSong.path.startsWith("file://"))
-                                val isContentUri = nativeSong.contentUriString.startsWith("content://") || nativeSong.contentUriString.startsWith("file://")
-                                val isTelegramOrNetworkStream = nativeSong.telegramFileId != null || nativeSong.contentUriString.startsWith("tg://") || nativeSong.path.startsWith("tg://") || nativeSong.contentUriString.startsWith("http")
-                                (isLocalOrContent || isContentUri) && !isTelegramOrNetworkStream
-                            }.take(3)
-                        } else {
-                            rawSongs.take(3)
-                        }
-                    }
+                    val songs = section.items.filterIsInstance<SongItem>().take(3)
                     val nativeSongs = remember(songs, localSongs) { songs.map { localSongs[it.id] ?: it.toNativeSong() } }
                     songs.forEachIndexed { index, songItem ->
                         val nativeSong = nativeSongs[index]
