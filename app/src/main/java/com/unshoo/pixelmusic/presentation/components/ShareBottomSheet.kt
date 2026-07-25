@@ -10,6 +10,7 @@ import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -1088,14 +1089,16 @@ private fun SongMiniCard(
     song: Song,
     lightScheme: ColorScheme
 ) {
-    val formattedDuration = remember(song.duration) {
-        val totalSecs = song.duration / 1000
+    val durationMs = remember(song.duration) { if (song.duration > 0) song.duration else 180000L }
+    val formattedDuration = remember(durationMs) {
+        val totalSecs = durationMs / 1000
         val mins = totalSecs / 60
         val secs = totalSecs % 60
         String.format("%02d:%02d", mins, secs)
     }
-    val formattedProgress = remember(song.duration) {
-        val progressSecs = (song.duration * 0.4f / 1000).toLong()
+    val progressRatio = 0.42f
+    val formattedProgress = remember(durationMs, progressRatio) {
+        val progressSecs = ((durationMs * progressRatio) / 1000).toLong()
         val mins = progressSecs / 60
         val secs = progressSecs % 60
         String.format("%02d:%02d", mins, secs)
@@ -1168,7 +1171,7 @@ private fun SongMiniCard(
                     color = lightScheme.onSurfaceVariant
                 )
                 LinearWavyProgressIndicator(
-                    progress = { 0.4f },
+                    progress = { progressRatio },
                     modifier = Modifier
                         .weight(1f)
                         .height(10.dp),
@@ -1449,29 +1452,50 @@ private fun ShareActionChip(
     contentColor: Color,
     onClick: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.92f else 1f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 400f),
+        label = "chipScale"
+    )
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Box(
+        Surface(
             modifier = Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(containerColor)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
+                .size(58.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .clickable {
+                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    onClick()
+                },
+            shape = CircleShape,
+            color = containerColor
         ) {
-            CompositionLocalProvider(LocalContentColor provides contentColor) {
-                icon()
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CompositionLocalProvider(LocalContentColor provides contentColor) {
+                    icon()
+                }
             }
         }
         Text(
             text = label,
+            fontFamily = GoogleSansRounded,
+            fontWeight = FontWeight.Medium,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             maxLines = 2,
-            modifier = Modifier.width(64.dp)
+            modifier = Modifier.width(68.dp)
         )
     }
 }
