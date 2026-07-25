@@ -476,7 +476,7 @@ class ExploreViewModel @Inject constructor(
                                 
                                 (enrichedReleases + searchResults)
                                     .distinctBy { it.browseId }
-                                    .take(15)
+                                    .take(50)
                             } else {
                                 emptyList()
                             }

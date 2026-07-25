@@ -116,6 +116,8 @@ import com.unshoo.pixelmusic.presentation.components.subcomps.PlayingEqIcon
 import com.unshoo.pixelmusic.presentation.navigation.Screen
 import com.unshoo.pixelmusic.presentation.components.StreamingProviderSheet
 import com.unshoo.pixelmusic.presentation.telegram.auth.TelegramLoginActivity
+import com.unshoo.pixelmusic.presentation.components.DailyDiscoverSection
+import com.unshoo.pixelmusic.presentation.viewmodel.ExploreViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.SettingsViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.StatsViewModel
@@ -147,6 +149,7 @@ fun HomeScreen(
     quickPicksViewModel: QuickPicksViewModel = hiltViewModel(),
     favoriteArtistReleasesViewModel: FavoriteArtistReleasesViewModel = hiltViewModel(),
     accountsViewModel: AccountsViewModel = hiltViewModel(),
+    exploreViewModel: ExploreViewModel = hiltViewModel(),
     onOpenSidebar: () -> Unit
 ) {
     val context = LocalContext.current
@@ -156,6 +159,14 @@ fun HomeScreen(
     }
     val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val accountsUiState by accountsViewModel.uiState.collectAsStateWithLifecycle()
+    val exploreUiState by exploreViewModel.uiState.collectAsStateWithLifecycle()
+    val discoverSections = remember(exploreUiState.homePageSections) {
+        exploreUiState.homePageSections.filter {
+            it.title.contains("mix", ignoreCase = true) ||
+            it.title.contains("discover", ignoreCase = true) ||
+            it.title.contains("for you", ignoreCase = true)
+        }
+    }
     val userName = remember(accountsUiState) {
         val rawName = accountsUiState.userName
         if (!rawName.isNullOrBlank()) {
@@ -537,6 +548,21 @@ fun HomeScreen(
                             },
                             onNavigateToGenre = {},
                             playerViewModel = playerViewModel
+                        )
+                    }
+                }
+
+                // Daily Discover Section
+                if (discoverSections.isNotEmpty()) {
+                    item(
+                        key = "home_daily_discover_section",
+                        contentType = "daily_discover_section"
+                    ) {
+                        DailyDiscoverSection(
+                            sections = discoverSections,
+                            playerViewModel = playerViewModel,
+                            navController = navController,
+                            localSongs = exploreUiState.localSongs
                         )
                     }
                 }

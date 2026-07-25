@@ -412,7 +412,7 @@ fun ExploreScreen(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        val categories = listOf("All", "Smart Mix", "For You", "Charts", "Recap")
+                                        val categories = listOf("All", "Smart Mix", "For You", "New Releases", "Charts", "Recap")
                                         categories.forEach { category ->
                                             FilterChip(
                                                 selected = filterSlice.selectedFilter == category,
@@ -691,8 +691,36 @@ fun ExploreScreen(
                             }
                         }
 
-                        // Move New Releases here (4th row) - shown under New Releases filter or main All/For You filters
-                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "New Releases" || filterSlice.selectedFilter == "For You") &&
+                        // Move New Releases here - shown under New Releases filter as full 2-column grid or main All/For You filters as carousel
+                        if (filterSlice.selectedFilter == "New Releases" && contentSlice.newReleaseAlbums.isNotEmpty()) {
+                            item(key = "new_releases_full_header") {
+                                SectionHeader(title = "All New Releases & Singles")
+                            }
+                            val albums = contentSlice.newReleaseAlbums
+                            val chunkedAlbums = albums.chunked(2)
+                            items(items = chunkedAlbums, key = { chunk -> "nr_row_${chunk.first().browseId}" }) { rowAlbums ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    rowAlbums.forEach { album ->
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            AlbumCarouselItem(
+                                                album = album,
+                                                onClick = {
+                                                    navController.navigateSafely(Screen.AlbumDetail.createRoute(album.browseId))
+                                                }
+                                            )
+                                        }
+                                    }
+                                    if (rowAlbums.size == 1) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        } else if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") &&
                             contentSlice.newReleaseAlbums.isNotEmpty()
                         ) {
                             item(key = "new_releases_header") {
