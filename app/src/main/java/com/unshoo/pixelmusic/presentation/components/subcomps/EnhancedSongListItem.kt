@@ -1,5 +1,9 @@
 package com.unshoo.pixelmusic.presentation.components.subcomps
 
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.Spring
@@ -150,6 +154,26 @@ fun EnhancedSongListItem(
         if (state.isSelected) 1f else 0f
     }
 
+    val playingScale by animateFloatAsState(
+        targetValue = if (isHighlighted && isPlaying) 1.025f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "playingScale"
+    )
+
+    val pulseTransition = rememberInfiniteTransition(label = "pulseTransition")
+    val pulseAlpha by pulseTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
     val animatedCornerRadius = lerpDp(22.dp, 50.dp, highlightProgress)
     val animatedAlbumCornerRadius = lerpDp(10.dp, 50.dp, highlightProgress)
     val selectionScale = lerpFloat(1f, 0.98f, selectionScaleProgress)
@@ -272,13 +296,19 @@ fun EnhancedSongListItem(
         Surface(
             modifier = modifier
                 .fillMaxWidth()
-                .scale(selectionScale)
+                .scale(selectionScale * playingScale)
                 .clip(surfaceShape)
                 .then(
                     if (showSelectionDecoration) {
                         Modifier.border(
                             width = selectionBorderWidth,
                             color = selectionBorderColor,
+                            shape = surfaceShape
+                        )
+                    } else if (isHighlighted && isPlaying) {
+                        Modifier.border(
+                            width = 2.dp,
+                            color = colors.primary.copy(alpha = pulseAlpha),
                             shape = surfaceShape
                         )
                     } else {
@@ -323,6 +353,15 @@ fun EnhancedSongListItem(
                     Box(
                         modifier = Modifier
                             .size(albumArtSize)
+                            .then(
+                                if (isHighlighted && isPlaying) {
+                                    Modifier.border(
+                                        width = 2.dp,
+                                        color = colors.primary.copy(alpha = pulseAlpha),
+                                        shape = albumShape
+                                    )
+                                } else Modifier
+                            )
                             .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
                     ) {
                         SmartImage(

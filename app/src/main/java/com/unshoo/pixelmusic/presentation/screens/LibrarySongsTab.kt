@@ -114,16 +114,32 @@ fun LibrarySongsTab(
     // Check if list is effectively empty (based on Paging state)
     // val isListEmpty = songs.itemCount == 0 && songs.loadState.refresh is LoadState.NotLoading
     
-    // Scroll Handler from ViewModel
+    // Scroll Handler from ViewModel (Centers playing song vertically in list)
     LaunchedEffect(Unit) {
         playerViewModel.scrollToIndexEvent.collect { index ->
             if (index >= 0) {
+                 val viewportHeight = listState.layoutInfo.viewportSize.height
+                 val centerOffset = -(viewportHeight / 3)
                  val firstVisible = listState.firstVisibleItemIndex
                  if (Math.abs(index - firstVisible) > 20) {
-                     listState.scrollToItem(index)
+                     listState.scrollToItem(index, scrollOffset = centerOffset)
                  } else {
-                     listState.animateScrollToItem(index)
+                     listState.animateScrollToItem(index, scrollOffset = centerOffset)
                  }
+            }
+        }
+    }
+
+    // Auto-center current playing song when track changes
+    LaunchedEffect(currentSongId) {
+        if (currentSongId != null && songs.itemCount > 0) {
+            val targetIndex = (0 until songs.itemCount).firstOrNull { idx ->
+                songs.peek(idx)?.id == currentSongId
+            } ?: -1
+            if (targetIndex >= 0) {
+                val viewportHeight = listState.layoutInfo.viewportSize.height
+                val centerOffset = -(viewportHeight / 3)
+                listState.animateScrollToItem(targetIndex, scrollOffset = centerOffset)
             }
         }
     }
