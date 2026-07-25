@@ -1157,7 +1157,12 @@ fun FullPlayerContent(
                                 }
                                 
                                 // Paired Button Group for Like & Dislike
-                                var isDisliked by remember { mutableStateOf(false) }
+                                var isDisliked by remember(song.isDisliked) { mutableStateOf(song.isDisliked) }
+                                val isYouTubeSong = remember(song) {
+                                    !song.youtubeId.isNullOrEmpty() ||
+                                            song.contentUriString.startsWith("youtube://") ||
+                                            song.id.startsWith("youtube_")
+                                }
                                 Surface(
                                     shape = CircleShape,
                                     color = LocalMaterialTheme.current.surfaceContainerHighest,
@@ -1170,10 +1175,17 @@ fun FullPlayerContent(
                                         // Like Button
                                         IconButton(
                                             onClick = {
-                                                if (isDisliked) {
+                                                val targetState = !isFavoriteProvider()
+                                                onFavoriteToggle()
+                                                if (isYouTubeSong && songInfoViewModel.isLoggedIn()) {
+                                                    songInfoViewModel.likeOnYouTube(song, targetState) { success ->
+                                                        if (success && targetState) {
+                                                            isDisliked = false
+                                                        }
+                                                    }
+                                                } else if (targetState && isDisliked) {
                                                     isDisliked = false
                                                 }
-                                                onFavoriteToggle()
                                             },
                                             modifier = Modifier.size(40.dp)
                                         ) {
@@ -1193,15 +1205,23 @@ fun FullPlayerContent(
                                         // Dislike Button
                                         IconButton(
                                             onClick = {
-                                                if (!isDisliked) {
-                                                    isDisliked = true
-                                                    if (isFavoriteProvider()) {
+                                                val targetState = !isDisliked
+                                                if (isYouTubeSong && songInfoViewModel.isLoggedIn()) {
+                                                    songInfoViewModel.dislikeOnYouTube(song, targetState) { success ->
+                                                        if (success) {
+                                                            isDisliked = targetState
+                                                            if (targetState && isFavoriteProvider()) {
+                                                                onFavoriteToggle()
+                                                            }
+                                                            Toast.makeText(context, if (targetState) "Disliked on YouTube" else "Removed Dislike", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                } else {
+                                                    isDisliked = targetState
+                                                    if (targetState && isFavoriteProvider()) {
                                                         onFavoriteToggle()
                                                     }
-                                                    Toast.makeText(context, "Marked as disliked", Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    isDisliked = false
-                                                    Toast.makeText(context, "Removed dislike", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, if (targetState) "Marked as disliked" else "Removed dislike", Toast.LENGTH_SHORT).show()
                                                 }
                                             },
                                             modifier = Modifier.size(40.dp)
