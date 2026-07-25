@@ -983,11 +983,11 @@ private fun ShareableCard(
                         ),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = lightScheme.surfaceContainerHigh
+                        containerColor = darkScheme.primaryContainer
                     ),
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
                 ) {
-                    SongMiniCard(song = song, lightScheme = lightScheme)
+                    SongMiniCard(song = song, albumScheme = darkScheme)
                 }
                 } // end bloom Box
             } else {
@@ -1093,7 +1093,7 @@ private fun ShareableCard(
 @Composable
 private fun SongMiniCard(
     song: Song,
-    lightScheme: ColorScheme
+    albumScheme: ColorScheme
 ) {
     val durationMs = remember(song.duration) { if (song.duration > 0) song.duration else 180000L }
     val formattedDuration = remember(durationMs) {
@@ -1118,7 +1118,14 @@ private fun SongMiniCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(lightScheme.surfaceContainerHigh),
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        albumScheme.primaryContainer,
+                        albumScheme.surfaceContainerLowest
+                    )
+                )
+            ),
         horizontalAlignment = Alignment.Start
     ) {
         // Flush Album Artwork with subtle bottom inner border
@@ -1145,7 +1152,7 @@ private fun SongMiniCard(
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
                 lineHeight = 20.sp,
-                color = lightScheme.onSurface,
+                color = albumScheme.onPrimaryContainer,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1156,7 +1163,7 @@ private fun SongMiniCard(
                 fontWeight = FontWeight.Medium,
                 fontSize = 12.sp,
                 lineHeight = 15.sp,
-                color = lightScheme.onSurfaceVariant,
+                color = albumScheme.onPrimaryContainer.copy(alpha = 0.7f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1174,15 +1181,15 @@ private fun SongMiniCard(
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 9.sp,
-                    color = lightScheme.onSurfaceVariant
+                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.65f)
                 )
                 LinearWavyProgressIndicator(
                     progress = { progressRatio },
                     modifier = Modifier
                         .weight(1f)
                         .height(10.dp),
-                    color = lightScheme.primary,
-                    trackColor = lightScheme.primary.copy(alpha = 0.18f),
+                    color = albumScheme.primary,
+                    trackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.2f),
                     stroke = stroke,
                     trackStroke = stroke,
                     wavelength = 10.dp,
@@ -1194,7 +1201,7 @@ private fun SongMiniCard(
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 9.sp,
-                    color = lightScheme.onSurfaceVariant
+                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.65f)
                 )
             }
         }
