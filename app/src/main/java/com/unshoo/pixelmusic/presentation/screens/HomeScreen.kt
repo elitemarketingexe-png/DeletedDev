@@ -562,32 +562,6 @@ fun HomeScreen(
                     }
                 }
 
-                if (recentlyPlayedSongs.size >= RecentlyPlayedSectionMinSongsToShow) {
-                    item(
-                        key = "recently_played_section",
-                        contentType = "recently_played_section"
-                    ) {
-                        RecentlyPlayedSection(
-                            songs = recentlyPlayedSongs,
-                            onSongClick = { song ->
-                                if (recentlyPlayedQueue.isNotEmpty()) {
-                                    playerViewModel.playSongs(
-                                        songsToPlay = recentlyPlayedQueue,
-                                        startSong = song,
-                                        queueName = "Recently Played"
-                                    )
-                                }
-                            },
-                            onOpenAllClick = {
-                                navController.navigateSafely(Screen.RecentlyPlayed.route)
-                            },
-                            themeStateHolder = playerViewModel.themeStateHolder,
-                            currentSongId = currentSong?.id,
-                            contentPadding = PaddingValues(start = 8.dp, end = 24.dp)
-                        )
-                    }
-                }
-
                 if (artistReleases.isNotEmpty()) {
                     item(
                         key = "favorite_artist_releases_section",
