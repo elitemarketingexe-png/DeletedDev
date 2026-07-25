@@ -135,13 +135,15 @@ fun HomeGradientTopBar(
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         TopAppBar(
-            modifier = Modifier.background(Color.Transparent),
+            modifier = Modifier
+                .background(Color.Transparent)
+                .padding(vertical = 0.dp),
             title = { /* nada, usamos solo acciones */ },
             navigationIcon = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.padding(start = 16.dp)
+                    modifier = Modifier.padding(start = 16.dp, top = 2.dp, bottom = 2.dp)
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.pixelmusic_base_monochrome),
