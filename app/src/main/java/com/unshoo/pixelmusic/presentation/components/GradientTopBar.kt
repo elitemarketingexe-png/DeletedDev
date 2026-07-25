@@ -1,16 +1,20 @@
 package com.unshoo.pixelmusic.presentation.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.ButtonDefaults
@@ -106,8 +110,29 @@ fun HomeGradientTopBar(
     onMenuClick: () -> Unit = {},
     isScrolled: Boolean = false,
 ) {
-    androidx.compose.foundation.layout.Column(
-        modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+    val targetContainerColor = if (isScrolled) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+    }
+    val animatedContainerColor by animateColorAsState(
+        targetValue = targetContainerColor,
+        animationSpec = tween(durationMillis = 300),
+        label = "home_topbar_color"
+    )
+
+    val targetCornerRadius = if (isScrolled) 28.dp else 24.dp
+    val animatedCornerRadius by animateDpAsState(
+        targetValue = targetCornerRadius,
+        animationSpec = tween(durationMillis = 300),
+        label = "home_topbar_corner"
+    )
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(bottomStart = animatedCornerRadius, bottomEnd = animatedCornerRadius),
+        color = animatedContainerColor,
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         TopAppBar(
             modifier = Modifier.background(Color.Transparent),

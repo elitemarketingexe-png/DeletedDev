@@ -1374,10 +1374,28 @@ fun ExploreTopBar(
     onCreateClick: () -> Unit,
     isScrolled: Boolean = false,
 ) {
+    val targetContainerColor = if (isScrolled) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+    }
+    val animatedContainerColor by animateColorAsState(
+        targetValue = targetContainerColor,
+        animationSpec = tween(durationMillis = 300),
+        label = "explore_topbar_color"
+    )
+
+    val targetCornerRadius = if (isScrolled) 28.dp else 24.dp
+    val animatedCornerRadius by animateDpAsState(
+        targetValue = targetCornerRadius,
+        animationSpec = tween(durationMillis = 300),
+        label = "explore_topbar_corner"
+    )
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(bottomStart = animatedCornerRadius, bottomEnd = animatedCornerRadius),
+        color = animatedContainerColor,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Row(
