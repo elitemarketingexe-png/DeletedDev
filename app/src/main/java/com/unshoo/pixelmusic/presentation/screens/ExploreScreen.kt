@@ -360,16 +360,14 @@ fun ExploreScreen(
                         homeSectionsFiltered.filter { section ->
                             val isBento = isBentoSection(section.title, section.items.size)
                             val title = section.title.lowercase()
-                            val isRecentlyPlayedOrOnline = title.contains("recently played") ||
-                                        title.contains("recently") ||
-                                        title.contains("online") ||
-                                        title.contains("stream")
-                            val isSug = !isBento && !isRecentlyPlayedOrOnline &&
+                            val isLocalDuplicate = title.contains("local")
+                            val isSug = !isBento && !isLocalDuplicate &&
                                         (title.contains("mix") || title.contains("listen again") || 
                                         title.contains("favorites") || title.contains("suggest") || 
                                         title.contains("recommend") || title.contains("radio") || 
-                                        title.contains("similar") || title.contains("liked") ||
-                                        title.contains("cached") || title.contains("you might like") ||
+                                        title.contains("similar") || title.contains("played") ||
+                                        title.contains("liked") || title.contains("cached") ||
+                                        title.contains("you might like") || title.contains("recently") ||
                                         title.contains("most"))
                             val hasSongs = section.items.filterIsInstance<SongItem>().isNotEmpty()
                             isSug && hasSongs
@@ -773,6 +771,9 @@ fun ExploreScreen(
                         if (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") {
 
                             remainingSections.forEachIndexed { index, section ->
+                                val titleLower = section.title.lowercase()
+                                if (titleLower.contains("local")) return@forEachIndexed
+
                                 val isShelf = section.title.contains("recently played", ignoreCase = true) ||
                                               section.title.contains("most played", ignoreCase = true) ||
                                               section.title.contains("heavy rotation", ignoreCase = true) ||
