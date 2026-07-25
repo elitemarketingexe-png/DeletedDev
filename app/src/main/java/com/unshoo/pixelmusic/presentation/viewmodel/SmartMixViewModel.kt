@@ -271,22 +271,16 @@ class SmartMixViewModel @Inject constructor(
                 }
 
                 // Step 2: Resolve tracks to YouTube Music IDs
-                val basePlaylistName = generatePlaylistName(mode, state)
+                val basePlaylistName = generatePlaylistName(mode, state, lastFmTracks)
                 val allPlaylists = playlistPreferencesRepository.userPlaylistsFlow.first()
-                var existingPlaylist = allPlaylists.find { it.name.equals(basePlaylistName, ignoreCase = true) }
+                
+                // Always generate a unique professional playlist name (e.g. "For You #2", "Weekly Vibe #3") so older mixes are preserved
                 var finalPlaylistName = basePlaylistName
-
-                // If it exists but is NOT AI-generated, resolve name collision by adding a suffix
-                if (existingPlaylist != null && !existingPlaylist.isAiGenerated) {
-                    var suffixCounter = 1
-                    while (allPlaylists.any { it.name.equals("$basePlaylistName ($suffixCounter)", ignoreCase = true) }) {
-                        suffixCounter++
-                    }
-                    finalPlaylistName = "$basePlaylistName ($suffixCounter)"
-                    existingPlaylist = null
+                var suffixCounter = 1
+                while (allPlaylists.any { it.name.equals(finalPlaylistName, ignoreCase = true) }) {
+                    suffixCounter++
+                    finalPlaylistName = "$basePlaylistName #$suffixCounter"
                 }
-
-                val existingSongIds = existingPlaylist?.songIds?.map { it.removePrefix("youtube_") }?.toSet().orEmpty()
 
                 _uiState.update { it.copy(generationProgress = "Resolving streamable tracks on YouTube Music (0/${lastFmTracks.size})...") }
 
@@ -300,7 +294,6 @@ class SmartMixViewModel @Inject constructor(
                                 synchronized(resolvedSongs) {
                                     val ytId = song.youtubeId
                                     if (ytId != null && 
-                                        !existingSongIds.contains(ytId) && 
                                         resolvedSongs.none { it.youtubeId == ytId }) {
                                         resolvedSongs.add(song)
                                     }
@@ -324,30 +317,20 @@ class SmartMixViewModel @Inject constructor(
                     musicRepository.insertYoutubeSongs(finalSongs)
                 }
 
-                // Step 4: Create playlist in Room database
+                // Step 4: Create unique mix playlist in Room database
                 _uiState.update { it.copy(generationProgress = "Creating your mix playlist...") }
                 val songIds = finalSongs.map { "youtube_${it.youtubeId}" }
                 
                 val coverImage = lastFmTracks.firstOrNull { it.imageUrl.isNotEmpty() }?.imageUrl
 
                 val newPlaylist = withContext(Dispatchers.IO) {
-                    if (existingPlaylist != null && existingPlaylist.isAiGenerated) {
-                        val updated = existingPlaylist.copy(
-                            songIds = songIds,
-                            coverImageUri = coverImage,
-                            lastModified = System.currentTimeMillis()
-                        )
-                        playlistPreferencesRepository.updatePlaylist(updated)
-                        updated
-                    } else {
-                        playlistPreferencesRepository.createPlaylist(
-                            name = finalPlaylistName,
-                            songIds = songIds,
-                            isAiGenerated = true,
-                            coverImageUri = coverImage,
-                            source = "LASTFM_MIX"
-                        )
-                    }
+                    playlistPreferencesRepository.createPlaylist(
+                        name = finalPlaylistName,
+                        songIds = songIds,
+                        isAiGenerated = true,
+                        coverImageUri = coverImage,
+                        source = "LASTFM_MIX"
+                    )
                 }
 
                 _uiState.update {
@@ -392,36 +375,44 @@ class SmartMixViewModel @Inject constructor(
         }
     }
 
-    private fun generatePlaylistName(mode: String, state: SmartMixUiState): String {
+    private fun generatePlaylistName(mode: String, state: SmartMixUiState, tracks: List<LastFmTrack>): String {
+        val topArtist = tracks.firstOrNull()?.artist?.takeIf { it.isNotBlank() }
+        val topTrack = tracks.firstOrNull()?.name?.takeIf { it.isNotBlank() }
+
         return when (mode) {
             "top" -> {
                 when (state.timePeriod) {
-                    "overall" -> "My Era"
-                    "12month" -> "Yearly Vibe"
-                    "6month" -> "6M Vibe Check"
-                    "3month" -> "3M Vibe Check"
-                    "1month" -> "Monthly Vibe"
-                    "7day" -> "Weekly Vibe"
-                    else -> "My Vibe"
+                    "overall" -> "My All-Time Era"
+                    "12month" -> "Yearly Frequency"
+                    "6month" -> "Mid-Year Mix"
+                    "3month" -> "Quarterly Echo"
+                    "1month" -> "Monthly Spectrum"
+                    "7day" -> "Weekly Pulse"
+                    else -> "Personal Era"
                 }
             }
-            "library" -> "My Vault"
-            "recent" -> "On Repeat"
+            "library" -> "Vault Selects"
+            "recent" -> "Current Rotation"
             "similar-tracks" -> {
-                val shortName = if (state.seedTrackName.length > 15) state.seedTrackName.take(15).trim() + "..." else state.seedTrackName.trim()
-                "$shortName Vibes"
+                val seed = state.seedTrackName.ifBlank { topTrack ?: "Track" }
+                val shortName = if (seed.length > 14) seed.take(14).trim() + "…" else seed.trim()
+                "$shortName Echo"
             }
             "similar-artists" -> {
-                val shortName = if (state.seedArtistInput.length > 15) state.seedArtistInput.take(15).trim() + "..." else state.seedArtistInput.trim()
-                "Like $shortName"
+                val seed = state.seedArtistInput.ifBlank { topArtist ?: "Artist" }
+                val shortName = if (seed.length > 14) seed.take(14).trim() + "…" else seed.trim()
+                "Radio $shortName"
             }
             "tag" -> {
-                val shortName = if (state.tagInput.length > 15) state.tagInput.take(15).trim() + "..." else state.tagInput.trim()
-                "${shortName.replaceFirstChar { it.uppercase() }} Vibe"
+                val seed = state.tagInput.ifBlank { "Genre" }
+                val shortName = if (seed.length > 14) seed.take(14).trim() + "…" else seed.trim()
+                "${shortName.replaceFirstChar { it.uppercase() }} Groove"
             }
-            "mix" -> "Algorhythm"
-            "recommendations" -> "For You"
-            else -> "Smart Vibe"
+            "mix" -> "Algorhythm Mix"
+            "recommendations" -> {
+                if (topArtist != null) "Daily Mix: $topArtist" else "For You"
+            }
+            else -> "Smart Mix"
         }
     }
 
