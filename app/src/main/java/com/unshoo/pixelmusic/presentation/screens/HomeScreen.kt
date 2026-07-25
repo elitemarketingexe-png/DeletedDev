@@ -162,10 +162,10 @@ fun HomeScreen(
     val exploreUiState by exploreViewModel.uiState.collectAsStateWithLifecycle()
     val discoverYoutubeSongs = remember(exploreUiState.homePageSections) {
         exploreUiState.homePageSections
-            .filter {
-                it.title.contains("mix", ignoreCase = true) ||
-                it.title.contains("discover", ignoreCase = true) ||
-                it.title.contains("for you", ignoreCase = true)
+            .filter { section ->
+                val title = section.title
+                title.contains("daily discover", ignoreCase = true) ||
+                (title.contains("discover", ignoreCase = true) && title.contains("daily", ignoreCase = true))
             }
             .flatMap { section ->
                 section.items.filterIsInstance<unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem>()
