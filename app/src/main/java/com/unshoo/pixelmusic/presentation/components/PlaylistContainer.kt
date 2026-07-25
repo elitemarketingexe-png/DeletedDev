@@ -2,7 +2,9 @@ package com.unshoo.pixelmusic.presentation.components
 
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -133,58 +135,70 @@ fun PlaylistContainer(
     playlistSelectionStateHolder: PlaylistSelectionStateHolder? = null
 ) {
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (playlistUiState.isLoading && filteredPlaylists.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) { CircularProgressIndicator() }
-        }
+    val playlistStateTarget = when {
+        playlistUiState.isLoading && filteredPlaylists.isEmpty() -> "loading"
+        filteredPlaylists.isEmpty() && !playlistUiState.isLoading -> "empty"
+        else -> "content"
+    }
 
-        if (filteredPlaylists.isEmpty() && !playlistUiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                Column(
-                    modifier = Modifier.padding(top = 28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+    Crossfade(
+        targetState = playlistStateTarget,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "PlaylistContainerStateTransition",
+        modifier = Modifier.fillMaxSize()
+    ) { state ->
+        when (state) {
+            "loading" -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) { CircularProgressIndicator() }
+            }
+            "empty" -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.TopCenter
                 ) {
-                    SineWaveLine(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(32.dp)
-                            .padding(horizontal = 8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
-                        alpha = 0.95f,
-                        strokeWidth = 3.dp,
-                        amplitude = 4.dp,
-                        waves = 7.6f,
-                        phase = 0f
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Icon(
-                        Icons.AutoMirrored.Rounded.PlaylistPlay,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        stringResource(R.string.presentation_batch_e_no_playlist_created),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        stringResource(R.string.presentation_batch_e_new_playlist_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column(
+                        modifier = Modifier.padding(top = 28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        SineWaveLine(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(32.dp)
+                                .padding(horizontal = 8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+                            alpha = 0.95f,
+                            strokeWidth = 3.dp,
+                            amplitude = 4.dp,
+                            waves = 7.6f,
+                            phase = 0f
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Icon(
+                            Icons.AutoMirrored.Rounded.PlaylistPlay,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            stringResource(R.string.presentation_batch_e_no_playlist_created),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            stringResource(R.string.presentation_batch_e_new_playlist_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
-        } else {
+            else -> {
             if (isAddingToPlaylist) {
                 PlaylistItems(
                     currentSong = currentSong,
@@ -240,6 +254,7 @@ fun PlaylistContainer(
             )
         }
     }
+}
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)

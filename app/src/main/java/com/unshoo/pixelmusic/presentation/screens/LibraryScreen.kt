@@ -4752,28 +4752,5 @@ private fun LazyPage(
     pagerState: PagerState,
     content: @Composable () -> Unit
 ) {
-    var hasBeenLoaded by remember { mutableStateOf(false) }
-
-    val shouldLoad = remember(pagerState.currentPage, pagerState.targetPage, page) {
-        pagerState.currentPage == page || pagerState.targetPage == page
-    }
-
-    LaunchedEffect(shouldLoad) {
-        if (shouldLoad && !hasBeenLoaded) {
-            // Calm loading transition: wait ~180ms so fast tab transitions/swiping animations finish cleanly
-            kotlinx.coroutines.delay(180L)
-            hasBeenLoaded = true
-        }
-    }
-
-    if (hasBeenLoaded) {
-        content()
-    } else {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            M3MicroAnimatedLoader(color = MaterialTheme.colorScheme.primary)
-        }
-    }
+    content()
 }

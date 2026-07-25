@@ -21,6 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -196,76 +199,85 @@ fun LibrarySongsTab(
         }
     }
 
-    // Handle different loading states
     val refreshState = songs.loadState.refresh
     val reachedEndOfPagination = songs.loadState.append.endOfPaginationReached
     val shouldShowInitialLoading = songs.itemCount == 0 && (
-        isLoading ||
-            refreshState is LoadState.Loading ||
-            (refreshState is LoadState.NotLoading && !reachedEndOfPagination)
+        isLoading || refreshState is LoadState.Loading
     )
 
-    when {
-        refreshState is LoadState.Error && songs.itemCount == 0 -> {
-            val error = (refreshState as LoadState.Error).error
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.library_error_loading_songs), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        error.localizedMessage ?: stringResource(R.string.error_unknown),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = { songs.retry() }) {
-                        Text(stringResource(R.string.library_retry), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    val pageTarget = when {
+        refreshState is LoadState.Error && songs.itemCount == 0 -> "error"
+        shouldShowInitialLoading -> "loading"
+        songs.itemCount == 0 && refreshState is LoadState.NotLoading -> "empty"
+        else -> "content"
+    }
+
+    Crossfade(
+        targetState = pageTarget,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "SongsTabContentTransition"
+    ) { state ->
+        when (state) {
+            "error" -> {
+                val error = (refreshState as? LoadState.Error)?.error
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.library_error_loading_songs), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            error?.localizedMessage ?: stringResource(R.string.error_unknown),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(onClick = { songs.retry() }) {
+                            Text(stringResource(R.string.library_retry), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
-        }
-        shouldShowInitialLoading -> {
-            // Initial loading - show skeleton placeholders
-            LazyColumn(
-                modifier = Modifier
-                    .padding(start = 12.dp, end = 24.dp, bottom = 6.dp)
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 26.dp,
-                            topEnd = 26.dp,
-                            bottomStart = PlayerSheetCollapsedCornerRadius,
-                            bottomEnd = PlayerSheetCollapsedCornerRadius
+            "loading" -> {
+                // Initial loading - show skeleton placeholders
+                LazyColumn(
+                    modifier = Modifier
+                        .padding(start = 12.dp, end = 24.dp, bottom = 6.dp)
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 26.dp,
+                                topEnd = 26.dp,
+                                bottomStart = PlayerSheetCollapsedCornerRadius,
+                                bottomEnd = PlayerSheetCollapsedCornerRadius
+                            )
                         )
-                    )
-                    .fillMaxSize(),
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap)
-            ) {
-                items(12, key = { "skeleton_song_$it" }) { // Show 12 skeleton items
-                    EnhancedSongListItem(
-                        song = Song.emptySong(),
-                        isPlaying = false,
-                        isLoading = true,
-                        isCurrentSong = false,
-                        onMoreOptionsClick = {},
-                        onClick = {}
-                    )
+                        .fillMaxSize(),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap)
+                ) {
+                    items(12, key = { "skeleton_song_$it" }) {
+                        EnhancedSongListItem(
+                            song = Song.emptySong(),
+                            isPlaying = false,
+                            isLoading = true,
+                            isCurrentSong = false,
+                            onMoreOptionsClick = {},
+                            onClick = {}
+                        )
+                    }
                 }
             }
-        }
-        songs.itemCount == 0 && refreshState is LoadState.NotLoading && reachedEndOfPagination -> {
-            LibraryExpressiveEmptyState(
-                tabId = LibraryTabId.SONGS,
-                storageFilter = storageFilter,
-                bottomBarHeight = bottomBarHeight
-            )
-        }
-        else -> {
+            "empty" -> {
+                LibraryExpressiveEmptyState(
+                    tabId = LibraryTabId.SONGS,
+                    storageFilter = storageFilter,
+                    bottomBarHeight = bottomBarHeight
+                )
+            }
+            else -> {
             // Songs loaded
             Box(modifier = Modifier.fillMaxSize()) {
                 PullToRefreshBox(
@@ -370,4 +382,5 @@ fun LibrarySongsTab(
             }
         }
     }
+}
 }

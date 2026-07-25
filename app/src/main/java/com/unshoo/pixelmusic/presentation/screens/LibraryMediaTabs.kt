@@ -6,6 +6,9 @@
 
 package com.unshoo.pixelmusic.presentation.screens
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -218,102 +221,112 @@ fun LibraryAlbumsTab(
     val refreshState = albums.loadState.refresh
     val reachedEndOfPagination = albums.loadState.append.endOfPaginationReached
     val shouldShowInitialLoading = albums.itemCount == 0 && (
-        isLoading ||
-            refreshState is LoadState.Loading ||
-            (refreshState is LoadState.NotLoading && !reachedEndOfPagination)
+        isLoading || refreshState is LoadState.Loading
     )
 
-    when {
-        refreshState is LoadState.Error && albums.itemCount == 0 -> {
-            val error = (refreshState as LoadState.Error).error
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.library_error_loading_albums), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        error.localizedMessage ?: stringResource(R.string.error_unknown),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = { albums.retry() }) {
-                        Text(stringResource(R.string.library_retry), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    val pageTarget = when {
+        refreshState is LoadState.Error && albums.itemCount == 0 -> "error"
+        shouldShowInitialLoading -> "loading"
+        albums.itemCount == 0 && refreshState is LoadState.NotLoading -> "empty"
+        else -> "content"
+    }
+
+    Crossfade(
+        targetState = pageTarget,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "AlbumsTabContentTransition"
+    ) { state ->
+        when (state) {
+            "error" -> {
+                val error = (refreshState as? LoadState.Error)?.error
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.library_error_loading_albums), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            error?.localizedMessage ?: stringResource(R.string.error_unknown),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(onClick = { albums.retry() }) {
+                            Text(stringResource(R.string.library_retry), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
-        }
 
-        shouldShowInitialLoading -> {
-            if (isListView) {
-                LazyColumn(
-                    modifier = Modifier
-                        .padding(start = 14.dp, end = 14.dp, bottom = 6.dp)
-                        .clip(
-                            RoundedCornerShape(
-                                topStart = 16.dp,
-                                topEnd = 16.dp,
-                                bottomStart = PlayerSheetCollapsedCornerRadius,
-                                bottomEnd = PlayerSheetCollapsedCornerRadius
+            "loading" -> {
+                if (isListView) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .padding(start = 14.dp, end = 14.dp, bottom = 6.dp)
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 16.dp,
+                                    topEnd = 16.dp,
+                                    bottomStart = PlayerSheetCollapsedCornerRadius,
+                                    bottomEnd = PlayerSheetCollapsedCornerRadius
+                                )
                             )
-                        )
-                        .fillMaxSize(),
-                    state = listState,
-                    contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap + 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(8, key = { "skeleton_album_list_$it" }) {
-                        AlbumListItem(
-                            album = Album.empty(),
-                            albumColorSchemePairFlow = MutableStateFlow<ColorSchemePair?>(null),
-                            onClick = {},
-                            isLoading = true
-                        )
+                            .fillMaxSize(),
+                        state = listState,
+                        contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap + 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(8, key = { "skeleton_album_list_$it" }) {
+                            AlbumListItem(
+                                album = Album.empty(),
+                                albumColorSchemePairFlow = MutableStateFlow<ColorSchemePair?>(null),
+                                onClick = {},
+                                isLoading = true
+                            )
+                        }
                     }
-                }
-            } else {
-                LazyVerticalGrid(
-                    modifier = Modifier
-                        .padding(start = 14.dp, end = 14.dp, bottom = 6.dp)
-                        .clip(
-                            RoundedCornerShape(
-                                topStart = 16.dp,
-                                topEnd = 16.dp,
-                                bottomStart = PlayerSheetCollapsedCornerRadius,
-                                bottomEnd = PlayerSheetCollapsedCornerRadius
+                } else {
+                    LazyVerticalGrid(
+                        modifier = Modifier
+                            .padding(start = 14.dp, end = 14.dp, bottom = 6.dp)
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 16.dp,
+                                    topEnd = 16.dp,
+                                    bottomStart = PlayerSheetCollapsedCornerRadius,
+                                    bottomEnd = PlayerSheetCollapsedCornerRadius
+                                )
                             )
-                        )
-                        .fillMaxSize(),
-                    state = gridState,
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap + 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    items(8, key = { "skeleton_album_grid_$it" }) {
-                        AlbumGridItemRedesigned(
-                            album = Album.empty(),
-                            albumColorSchemePairFlow = MutableStateFlow<ColorSchemePair?>(null),
-                            onClick = {},
-                            isLoading = true
-                        )
+                            .fillMaxSize(),
+                        state = gridState,
+                        columns = GridCells.Fixed(2),
+                        contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap + 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        items(8, key = { "skeleton_album_grid_$it" }) {
+                            AlbumGridItemRedesigned(
+                                album = Album.empty(),
+                                albumColorSchemePairFlow = MutableStateFlow<ColorSchemePair?>(null),
+                                onClick = {},
+                                isLoading = true
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        albums.itemCount == 0 && refreshState is LoadState.NotLoading -> {
-            LibraryExpressiveEmptyState(
-                tabId = LibraryTabId.ALBUMS,
-                storageFilter = storageFilter,
-                bottomBarHeight = bottomBarHeight
-            )
-        }
+            "empty" -> {
+                LibraryExpressiveEmptyState(
+                    tabId = LibraryTabId.ALBUMS,
+                    storageFilter = storageFilter,
+                    bottomBarHeight = bottomBarHeight
+                )
+            }
 
-        else -> {
+            else -> {
             Box(modifier = Modifier.fillMaxSize()) {
                 val albumsPullToRefreshState = rememberPullToRefreshState()
                 PullToRefreshBox(
@@ -476,6 +489,7 @@ fun LibraryAlbumsTab(
         }
     }
 }
+}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -528,72 +542,82 @@ fun LibraryArtistsTab(
     val refreshState = artists.loadState.refresh
     val reachedEndOfPagination = artists.loadState.append.endOfPaginationReached
     val shouldShowInitialLoading = artists.itemCount == 0 && (
-        isLoading ||
-            refreshState is LoadState.Loading ||
-            (refreshState is LoadState.NotLoading && !reachedEndOfPagination)
+        isLoading || refreshState is LoadState.Loading
     )
 
-    when {
-        refreshState is LoadState.Error && artists.itemCount == 0 -> {
-            val error = (refreshState as LoadState.Error).error
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.library_error_loading_artists), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        error.localizedMessage ?: stringResource(R.string.error_unknown),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = { artists.retry() }) {
-                        Text(stringResource(R.string.library_retry), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    val pageTarget = when {
+        refreshState is LoadState.Error && artists.itemCount == 0 -> "error"
+        shouldShowInitialLoading -> "loading"
+        artists.itemCount == 0 && refreshState is LoadState.NotLoading -> "empty"
+        else -> "content"
+    }
+
+    Crossfade(
+        targetState = pageTarget,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "ArtistsTabContentTransition"
+    ) { state ->
+        when (state) {
+            "error" -> {
+                val error = (refreshState as? LoadState.Error)?.error
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.library_error_loading_artists), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            error?.localizedMessage ?: stringResource(R.string.error_unknown),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(onClick = { artists.retry() }) {
+                            Text(stringResource(R.string.library_retry), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
-        }
 
-        shouldShowInitialLoading -> {
-            LazyColumn(
-                modifier = Modifier
-                    .padding(start = 12.dp, end = 12.dp, bottom = 6.dp)
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 26.dp,
-                            topEnd = 26.dp,
-                            bottomStart = PlayerSheetCollapsedCornerRadius,
-                            bottomEnd = PlayerSheetCollapsedCornerRadius
+            "loading" -> {
+                LazyColumn(
+                    modifier = Modifier
+                        .padding(start = 12.dp, end = 12.dp, bottom = 6.dp)
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 26.dp,
+                                topEnd = 26.dp,
+                                bottomStart = PlayerSheetCollapsedCornerRadius,
+                                bottomEnd = PlayerSheetCollapsedCornerRadius
+                            )
                         )
-                    )
-                    .fillMaxSize(),
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap)
-            ) {
-                item(key = "skeleton_top_spacer") { Spacer(Modifier.height(4.dp)) }
-                items(10, key = { "skeleton_artist_$it" }) {
-                    ArtistListItem(
-                        artist = Artist.empty(),
-                        onClick = {},
-                        isLoading = true
-                    )
+                        .fillMaxSize(),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = bottomBarHeight + MiniPlayerHeight + ListExtraBottomGap)
+                ) {
+                    item(key = "skeleton_top_spacer") { Spacer(Modifier.height(4.dp)) }
+                    items(10, key = { "skeleton_artist_$it" }) {
+                        ArtistListItem(
+                            artist = Artist.empty(),
+                            onClick = {},
+                            isLoading = true
+                        )
+                    }
                 }
             }
-        }
 
-        artists.itemCount == 0 && refreshState is LoadState.NotLoading -> {
-            LibraryExpressiveEmptyState(
-                tabId = LibraryTabId.ARTISTS,
-                storageFilter = storageFilter,
-                bottomBarHeight = bottomBarHeight
-            )
-        }
+            "empty" -> {
+                LibraryExpressiveEmptyState(
+                    tabId = LibraryTabId.ARTISTS,
+                    storageFilter = storageFilter,
+                    bottomBarHeight = bottomBarHeight
+                )
+            }
 
-        else -> {
+            else -> {
             Box(
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -666,6 +690,7 @@ fun LibraryArtistsTab(
             }
         }
     }
+}
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
