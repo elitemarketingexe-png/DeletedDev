@@ -975,16 +975,16 @@ private fun ShareableCard(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .shadow(
-                            elevation = 20.dp,
-                            shape = RoundedCornerShape(12.dp),
-                            ambientColor = primaryColor.copy(alpha = 0.4f),
-                            spotColor = primaryColor.copy(alpha = 0.65f)
+                            elevation = 24.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            ambientColor = Color.Black.copy(alpha = 0.5f),
+                            spotColor = primaryColor.copy(alpha = 0.5f)
                         ),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = lightScheme.primaryContainer.copy(alpha = 0.9f)
+                        containerColor = lightScheme.surfaceContainerHigh
                     ),
-                    border = BorderStroke(1.2.dp, Color.White.copy(alpha = 0.45f))
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
                 ) {
                     SongMiniCard(song = song, lightScheme = lightScheme)
                 }
@@ -1103,14 +1103,16 @@ private fun SongMiniCard(
 
     val density = LocalDensity.current
     val stroke = remember(density) {
-        Stroke(width = with(density) { 3.dp.toPx() }, cap = StrokeCap.Round)
+        Stroke(width = with(density) { 2.5.dp.toPx() }, cap = StrokeCap.Round)
     }
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(lightScheme.surfaceContainerHigh),
         horizontalAlignment = Alignment.Start
     ) {
-        // Album Art — flush to all edges, no horizontal padding, corner roundedness reduced to 12dp
+        // Flush Album Artwork with subtle bottom inner border
         SmartImage(
             model = song.albumArtUriString,
             contentDescription = null,
@@ -1118,32 +1120,23 @@ private fun SongMiniCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 12.dp,
-                        topEnd = 12.dp,
-                        bottomStart = 0.dp,
-                        bottomEnd = 0.dp
-                    )
-                )
         )
 
-        // Info Section
+        // Refined Info Section
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp)
-                .padding(top = 10.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // Song Title
             Text(
                 text = song.title,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                lineHeight = 18.sp,
-                color = lightScheme.onPrimaryContainer,
+                fontSize = 16.sp,
+                lineHeight = 20.sp,
+                color = lightScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1152,45 +1145,47 @@ private fun SongMiniCard(
                 text = song.displayArtist,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Medium,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                color = lightScheme.onPrimaryContainer.copy(alpha = 0.55f),
+                fontSize = 12.sp,
+                lineHeight = 15.sp,
+                color = lightScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Thin Wavy Progress Bar + Timestamps
+            Spacer(Modifier.height(4.dp))
+
+            // Expressive Wavy Progress Bar + Timestamps
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = formattedProgress,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 8.sp,
-                    color = lightScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    fontSize = 9.sp,
+                    color = lightScheme.onSurfaceVariant
                 )
                 LinearWavyProgressIndicator(
                     progress = { 0.4f },
                     modifier = Modifier
                         .weight(1f)
-                        .height(12.dp),
+                        .height(10.dp),
                     color = lightScheme.primary,
-                    trackColor = lightScheme.primary.copy(alpha = 0.22f),
+                    trackColor = lightScheme.primary.copy(alpha = 0.18f),
                     stroke = stroke,
                     trackStroke = stroke,
-                    wavelength = 12.dp,
-                    amplitude = { 0.5f },
+                    wavelength = 10.dp,
+                    amplitude = { 0.4f },
                     waveSpeed = 4.dp
                 )
                 Text(
                     text = formattedDuration,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 8.sp,
-                    color = lightScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    fontSize = 9.sp,
+                    color = lightScheme.onSurfaceVariant
                 )
             }
         }
