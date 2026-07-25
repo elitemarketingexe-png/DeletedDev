@@ -310,8 +310,7 @@ fun DailyDiscoverSection(
         sections.shuffled()
     }
 
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-    val snapFlingBehavior = androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior(lazyListState = listState)
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState { shuffledSections.size }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -325,21 +324,20 @@ fun DailyDiscoverSection(
             }
         )
 
-        LazyRow(
-            state = listState,
-            flingBehavior = snapFlingBehavior,
+        androidx.compose.foundation.pager.HorizontalPager(
+            state = pagerState,
+            pageSize = androidx.compose.foundation.pager.PageSize.Fixed(360.dp),
+            pageSpacing = 14.dp,
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            items(shuffledSections.size) { index ->
-                val section = shuffledSections[index]
-                ExpressiveDailyDiscoverCard(
-                    section = section,
-                    playerViewModel = playerViewModel,
-                    navController = navController,
-                    localSongs = localSongs
-                )
-            }
+            modifier = Modifier.fillMaxWidth()
+        ) { pageIndex ->
+            val section = shuffledSections[pageIndex]
+            ExpressiveDailyDiscoverCard(
+                section = section,
+                playerViewModel = playerViewModel,
+                navController = navController,
+                localSongs = localSongs
+            )
         }
     }
 }
