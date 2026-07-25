@@ -2142,7 +2142,24 @@ fun MixedForYouCard(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val songs = section.items.filterIsInstance<SongItem>().take(3)
+                    val rawSongs = section.items.filterIsInstance<SongItem>()
+                    val isOfflineShelf = remember(section.title) {
+                        val t = section.title.lowercase()
+                        t.contains("cached") || t.contains("downloaded")
+                    }
+                    val songs = remember(rawSongs, isOfflineShelf) {
+                        if (isOfflineShelf) {
+                            rawSongs.filter { songItem ->
+                                val nativeSong = songItem.toNativeSong()
+                                val isLocalOrContent = !nativeSong.path.isNullOrEmpty() && (nativeSong.path.startsWith("/") || nativeSong.path.contains(":") || nativeSong.path.startsWith("content://") || nativeSong.path.startsWith("file://"))
+                                val isContentUri = nativeSong.contentUriString.startsWith("content://") || nativeSong.contentUriString.startsWith("file://")
+                                val isTelegramOrNetworkStream = nativeSong.telegramFileId != null || nativeSong.contentUriString.startsWith("tg://") || nativeSong.path.startsWith("tg://") || nativeSong.contentUriString.startsWith("http")
+                                (isLocalOrContent || isContentUri) && !isTelegramOrNetworkStream
+                            }.take(3)
+                        } else {
+                            rawSongs.take(3)
+                        }
+                    }
                     val nativeSongs = remember(songs, localSongs) { songs.map { localSongs[it.id] ?: it.toNativeSong() } }
                     songs.forEachIndexed { index, songItem ->
                         val nativeSong = nativeSongs[index]
