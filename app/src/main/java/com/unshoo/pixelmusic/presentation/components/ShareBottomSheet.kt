@@ -340,29 +340,63 @@ fun ShareBottomSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.width(8.dp))
-                        FilterChip(
-                            selected = !useSolidLyricsCard,
-                            onClick = { useSolidLyricsCard = false },
-                            label = { Text("Glass Panel", fontFamily = GoogleSansRounded) },
+                        
+                        // Sleek Segmented Pill Container
+                        Surface(
                             shape = CircleShape,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = primaryColor,
-                                selectedLabelColor = onPrimaryColor
-                            )
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        FilterChip(
-                            selected = useSolidLyricsCard,
-                            onClick = { useSolidLyricsCard = true },
-                            label = { Text("Solid Color", fontFamily = GoogleSansRounded) },
-                            shape = CircleShape,
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = primaryColor,
-                                selectedLabelColor = onPrimaryColor
-                            )
-                        )
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val glassScale by animateFloatAsState(targetValue = if (!useSolidLyricsCard) 1.02f else 1f, label = "glassScale")
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (!useSolidLyricsCard) primaryColor else Color.Transparent,
+                                    modifier = Modifier
+                                        .graphicsLayer {
+                                            scaleX = glassScale
+                                            scaleY = glassScale
+                                        }
+                                        .clickable { useSolidLyricsCard = false }
+                                ) {
+                                    Text(
+                                        text = "Glass",
+                                        fontFamily = GoogleSansRounded,
+                                        fontWeight = if (!useSolidLyricsCard) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 13.sp,
+                                        color = if (!useSolidLyricsCard) onPrimaryColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                    )
+                                }
+
+                                val solidScale by animateFloatAsState(targetValue = if (useSolidLyricsCard) 1.02f else 1f, label = "solidScale")
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (useSolidLyricsCard) primaryColor else Color.Transparent,
+                                    modifier = Modifier
+                                        .graphicsLayer {
+                                            scaleX = solidScale
+                                            scaleY = solidScale
+                                        }
+                                        .clickable { useSolidLyricsCard = true }
+                                ) {
+                                    Text(
+                                        text = "Solid",
+                                        fontFamily = GoogleSansRounded,
+                                        fontWeight = if (useSolidLyricsCard) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 13.sp,
+                                        color = if (useSolidLyricsCard) onPrimaryColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(14.dp))
                 }
 
                 // ── 9:16 Card Preview (Capturable) ──────────────────────────
@@ -1307,69 +1341,100 @@ private fun LyricLineSelector(
     primaryColor: Color,
     haptic: androidx.compose.ui.hapticfeedback.HapticFeedback
 ) {
+    val containerShape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
     ) {
-        Text(
-            text = "Tap to select lyrics (Max 5 lines)",
-            fontFamily = GoogleSansRounded,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(vertical = 12.dp)
-        )
-
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(240.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                .padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Select Lyrics",
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Surface(
+                shape = CircleShape,
+                color = if (selectedLines.size >= 5) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Text(
+                    text = "${selectedLines.size}/5 lines",
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = if (selectedLines.size >= 5) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp),
+            shape = containerShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(12.dp),
+                contentPadding = PaddingValues(10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(lines) { line ->
                     val isSelected = selectedLines.contains(line)
-                    val bgSelectedColor = if (isSelected) primaryColor.copy(alpha = 0.15f) else Color.Transparent
+                    val bgSelectedColor = if (isSelected) primaryColor.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceContainerLow
                     val borderSelectedColor = if (isSelected) primaryColor else Color.Transparent
                     val textWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     val textColor = if (isSelected) primaryColor else MaterialTheme.colorScheme.onSurface
+                    val itemShape = remember { AbsoluteSmoothCornerShape(14.dp, 60) }
 
-                    Row(
+                    Surface(
+                        shape = itemShape,
+                        color = bgSelectedColor,
+                        border = BorderStroke(1.dp, borderSelectedColor),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(bgSelectedColor)
-                            .border(1.dp, borderSelectedColor, RoundedCornerShape(10.dp))
                             .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                                 onToggleLine(line)
                             }
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = line,
-                            fontFamily = GoogleSansRounded,
-                            fontWeight = textWeight,
-                            fontSize = 15.sp,
-                            color = textColor,
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Rounded.CheckCircle,
-                                contentDescription = "Selected",
-                                tint = primaryColor,
-                                modifier = Modifier.size(18.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = line,
+                                fontFamily = GoogleSansRounded,
+                                fontWeight = textWeight,
+                                fontSize = 14.sp,
+                                lineHeight = 18.sp,
+                                color = textColor,
+                                modifier = Modifier.weight(1f)
                             )
+                            Spacer(Modifier.width(8.dp))
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Rounded.CheckCircle,
+                                    contentDescription = "Selected",
+                                    tint = primaryColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }
