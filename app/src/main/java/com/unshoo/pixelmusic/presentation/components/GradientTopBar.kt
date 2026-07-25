@@ -106,19 +106,8 @@ fun HomeGradientTopBar(
     onMenuClick: () -> Unit = {},
     isScrolled: Boolean = false,
 ) {
-    val containerColor = if (isScrolled) {
-        MaterialTheme.colorScheme.surface
-    } else {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-    }
-    val animatedContainerColor by animateColorAsState(
-        targetValue = containerColor,
-        animationSpec = tween(durationMillis = 250),
-        label = "home_topbar_color"
-    )
-
     TopAppBar(
-        modifier = Modifier.background(animatedContainerColor),
+        modifier = Modifier.background(Color.Transparent),
         title = { /* nada, usamos solo acciones */ },
         navigationIcon = {
             Row(

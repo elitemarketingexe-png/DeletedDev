@@ -1374,21 +1374,10 @@ fun ExploreTopBar(
     onCreateClick: () -> Unit,
     isScrolled: Boolean = false,
 ) {
-    val containerColor = if (isScrolled) {
-        MaterialTheme.colorScheme.surface
-    } else {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-    }
-    val animatedContainerColor by animateColorAsState(
-        targetValue = containerColor,
-        animationSpec = tween(durationMillis = 250),
-        label = "explore_topbar_color"
-    )
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(animatedContainerColor)
+            .background(Color.Transparent)
             .statusBarsPadding()
             .padding(start = 24.dp, top = 12.dp, end = 20.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,

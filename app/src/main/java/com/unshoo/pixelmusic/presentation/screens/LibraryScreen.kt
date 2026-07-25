@@ -919,7 +919,7 @@ fun LibraryScreen(
         }
     }
 
-    val headerContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+    val headerContainerColor = Color.Transparent
 
     Scaffold(
         modifier = Modifier.background(brush = gradientBrush),
