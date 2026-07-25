@@ -575,49 +575,7 @@ class ExploreViewModel @Inject constructor(
                         ))
                     }
 
-                    if (dbArtists.isNotEmpty()) {
-                        val artistItems = dbArtists.map { entity ->
-                            ArtistItem(
-                                id = entity.channelId ?: entity.id.toString(),
-                                title = entity.name,
-                                thumbnail = entity.customImageUri ?: entity.imageUrl,
-                                channelId = entity.channelId,
-                                shuffleEndpoint = null,
-                                radioEndpoint = null
-                            )
-                        }
-                        localSections.add(HomePage.Section(
-                            title = "Top Library Artists",
-                            label = "Based on your local library",
-                            thumbnail = null,
-                            endpoint = null,
-                            items = artistItems
-                        ))
-                    }
 
-                    val libraryPlaylists = currentState.libraryPlaylists
-                    if (libraryPlaylists.isNotEmpty()) {
-                        val playlistItems = libraryPlaylists.take(10).map { playlist ->
-                            PlaylistItem(
-                                id = playlist.id,
-                                title = playlist.name,
-                                author = unshoo.ianshulyadav.pixelmusic.innertube.models.Artist("You", null),
-                                songCountText = "${playlist.songIds.size} songs",
-                                thumbnail = playlist.coverImageUri,
-                                playEndpoint = null,
-                                shuffleEndpoint = null,
-                                radioEndpoint = null,
-                                isEditable = true
-                            )
-                        }
-                        localSections.add(HomePage.Section(
-                            title = "Your Custom Playlists",
-                            label = "Created by you",
-                            thumbnail = null,
-                            endpoint = null,
-                            items = playlistItems
-                        ))
-                    }
 
                     _uiState.update { state ->
                         state.copy(
