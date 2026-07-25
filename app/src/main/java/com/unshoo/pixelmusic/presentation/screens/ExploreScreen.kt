@@ -779,7 +779,15 @@ fun ExploreScreen(
                                               section.title.contains("heavy rotation", ignoreCase = true) ||
                                               section.title.contains("liked", ignoreCase = true) ||
                                               section.title.contains("cached", ignoreCase = true) ||
-                                              section.title.contains("you might like", ignoreCase = true)
+                                              section.title.contains("you might like", ignoreCase = true) ||
+                                              section.title.contains("for you", ignoreCase = true) ||
+                                              section.title.contains("mix", ignoreCase = true) ||
+                                              section.title.contains("listen again", ignoreCase = true) ||
+                                              section.title.contains("favorites", ignoreCase = true) ||
+                                              section.title.contains("suggest", ignoreCase = true) ||
+                                              section.title.contains("recommend", ignoreCase = true) ||
+                                              section.title.contains("radio", ignoreCase = true) ||
+                                              section.title.contains("recently", ignoreCase = true)
 
                                 val isSimilar = !isShelf && 
                                                 (section.title.startsWith("Similar to", ignoreCase = true) || 
