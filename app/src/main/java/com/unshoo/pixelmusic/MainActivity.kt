@@ -210,13 +210,14 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
-        // Force high refresh rate (120Hz / highest available) on supported hardware
+        // Force high refresh rate (120Hz / highest available) on supported hardware for 120Hz launch & UI smoothness
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val modes = window.windowManager.defaultDisplay.supportedModes
             val maxMode = modes.maxByOrNull { it.refreshRate }
             if (maxMode != null) {
                 val params = window.attributes
                 params.preferredDisplayModeId = maxMode.modeId
+                params.preferredRefreshRate = maxMode.refreshRate
                 window.attributes = params
             }
         }
