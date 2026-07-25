@@ -993,20 +993,26 @@ private fun ShareableCard(
             } else {
                 // ── LYRICS PANEL ─────────────────────────────────────────────
                 val containerColor = if (useSolidLyricsCard) {
-                    lightScheme.primaryContainer.copy(alpha = 0.9f)
+                    lightScheme.surfaceContainerHigh
                 } else {
                     Color.White.copy(alpha = 0.18f)
                 }
                 val borderColor = if (useSolidLyricsCard) {
-                    Color.White.copy(alpha = 0.45f)
+                    Color.White.copy(alpha = 0.25f)
                 } else {
                     Color.White.copy(alpha = 0.18f)
                 }
-                val borderStrokeWidth = if (useSolidLyricsCard) 1.2.dp else 1.dp
+                val borderStrokeWidth = 1.dp
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.92f)
+                        .shadow(
+                            elevation = if (useSolidLyricsCard) 20.dp else 0.dp,
+                            shape = RoundedCornerShape(18.dp),
+                            ambientColor = Color.Black.copy(alpha = 0.4f),
+                            spotColor = primaryColor.copy(alpha = 0.4f)
+                        )
                         .clip(RoundedCornerShape(18.dp))
                         .background(containerColor)
                         .border(
@@ -1014,7 +1020,7 @@ private fun ShareableCard(
                             color = borderColor,
                             shape = RoundedCornerShape(18.dp)
                         )
-                        .padding(14.dp)
+                        .padding(16.dp)
                 ) {
                     LyricsGlassPanel(
                         song = song,
@@ -1207,9 +1213,9 @@ private fun LyricsGlassPanel(
     isSolid: Boolean = false,
     lightScheme: ColorScheme = LightColorScheme
 ) {
-    val textColor = if (isSolid) lightScheme.onPrimaryContainer else Color.White
-    val artistColor = if (isSolid) lightScheme.onPrimaryContainer.copy(alpha = 0.65f) else Color.White.copy(alpha = 0.65f)
-    val dividerColor = if (isSolid) lightScheme.onPrimaryContainer.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.15f)
+    val textColor = if (isSolid) lightScheme.onSurface else Color.White
+    val artistColor = if (isSolid) lightScheme.onSurfaceVariant else Color.White.copy(alpha = 0.65f)
+    val dividerColor = if (isSolid) lightScheme.outlineVariant.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.15f)
     val activeProgressColor = if (isSolid) lightScheme.onPrimaryContainer else Color.White
     val progressTrackColor = if (isSolid) lightScheme.onPrimaryContainer.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.22f)
 
