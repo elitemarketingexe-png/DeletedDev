@@ -1374,44 +1374,50 @@ fun ExploreTopBar(
     onCreateClick: () -> Unit,
     isScrolled: Boolean = false,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.Transparent)
-            .statusBarsPadding()
-            .padding(start = 24.dp, top = 12.dp, end = 20.dp, bottom = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
-        Text(
-            text = "Explore",
-            fontFamily = GoogleSansRounded,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.primary,
-            fontSize = 40.sp,
-            letterSpacing = 1.sp
-        )
-
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(start = 24.dp, top = 12.dp, end = 20.dp, bottom = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AnimatedSparklesIconButton(onClick = onCreateClick)
+            Text(
+                text = "Explore",
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 38.sp,
+                letterSpacing = 1.sp
+            )
 
-            FilledIconButton(
-                onClick = onSettingsClick,
-                modifier = Modifier.size(40.dp),
-                shape = CircleShape,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.rounded_settings_24),
-                    contentDescription = stringResource(R.string.settings_top_bar_title),
-                    modifier = Modifier.size(20.dp)
-                )
+                AnimatedSparklesIconButton(onClick = onCreateClick)
+
+                FilledIconButton(
+                    onClick = onSettingsClick,
+                    modifier = Modifier.size(40.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.rounded_settings_24),
+                        contentDescription = stringResource(R.string.settings_top_bar_title),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }

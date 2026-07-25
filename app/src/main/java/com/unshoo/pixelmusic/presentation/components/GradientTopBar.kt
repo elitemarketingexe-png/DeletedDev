@@ -106,62 +106,67 @@ fun HomeGradientTopBar(
     onMenuClick: () -> Unit = {},
     isScrolled: Boolean = false,
 ) {
-    TopAppBar(
-        modifier = Modifier.background(Color.Transparent),
-        title = { /* nada, usamos solo acciones */ },
-        navigationIcon = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(start = 16.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.pixelmusic_base_monochrome),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
-                )
-                Text(
-                    text = "PixelMusic",
-                    fontFamily = GoogleSansRounded,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleLarge
-                )
-            }
-        },
-        actions = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(end = 14.dp)
-            ) {
-                FilledIconButton(
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    onClick = onTelegramClick
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+    ) {
+        TopAppBar(
+            modifier = Modifier.background(Color.Transparent),
+            title = { /* nada, usamos solo acciones */ },
+            navigationIcon = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(start = 16.dp)
                 ) {
                     Icon(
-                         imageVector = Icons.Rounded.Cloud,
-                         contentDescription = stringResource(R.string.presentation_batch_g_topbar_cd_telegram)
+                        painter = painterResource(R.drawable.pixelmusic_base_monochrome),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Text(
+                        text = "PixelMusic",
+                        fontFamily = GoogleSansRounded,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge
                     )
                 }
-                FilledIconButton(
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    onClick = onNavigationIconClick
+            },
+            actions = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(end = 14.dp)
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.rounded_settings_24),
-                        contentDescription = stringResource(R.string.settings_top_bar_title)
-                    )
+                    FilledIconButton(
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        onClick = onTelegramClick
+                    ) {
+                        Icon(
+                             imageVector = Icons.Rounded.Cloud,
+                             contentDescription = stringResource(R.string.presentation_batch_g_topbar_cd_telegram)
+                        )
+                    }
+                    Spacer(modifier = Modifier.size(6.dp))
+                    FilledIconButton(
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        onClick = onNavigationIconClick
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.rounded_settings_24),
+                            contentDescription = stringResource(R.string.settings_top_bar_title)
+                        )
+                    }
                 }
-            }
-        },
-        colors = topAppBarColors(
-            containerColor = Color.Transparent
+            },
+            colors = topAppBarColors(
+                containerColor = Color.Transparent
+            )
         )
-    )
+    }
 }
