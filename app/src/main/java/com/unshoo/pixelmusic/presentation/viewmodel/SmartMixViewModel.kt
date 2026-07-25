@@ -485,72 +485,103 @@ class SmartMixViewModel @Inject constructor(
     }
 
     private suspend fun fetchMix(user: String, total: Int): List<LastFmTrack> {
-        val weighted = mutableListOf<Pair<LastFmTrack, Int>>() // track to weight
+        val weighted = java.util.Collections.synchronizedList(mutableListOf<Pair<LastFmTrack, Int>>())
 
-        // Bucket A (weight 3) - Recent plays similarity
-        try {
-            val res = LastFM.get("user.getrecenttracks", mapOf("user" to user, "limit" to "50")).getOrThrow()
-            val recent = parseLastFmTracks(json.parseToJsonElement(res))
-            val recentSeeds = recent.shuffled().take(6)
-            recentSeeds.forEach { weighted.add(it to 3) }
-
-            for (seed in recentSeeds.take(4)) {
-                try {
-                    val simRes = LastFM.get(
-                        "track.getsimilar",
-                        mapOf("track" to seed.name, "artist" to seed.artist, "limit" to (total / 6).coerceAtLeast(5).toString())
-                    ).getOrThrow()
-                    parseLastFmTracks(json.parseToJsonElement(simRes)).forEach { weighted.add(it to 3) }
-                } catch (e: Exception) {}
-            }
-        } catch (e: Exception) {}
-
-        // Bucket B (weight 2) - Top tracks period
-        try {
-            val period = listOf("1month", "3month", "6month", "12month").random()
-            val res = LastFM.get("user.gettoptracks", mapOf("user" to user, "limit" to "30", "period" to period)).getOrThrow()
-            parseLastFmTracks(json.parseToJsonElement(res)).forEach { weighted.add(it to 2) }
-        } catch (e: Exception) {}
-
-        // Bucket B2 (weight 2) - Similar artists of top artists
-        var topArtists = emptyList<String>()
-        try {
-            val period = listOf("overall", "12month", "6month").random()
-            val res = LastFM.get("user.gettopartists", mapOf("user" to user, "limit" to "30", "period" to period)).getOrThrow()
-            topArtists = parseLastFmTopArtists(json.parseToJsonElement(res))
-        } catch (e: Exception) {}
-
-        for (artist in topArtists.shuffled().take(3)) {
-            try {
-                val simRes = LastFM.get("artist.getsimilar", mapOf("artist" to artist, "limit" to "12")).getOrThrow()
-                val simPool = parseLastFmArtists(json.parseToJsonElement(simRes)).shuffled().take(3)
-                for (sa in simPool) {
+        coroutineScope {
+            // Bucket A (weight 4) - Heavy Rotation (User Top Tracks across multiple time periods)
+            launch {
+                val periods = listOf("7day", "1month", "3month", "6month", "12month", "overall").shuffled().take(3)
+                for (period in periods) {
                     try {
-                        val page = (1..4).random().toString()
-                        val topTracksRes = LastFM.get(
-                            "artist.gettoptracks",
-                            mapOf("artist" to sa, "limit" to (total / 12).coerceAtLeast(4).toString(), "page" to page)
-                        ).getOrThrow()
-                        parseLastFmTracks(json.parseToJsonElement(topTracksRes)).forEach { weighted.add(it to 2) }
+                        val page = (1..3).random().toString()
+                        val res = LastFM.get("user.gettoptracks", mapOf("user" to user, "limit" to "50", "period" to period, "page" to page)).getOrNull()
+                        if (res != null) {
+                            parseLastFmTracks(json.parseToJsonElement(res)).shuffled().forEach { weighted.add(it to 4) }
+                        }
                     } catch (e: Exception) {}
                 }
-            } catch (e: Exception) {}
-        }
-
-        // Bucket C (weight 1) - Genre tags discovery
-        try {
-            val tagsRes = LastFM.get("user.gettoptags", mapOf("user" to user, "limit" to "8")).getOrThrow()
-            val tags = parseLastFmTags(json.parseToJsonElement(tagsRes))
-            if (tags.isNotEmpty()) {
-                val tag = tags.take(5).random()
-                val page = (1..8).random().toString()
-                val tracksRes = LastFM.get(
-                    "tag.gettoptracks",
-                    mapOf("tag" to tag, "limit" to (total * 0.4).toInt().coerceAtLeast(5).toString(), "page" to page)
-                ).getOrThrow()
-                parseLastFmTracks(json.parseToJsonElement(tracksRes)).forEach { weighted.add(it to 1) }
             }
-        } catch (e: Exception) {}
+
+            // Bucket B (weight 3) - Recent plays & Track Similarity Deep Exploration
+            launch {
+                try {
+                    val res = LastFM.get("user.getrecenttracks", mapOf("user" to user, "limit" to "50")).getOrNull()
+                    if (res != null) {
+                        val recent = parseLastFmTracks(json.parseToJsonElement(res))
+                        val recentSeeds = recent.shuffled().take(8)
+                        recentSeeds.forEach { weighted.add(it to 3) }
+
+                        for (seed in recentSeeds.take(5)) {
+                            try {
+                                val simRes = LastFM.get(
+                                    "track.getsimilar",
+                                    mapOf("track" to seed.name, "artist" to seed.artist, "limit" to "30")
+                                ).getOrNull()
+                                if (simRes != null) {
+                                    parseLastFmTracks(json.parseToJsonElement(simRes)).shuffled().forEach { weighted.add(it to 3) }
+                                }
+                            } catch (e: Exception) {}
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+
+            // Bucket C (weight 2) - Heavy Rotation Artists & Similar Artist Deep Discovery
+            launch {
+                try {
+                    val period = listOf("overall", "12month", "6month", "3month").random()
+                    val res = LastFM.get("user.gettopartists", mapOf("user" to user, "limit" to "40", "period" to period)).getOrNull()
+                    if (res != null) {
+                        val topArtists = parseLastFmTopArtists(json.parseToJsonElement(res)).shuffled().take(5)
+                        for (artist in topArtists) {
+                            try {
+                                val simRes = LastFM.get("artist.getsimilar", mapOf("artist" to artist, "limit" to "15")).getOrNull()
+                                if (simRes != null) {
+                                    val simPool = parseLastFmArtists(json.parseToJsonElement(simRes)).shuffled().take(3)
+                                    for (sa in simPool) {
+                                        try {
+                                            val page = (1..6).random().toString()
+                                            val topTracksRes = LastFM.get(
+                                                "artist.gettoptracks",
+                                                mapOf("artist" to sa, "limit" to "12", "page" to page)
+                                            ).getOrNull()
+                                            if (topTracksRes != null) {
+                                                parseLastFmTracks(json.parseToJsonElement(topTracksRes)).shuffled().forEach { weighted.add(it to 2) }
+                                            }
+                                        } catch (e: Exception) {}
+                                    }
+                                }
+                            } catch (e: Exception) {}
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+
+            // Bucket D (weight 1) - Genre Tag Exploration
+            launch {
+                try {
+                    val tagsRes = LastFM.get("user.gettoptags", mapOf("user" to user, "limit" to "12")).getOrNull()
+                    if (tagsRes != null) {
+                        val tags = parseLastFmTags(json.parseToJsonElement(tagsRes))
+                        if (tags.isNotEmpty()) {
+                            val selectedTags = tags.shuffled().take(4)
+                            for (tag in selectedTags) {
+                                try {
+                                    val page = (1..10).random().toString()
+                                    val tracksRes = LastFM.get(
+                                        "tag.gettoptracks",
+                                        mapOf("tag" to tag, "limit" to "25", "page" to page)
+                                    ).getOrNull()
+                                    if (tracksRes != null) {
+                                        parseLastFmTracks(json.parseToJsonElement(tracksRes)).shuffled().forEach { weighted.add(it to 1) }
+                                    }
+                                } catch (e: Exception) {}
+                            }
+                        }
+                    }
+                } catch (e: Exception) {}
+            }
+        }
 
         // Deduplicate - keep highest weight
         val deduped = mutableMapOf<String, Pair<LastFmTrack, Int>>()
@@ -562,18 +593,18 @@ class SmartMixViewModel @Inject constructor(
             }
         }
 
-        // Merge, sort by weight tier, shuffle within tier
-        val merged = listOf(3, 2, 1).flatMap { w ->
+        // Merge tiers, applying non-deterministic shuffling within each weight tier for maximum variety
+        val merged = listOf(4, 3, 2, 1).flatMap { w ->
             deduped.values.filter { it.second == w }.map { it.first }.shuffled()
         }
 
-        // Artist diversity - max 3 tracks per artist
+        // Strict artist cap: max 2 tracks per artist for wide variety
         val artistCount = mutableMapOf<String, Int>()
         return merged.filter { track ->
             val ak = track.artist.lowercase()
             val count = artistCount[ak] ?: 0
             artistCount[ak] = count + 1
-            count < 3
+            count < 2
         }.take(total)
     }
 
