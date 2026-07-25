@@ -215,16 +215,16 @@ fun ExpressiveDailyDiscoverCard(
                 }
             }
 
-            // Horizontal Scrollable Song Cards List
+            // Horizontal Scrollable Song Cards List (Fits exactly 3 song cards)
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 18.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 itemsIndexed(songs) { index, songItem ->
                     val nativeSong = nativeSongs.getOrNull(index) ?: songItem.toNativeSong()
                     Surface(
                         modifier = Modifier
-                            .width(140.dp)
+                            .width(98.dp)
                             .clip(songCardShape)
                             .clickable {
                                 playerViewModel.showAndPlaySong(
@@ -238,13 +238,13 @@ fun ExpressiveDailyDiscoverCard(
                         tonalElevation = 1.dp
                     ) {
                         Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.padding(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(100.dp),
+                                    .height(86.dp),
                                 contentAlignment = Alignment.BottomEnd
                             ) {
                                 SmartImage(
@@ -252,7 +252,7 @@ fun ExpressiveDailyDiscoverCard(
                                     contentDescription = songItem.title,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .clip(AbsoluteSmoothCornerShape(14.dp, 60)),
+                                        .clip(AbsoluteSmoothCornerShape(12.dp, 60)),
                                     contentScale = ContentScale.Crop
                                 )
                                 Surface(
@@ -260,14 +260,14 @@ fun ExpressiveDailyDiscoverCard(
                                     color = colors.primary,
                                     contentColor = colors.onPrimary,
                                     modifier = Modifier
-                                        .padding(6.dp)
-                                        .size(26.dp)
+                                        .padding(4.dp)
+                                        .size(24.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.PlayArrow,
                                         contentDescription = "Play",
                                         modifier = Modifier
-                                            .padding(4.dp)
+                                            .padding(3.dp)
                                             .fillMaxSize()
                                     )
                                 }
@@ -275,7 +275,7 @@ fun ExpressiveDailyDiscoverCard(
                             Column {
                                 Text(
                                     text = songItem.title,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     color = colors.onSurface
@@ -285,7 +285,8 @@ fun ExpressiveDailyDiscoverCard(
                                     style = MaterialTheme.typography.labelSmall,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    color = colors.onSurfaceVariant
+                                    color = colors.onSurfaceVariant,
+                                    fontSize = 10.sp
                                 )
                             }
                         }
@@ -305,6 +306,13 @@ fun DailyDiscoverSection(
 ) {
     if (sections.isEmpty()) return
 
+    val shuffledSections = remember(sections) {
+        sections.shuffled()
+    }
+
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val snapFlingBehavior = androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior(lazyListState = listState)
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -318,11 +326,13 @@ fun DailyDiscoverSection(
         )
 
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+            state = listState,
+            flingBehavior = snapFlingBehavior,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(sections.size) { index ->
-                val section = sections[index]
+            items(shuffledSections.size) { index ->
+                val section = shuffledSections[index]
                 ExpressiveDailyDiscoverCard(
                     section = section,
                     playerViewModel = playerViewModel,

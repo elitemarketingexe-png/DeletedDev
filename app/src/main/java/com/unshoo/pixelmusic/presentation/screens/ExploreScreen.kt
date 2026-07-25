@@ -684,13 +684,6 @@ fun ExploreScreen(
                             }
                         }
 
-                        // Standalone Mixed For You Section (Rendered once)
-                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && cardShelfSections.isNotEmpty()) {
-                            item(key = "mixed_for_you_section") {
-                                MixedForYouSection(cardShelfSections, playerViewModel, navController, localSongs)
-                            }
-                        }
-
                         // Move New Releases here - shown under New Releases filter as full 2-column grid or main All/For You filters as carousel
                         if (filterSlice.selectedFilter == "New Releases" && contentSlice.newReleaseAlbums.isNotEmpty()) {
                             item(key = "new_releases_full_header") {
