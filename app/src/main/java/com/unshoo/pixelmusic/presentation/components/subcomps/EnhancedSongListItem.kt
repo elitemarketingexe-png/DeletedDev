@@ -201,26 +201,26 @@ fun EnhancedSongListItem(
     val colors = MaterialTheme.colorScheme
     val baseContainerColor = containerColorOverride ?: colors.surfaceContainerLow
     
-    val containerColor = remember(baseContainerColor, colors.primaryContainer, colors.secondaryContainer, highlightProgress, selectionVisualProgress) {
-        val playbackContainerColor = lerpColor(baseContainerColor, colors.primaryContainer, highlightProgress)
+    val containerColor = remember(baseContainerColor, colors.primary, colors.secondaryContainer, highlightProgress, selectionVisualProgress) {
+        val playbackContainerColor = lerpColor(baseContainerColor, colors.primary, highlightProgress)
         lerpColor(playbackContainerColor, colors.secondaryContainer, selectionVisualProgress)
     }
 
     val baseContentColor = colors.onSurface
     
-    val contentColor = remember(baseContentColor, colors.onPrimaryContainer, colors.onSecondaryContainer, highlightProgress, selectionVisualProgress) {
-        val playbackContentColor = lerpColor(baseContentColor, colors.onPrimaryContainer, highlightProgress)
+    val contentColor = remember(baseContentColor, colors.onPrimary, colors.onSecondaryContainer, highlightProgress, selectionVisualProgress) {
+        val playbackContentColor = lerpColor(baseContentColor, colors.onPrimary, highlightProgress)
         lerpColor(playbackContentColor, colors.onSecondaryContainer, selectionVisualProgress)
     }
 
     val selectionBorderColor = remember(colors.primary, selectionVisualProgress) {
         lerpColor(colors.primary.copy(alpha = 0f), colors.primary, selectionVisualProgress)
     }
-    val mvContainerColor = remember(colors.onSurface, colors.primaryContainer, highlightProgress) {
-        lerpColor(colors.onSurface, colors.primaryContainer, highlightProgress)
+    val mvContainerColor = remember(colors.surfaceContainerHigh, colors.primary, highlightProgress) {
+        lerpColor(colors.surfaceContainerHigh, colors.primary, highlightProgress)
     }
-    val mvContentColor = remember(colors.surfaceContainerHigh, colors.onPrimaryContainer, highlightProgress) {
-        lerpColor(colors.surfaceContainerHigh, colors.onPrimaryContainer, highlightProgress)
+    val mvContentColor = remember(colors.onSurface, colors.onPrimary, highlightProgress) {
+        lerpColor(colors.onSurface, colors.onPrimary, highlightProgress)
     }
     val selectionOverlayColor = remember(colors.primary, selectionVisualProgress) {
         lerpColor(
