@@ -106,14 +106,21 @@ import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.DeleteForever
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.shadow
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ModalBottomSheet
@@ -1107,17 +1114,17 @@ fun FullPlayerContent(
                                 )
                             }
                             
-                            // Material 3 Expressive Header: Cover + Metadata + Visual Badge
+                            // Material 3 Expressive Header: Cover + Metadata + Like/Dislike Actions
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                                    .padding(horizontal = 20.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .shadow(12.dp, AbsoluteSmoothCornerShape(22.dp, 60))
+                                        .shadow(10.dp, AbsoluteSmoothCornerShape(22.dp, 60))
                                         .background(LocalMaterialTheme.current.surfaceContainerHighest, AbsoluteSmoothCornerShape(22.dp, 60))
                                 ) {
                                     SmartImage(
@@ -1125,7 +1132,7 @@ fun FullPlayerContent(
                                         contentDescription = null,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier
-                                            .size(68.dp)
+                                            .size(64.dp)
                                             .clip(AbsoluteSmoothCornerShape(22.dp, 60))
                                     )
                                 }
@@ -1150,9 +1157,135 @@ fun FullPlayerContent(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    IconButton(
+                                        onClick = onFavoriteToggle,
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isFavoriteProvider()) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                            contentDescription = "Like",
+                                            tint = if (isFavoriteProvider()) LocalMaterialTheme.current.primary else LocalMaterialTheme.current.onSurfaceVariant,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
                             }
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // TOP 3 QUICK ACTION CARDS (Play next, Save to playlist, Share)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // 1. Play Next
+                                Surface(
+                                    onClick = {
+                                        showSongInfoBottomSheet = false
+                                        playerViewModel.addSongNextToQueue(song)
+                                        Toast.makeText(context, "Queued to play next", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(84.dp),
+                                    shape = AbsoluteSmoothCornerShape(22.dp, 50),
+                                    color = LocalMaterialTheme.current.surfaceContainerLow
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.QueueMusic,
+                                            contentDescription = null,
+                                            tint = LocalMaterialTheme.current.onSurface,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "Play next",
+                                            fontFamily = GoogleSansRounded,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 12.sp,
+                                            color = LocalMaterialTheme.current.onSurface
+                                        )
+                                    }
+                                }
+
+                                // 2. Save to Playlist
+                                Surface(
+                                    onClick = {
+                                        showSongInfoBottomSheet = false
+                                        showPlaylistBottomSheet = true
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(84.dp),
+                                    shape = AbsoluteSmoothCornerShape(22.dp, 50),
+                                    color = LocalMaterialTheme.current.surfaceContainerLow
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                            contentDescription = null,
+                                            tint = LocalMaterialTheme.current.onSurface,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "Save to playlist",
+                                            fontFamily = GoogleSansRounded,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 12.sp,
+                                            color = LocalMaterialTheme.current.onSurface
+                                        )
+                                    }
+                                }
+
+                                // 3. Share
+                                Surface(
+                                    onClick = {
+                                        showSongInfoBottomSheet = false
+                                        showShareSheet = true
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(84.dp),
+                                    shape = AbsoluteSmoothCornerShape(22.dp, 50),
+                                    color = LocalMaterialTheme.current.surfaceContainerLow
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxSize(),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Share,
+                                            contentDescription = null,
+                                            tint = LocalMaterialTheme.current.onSurface,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "Share",
+                                            fontFamily = GoogleSansRounded,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 12.sp,
+                                            color = LocalMaterialTheme.current.onSurface
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
 
                             // HERO M3 EXPRESSIVE CTA: Start Mix from this
                             Surface(
@@ -1165,7 +1298,7 @@ fun FullPlayerContent(
                                 contentColor = LocalMaterialTheme.current.onPrimaryContainer,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                                    .padding(horizontal = 16.dp, vertical = 3.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -1176,7 +1309,7 @@ fun FullPlayerContent(
                                         shape = CircleShape,
                                         color = LocalMaterialTheme.current.primary,
                                         contentColor = LocalMaterialTheme.current.onPrimary,
-                                        modifier = Modifier.size(42.dp)
+                                        modifier = Modifier.size(40.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                                             Icon(
@@ -1196,11 +1329,12 @@ fun FullPlayerContent(
                                 }
                             }
 
-                            // Option 1: Add to Playlist
+                            // Go to Album (Fetches YouTube album if online/yt song)
                             Surface(
                                 onClick = {
                                     showSongInfoBottomSheet = false
-                                    showPlaylistBottomSheet = true
+                                    val resolvedAlbumIdStr = song.albumBrowseId ?: song.albumId.toString()
+                                    playerViewModel.triggerAlbumNavigationFromPlayer(resolvedAlbumIdStr)
                                 },
                                 shape = AbsoluteSmoothCornerShape(20.dp, 50),
                                 color = LocalMaterialTheme.current.surfaceContainerLow,
@@ -1222,14 +1356,14 @@ fun FullPlayerContent(
                                     ) {
                                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                                             Icon(
-                                                imageVector = Icons.AutoMirrored.Rounded.PlaylistAdd,
+                                                imageVector = Icons.Rounded.Album,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     }
                                     Text(
-                                        text = "Add to playlist",
+                                        text = "Go to album",
                                         fontFamily = GoogleSansRounded,
                                         fontWeight = FontWeight.SemiBold,
                                         style = MaterialTheme.typography.bodyLarge,
@@ -1238,7 +1372,50 @@ fun FullPlayerContent(
                                 }
                             }
 
-                            // Option 2: Download Song
+                            // Go to Artist
+                            Surface(
+                                onClick = {
+                                    showSongInfoBottomSheet = false
+                                    val resolvedArtistIdStr = song.artistId?.toString() ?: song.artist
+                                    playerViewModel.triggerArtistNavigationFromPlayer(resolvedArtistIdStr)
+                                },
+                                shape = AbsoluteSmoothCornerShape(20.dp, 50),
+                                color = LocalMaterialTheme.current.surfaceContainerLow,
+                                contentColor = LocalMaterialTheme.current.onSurface,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 3.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = LocalMaterialTheme.current.surfaceContainerHighest,
+                                        contentColor = LocalMaterialTheme.current.onSurfaceVariant,
+                                        modifier = Modifier.size(38.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Person,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = "Go to artist",
+                                        fontFamily = GoogleSansRounded,
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = LocalMaterialTheme.current.onSurface
+                                    )
+                                }
+                            }
+
+                            // Download Song
                             val downloadText = when {
                                 isDownloaded -> "Downloaded"
                                 isDownloading -> "Downloading..."
@@ -1292,11 +1469,10 @@ fun FullPlayerContent(
                                 }
                             }
 
-                            // Option 3: Share Card
+                            // Dismiss Queue / Close Menu
                             Surface(
                                 onClick = {
                                     showSongInfoBottomSheet = false
-                                    showShareSheet = true
                                 },
                                 shape = AbsoluteSmoothCornerShape(20.dp, 50),
                                 color = LocalMaterialTheme.current.surfaceContainerLow,
@@ -1313,19 +1489,19 @@ fun FullPlayerContent(
                                     Surface(
                                         shape = CircleShape,
                                         color = LocalMaterialTheme.current.surfaceContainerHighest,
-                                        contentColor = LocalMaterialTheme.current.onSurfaceVariant,
+                                        contentColor = LocalMaterialTheme.current.error,
                                         modifier = Modifier.size(38.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                                             Icon(
-                                                imageVector = Icons.Rounded.Share,
+                                                imageVector = Icons.Rounded.DeleteForever,
                                                 contentDescription = null,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     }
                                     Text(
-                                        text = "Share to Stories",
+                                        text = "Clear queue",
                                         fontFamily = GoogleSansRounded,
                                         fontWeight = FontWeight.SemiBold,
                                         style = MaterialTheme.typography.bodyLarge,
