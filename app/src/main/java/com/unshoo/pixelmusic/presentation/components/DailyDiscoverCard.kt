@@ -306,11 +306,21 @@ fun DailyDiscoverSection(
 ) {
     if (sections.isEmpty()) return
 
-    val shuffledSections = remember(sections) {
-        sections.shuffled()
+    // Order sections so offline local/downloaded cards appear first if available, followed by all online discovery cards
+    val sortedSections = remember(sections, localSongs) {
+        val (offline, online) = sections.partition { section ->
+            section.items.filterIsInstance<SongItem>().any { songItem ->
+                val nativeSong = songItem.toNativeSong()
+                val isLocalPath = !nativeSong.path.isNullOrEmpty() && (nativeSong.path.startsWith("/") || nativeSong.path.contains(":") || nativeSong.path.startsWith("content://") || nativeSong.path.startsWith("file://"))
+                val isContentUri = nativeSong.contentUriString.startsWith("content://") || nativeSong.contentUriString.startsWith("file://")
+                val isOnlineStream = nativeSong.telegramFileId != null || nativeSong.contentUriString.startsWith("tg://") || nativeSong.path.startsWith("tg://") || nativeSong.contentUriString.startsWith("http")
+                (isLocalPath || isContentUri) && !isOnlineStream
+            }
+        }
+        offline.shuffled() + online.shuffled()
     }
 
-    val pagerState = androidx.compose.foundation.pager.rememberPagerState { shuffledSections.size }
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState { sortedSections.size }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -331,7 +341,7 @@ fun DailyDiscoverSection(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             modifier = Modifier.fillMaxWidth()
         ) { pageIndex ->
-            val section = shuffledSections[pageIndex]
+            val section = sortedSections[pageIndex]
             ExpressiveDailyDiscoverCard(
                 section = section,
                 playerViewModel = playerViewModel,
