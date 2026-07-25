@@ -312,7 +312,9 @@ fun LibrarySongsTab(
                     Box(modifier = Modifier.fillMaxSize()) {
                         LazyColumn(
                             modifier = Modifier
-                                .padding(start = 12.dp, end = if (listState.canScrollForward || listState.canScrollBackward) 22.dp else 12.dp, bottom = 6.dp)
+                                // Use fixed 22dp end padding to leave room for the scrollbar —
+                                // songs always fill more than a screen when in the content state.
+                                .padding(start = 12.dp, end = 22.dp, bottom = 6.dp)
                                 .clip(
                                     RoundedCornerShape(
                                         topStart = 26.dp,

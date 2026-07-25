@@ -103,7 +103,7 @@ fun rememberDominantCardColor(
     val animatedColor by animateColorAsState(
         targetValue = targetColor,
         animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
-        label = "card_dominant_color_${imageUrl}"
+        label = "card_dominant_color"
     )
 
     return animatedColor

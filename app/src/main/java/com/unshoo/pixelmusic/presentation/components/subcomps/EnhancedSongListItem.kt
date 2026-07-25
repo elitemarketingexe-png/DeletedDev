@@ -163,8 +163,11 @@ fun EnhancedSongListItem(
         label = "playingScale"
     )
 
-    val pulseTransition = rememberInfiniteTransition(label = "pulseTransition")
-    val pulseAlpha by pulseTransition.animateFloat(
+    // Only run the infinite pulse animation when this specific item is highlighted+playing.
+    // Running rememberInfiniteTransition on every list row (50+) simultaneously is very expensive.
+    val shouldPulse = isHighlighted && isPlaying && !performanceModeEnabled
+    val pulseTransition = if (shouldPulse) rememberInfiniteTransition(label = "pulseTransition") else null
+    val pulseAlpha by (pulseTransition?.animateFloat(
         initialValue = 0.4f,
         targetValue = 0.95f,
         animationSpec = infiniteRepeatable(
@@ -172,14 +175,18 @@ fun EnhancedSongListItem(
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulseAlpha"
-    )
+    ) ?: androidx.compose.runtime.derivedStateOf { 0.7f })
 
     val animatedCornerRadius = lerpDp(22.dp, 50.dp, highlightProgress)
     val animatedAlbumCornerRadius = lerpDp(10.dp, 50.dp, highlightProgress)
     val selectionScale = lerpFloat(1f, 0.98f, selectionScaleProgress)
     val selectionBorderWidth = lerpDp(0.dp, 2.5.dp, selectionVisualProgress)
 
-    val surfaceShape = remember(animatedCornerRadius, customShape, isHighlighted) {
+    // Use integer-rounded dp values as remember keys so shapes are only recreated when the
+    // animation meaningfully changes corner size, not on every sub-dp float tick.
+    val surfaceCornerRounded = (animatedCornerRadius.value * 2).toInt() // 0.5dp granularity
+    val albumCornerRounded = (animatedAlbumCornerRadius.value * 2).toInt()
+    val surfaceShape = remember(surfaceCornerRounded, customShape, isHighlighted) {
         if (customShape != null && !isHighlighted) {
             customShape
         } else {
@@ -187,7 +194,7 @@ fun EnhancedSongListItem(
         }
     }
 
-    val albumShape = remember(animatedAlbumCornerRadius) {
+    val albumShape = remember(albumCornerRounded) {
         RoundedCornerShape(animatedAlbumCornerRadius)
     }
 
@@ -305,7 +312,7 @@ fun EnhancedSongListItem(
                             color = selectionBorderColor,
                             shape = surfaceShape
                         )
-                    } else if (isHighlighted && isPlaying) {
+                    } else if (shouldPulse) {
                         Modifier.border(
                             width = 2.dp,
                             color = colors.primary.copy(alpha = pulseAlpha),
@@ -354,7 +361,7 @@ fun EnhancedSongListItem(
                         modifier = Modifier
                             .size(albumArtSize)
                             .then(
-                                if (isHighlighted && isPlaying) {
+                                if (shouldPulse) {
                                     Modifier.border(
                                         width = 2.dp,
                                         color = colors.primary.copy(alpha = pulseAlpha),

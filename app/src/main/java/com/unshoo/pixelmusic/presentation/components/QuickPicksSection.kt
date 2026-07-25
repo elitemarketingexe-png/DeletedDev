@@ -72,6 +72,9 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import com.unshoo.pixelmusic.ui.theme.GoogleSansRounded
 import kotlin.math.absoluteValue
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
 
 private val QuickPicksPillHeight = 56.dp
 private val QuickPicksPillSpacing = 8.dp
@@ -146,12 +149,19 @@ fun QuickPicksSection(
             val lazyListState = rememberLazyListState()
             val limitSongs = remember(songs) { songs.take(20) }
             
-            LaunchedEffect(lazyListState.isScrollInProgress, limitSongs) {
-                if (!lazyListState.isScrollInProgress && limitSongs.isNotEmpty()) {
-                    while (true) {
-                        delay(2500)
-                        val currentVisible = lazyListState.firstVisibleItemIndex
-                        val nextIndex = (currentVisible + 1) % limitSongs.size
+            // Use snapshotFlow instead of LaunchedEffect(isScrollInProgress) so the
+            // coroutine doesn't restart on every user touch — it just waits inside.
+            LaunchedEffect(limitSongs) {
+                if (limitSongs.isEmpty()) return@LaunchedEffect
+                while (true) {
+                    // Wait until the user is not scrolling before auto-advancing
+                    snapshotFlow { lazyListState.isScrollInProgress }
+                        .filter { !it }
+                        .first()
+                    delay(2500)
+                    // Re-check after delay in case user started scrolling again
+                    if (!lazyListState.isScrollInProgress) {
+                        val nextIndex = (lazyListState.firstVisibleItemIndex + 1) % limitSongs.size
                         lazyListState.animateScrollToItem(nextIndex)
                     }
                 }
@@ -211,13 +221,16 @@ fun QuickPicksSection(
                 }
             }
 
-            // Auto-scroll logic for Classic lazy lists
-            LaunchedEffect(lazyListState.isScrollInProgress, limitSongs) {
-                if (!lazyListState.isScrollInProgress && limitSongs.isNotEmpty()) {
-                    while (true) {
-                        delay(2500)
-                        val currentVisible = lazyListState.firstVisibleItemIndex
-                        val nextIndex = (currentVisible + 1) % limitSongs.size
+            // Same snapshotFlow-based fix as CARD mode above
+            LaunchedEffect(limitSongs) {
+                if (limitSongs.isEmpty()) return@LaunchedEffect
+                while (true) {
+                    snapshotFlow { lazyListState.isScrollInProgress }
+                        .filter { !it }
+                        .first()
+                    delay(2500)
+                    if (!lazyListState.isScrollInProgress) {
+                        val nextIndex = (lazyListState.firstVisibleItemIndex + 1) % limitSongs.size
                         if (isReducedMotion) {
                             lazyListState.scrollToItem(nextIndex)
                         } else {
