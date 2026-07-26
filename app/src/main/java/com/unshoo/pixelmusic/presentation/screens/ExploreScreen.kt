@@ -777,7 +777,7 @@ fun ExploreScreen(
                                 val titleLower = section.title.lowercase()
                                 if (titleLower.contains("local")) return@forEachIndexed
 
-                                val isShelf = section.title.contains("recently played", ignoreCase = true) ||
+                                val isShelf = (section.title.contains("recently played", ignoreCase = true) ||
                                               section.title.contains("most played", ignoreCase = true) ||
                                               section.title.contains("heavy rotation", ignoreCase = true) ||
                                               section.title.contains("liked", ignoreCase = true) ||
@@ -790,7 +790,8 @@ fun ExploreScreen(
                                               section.title.contains("suggest", ignoreCase = true) ||
                                               section.title.contains("recommend", ignoreCase = true) ||
                                               section.title.contains("radio", ignoreCase = true) ||
-                                              section.title.contains("recently", ignoreCase = true)
+                                              section.title.contains("recently", ignoreCase = true)) &&
+                                              section.items.any { it is SongItem }
 
                                 val isSimilar = !isShelf && 
                                                 (section.title.startsWith("Similar to", ignoreCase = true) || 
@@ -2162,48 +2163,89 @@ fun MixedForYouCard(
                     )
                 }
 
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val songs = section.items.filterIsInstance<SongItem>().take(3)
-                    val nativeSongs = remember(songs, localSongs) { songs.map { localSongs[it.id] ?: it.toNativeSong() } }
-                    songs.forEachIndexed { index, songItem ->
-                        val nativeSong = nativeSongs[index]
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    playerViewModel.showAndPlaySong(
-                                        song = nativeSong,
-                                        contextSongs = nativeSongs,
-                                        queueName = section.title
+                val songs = section.items.filterIsInstance<SongItem>().take(3)
+                if (songs.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val nativeSongs = remember(songs, localSongs) { songs.map { localSongs[it.id] ?: it.toNativeSong() } }
+                        songs.forEachIndexed { index, songItem ->
+                            val nativeSong = nativeSongs[index]
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        playerViewModel.showAndPlaySong(
+                                            song = nativeSong,
+                                            contextSongs = nativeSongs,
+                                            queueName = section.title
+                                        )
+                                    }
+                                    .padding(vertical = 2.dp, horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${index + 1}",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = colors.onSurfaceVariant
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = songItem.title,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = colors.onSurface
+                                    )
+                                    Text(
+                                        text = songItem.artists.joinToString { it.name },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = colors.onSurfaceVariant
                                     )
                                 }
-                                .padding(vertical = 2.dp, horizontal = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "${index + 1}",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                color = colors.onSurfaceVariant
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = songItem.title,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = colors.onSurface
-                                )
-                                Text(
-                                    text = songItem.artists.joinToString { it.name },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    color = colors.onSurfaceVariant
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback for sections containing non-song items (e.g. Albums, Playlists)
+                    LazyRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(section.items.take(4)) { item ->
+                            val itemThumb = when (item) {
+                                is AlbumItem -> item.thumbnail
+                                is PlaylistItem -> item.thumbnail
+                                is ArtistItem -> item.thumbnail
+                                else -> null
+                            }
+                            val itemTitle = when (item) {
+                                is AlbumItem -> item.title
+                                is PlaylistItem -> item.title
+                                is ArtistItem -> item.title
+                                else -> ""
+                            }
+                            if (!itemThumb.isNullOrBlank()) {
+                                SmartImage(
+                                    model = itemThumb,
+                                    contentDescription = itemTitle,
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            when (item) {
+                                                is AlbumItem -> navController.navigateSafely(Screen.AlbumDetail.createRoute(item.browseId))
+                                                is PlaylistItem -> navController.navigateSafely(Screen.PlaylistDetail.createRoute(item.id))
+                                                is ArtistItem -> navController.navigateSafely(Screen.ArtistDetail.createRoute(item.id))
+                                                else -> {}
+                                            }
+                                        },
+                                    contentScale = ContentScale.Crop
                                 )
                             }
                         }
