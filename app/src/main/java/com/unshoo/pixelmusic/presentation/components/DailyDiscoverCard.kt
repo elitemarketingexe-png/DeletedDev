@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -97,9 +98,7 @@ fun ExpressiveDailyDiscoverCard(
     val songCardShape = remember { AbsoluteSmoothCornerShape(18.dp, 60) }
 
     Card(
-        modifier = modifier
-            .width(360.dp)
-            .wrapContentHeight(),
+        modifier = modifier.wrapContentHeight(),
         shape = outerShape,
         colors = CardDefaults.cardColors(
             containerColor = animatedBackground
@@ -320,6 +319,9 @@ fun DailyDiscoverSection(
         offline.shuffled() + online.shuffled()
     }
 
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val cardWidth = remember(screenWidth) { (screenWidth * 0.84f).coerceIn(280.dp, 340.dp) }
     val pagerState = androidx.compose.foundation.pager.rememberPagerState { sortedSections.size }
 
     Column(
@@ -336,8 +338,8 @@ fun DailyDiscoverSection(
 
         androidx.compose.foundation.pager.HorizontalPager(
             state = pagerState,
-            pageSize = androidx.compose.foundation.pager.PageSize.Fixed(360.dp),
-            pageSpacing = 14.dp,
+            pageSize = androidx.compose.foundation.pager.PageSize.Fixed(cardWidth),
+            pageSpacing = 12.dp,
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             modifier = Modifier.fillMaxWidth()
         ) { pageIndex ->
@@ -346,7 +348,8 @@ fun DailyDiscoverSection(
                 section = section,
                 playerViewModel = playerViewModel,
                 navController = navController,
-                localSongs = localSongs
+                localSongs = localSongs,
+                modifier = Modifier.width(cardWidth)
             )
         }
     }
