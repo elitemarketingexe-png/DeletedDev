@@ -302,11 +302,11 @@ class ListeningStatsTracker @Inject constructor(
                             watchtimeUrl = playerRes?.playbackTracking?.videostatsWatchtimeUrl?.baseUrl
                             if (!trackingUrl.isNullOrBlank()) {
                                 com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
-                                    .playbackTrackingCache[ytId] = trackingUrl!!
+                                    .playbackTrackingCache[ytId] = trackingUrl
                             }
                             if (!watchtimeUrl.isNullOrBlank()) {
                                 com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
-                                    .watchtimeTrackingCache[ytId] = watchtimeUrl!!
+                                    .watchtimeTrackingCache[ytId] = watchtimeUrl
                             }
                         }
                     }
@@ -333,7 +333,7 @@ class ListeningStatsTracker @Inject constructor(
                         runCatching {
                             unshoo.ianshulyadav.pixelmusic.innertube.YouTube.registerPlayback(
                                 playlistId = null,
-                                playbackTracking = trackingUrl!!,
+                                playbackTracking = trackingUrl,
                                 videoId = ytId
                             )
                         }.onSuccess {

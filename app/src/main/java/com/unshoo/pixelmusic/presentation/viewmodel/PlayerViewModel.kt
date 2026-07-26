@@ -182,21 +182,21 @@ private fun ImmutableList<Song>.asPersistentPlaybackQueue(): PersistentList<Song
 private fun ImmutableList<Song>.replaceSong(updatedSong: Song): ImmutableList<Song> {
     val index = indexOfFirst { it.id == updatedSong.id }
     if (index == -1) return this
-    return asPersistentPlaybackQueue().set(index, updatedSong)
+    return asPersistentPlaybackQueue().replacingAt(index, updatedSong)
 }
 
 private fun ImmutableList<Song>.removeSongById(songId: String): ImmutableList<Song> {
     val index = indexOfFirst { it.id == songId }
     if (index == -1) return this
-    return asPersistentPlaybackQueue().removeAt(index)
+    return asPersistentPlaybackQueue().removingAt(index)
 }
 
 private fun ImmutableList<Song>.moveSong(fromIndex: Int, toIndex: Int): ImmutableList<Song> {
     if (fromIndex == toIndex || fromIndex !in indices || toIndex !in indices) return this
     val movedSong = this[fromIndex]
     return asPersistentPlaybackQueue()
-        .removeAt(fromIndex)
-        .add(toIndex, movedSong)
+        .removingAt(fromIndex)
+        .addingAt(toIndex, movedSong)
 }
 
 private fun moveQueueIndex(index: Int, fromIndex: Int, toIndex: Int): Int {

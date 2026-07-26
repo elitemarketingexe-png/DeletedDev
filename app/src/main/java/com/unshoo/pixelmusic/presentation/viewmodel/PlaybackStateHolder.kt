@@ -418,7 +418,7 @@ class PlaybackStateHolder @Inject constructor(
             castStateHolder.castPlayer?.seek(targetPosition)
 
             remoteSeekUnlockJob?.cancel()
-            remoteSeekUnlockJob = scope?.launch {
+            remoteSeekUnlockJob = scope.launch {
                 // Fail-safe: never keep remote seeking lock indefinitely.
                 delay(1800)
                 castStateHolder.setRemotelySeeking(false)
