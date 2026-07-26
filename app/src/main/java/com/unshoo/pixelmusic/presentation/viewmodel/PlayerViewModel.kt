@@ -4498,7 +4498,8 @@ class PlayerViewModel @Inject constructor(
                             }
                         }
                     } ?: run {
-                        if (!isCastConnecting.value && !isRemotePlaybackActive.value) {
+                        val isPreparingCurrent = _playerUiState.value.preparingSongId != null
+                        if (!isCastConnecting.value && !isRemotePlaybackActive.value && !isPreparingCurrent) {
                             lyricsStateHolder.cancelLoading()
                             playbackStateHolder.updateStablePlayerState {
                                 it.copy(
