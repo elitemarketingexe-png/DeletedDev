@@ -1655,7 +1655,7 @@ interface MusicDao {
             )
         )
         GROUP BY artists.id
-        HAVING track_count >= :minSongCount
+        HAVING track_count >= :minSongCount OR (artists.channel_id IS NOT NULL AND artists.channel_id != '')
         ORDER BY
             CASE WHEN :sortOrder = 'artist_name_az' THEN artists.name END COLLATE NOCASE ASC,
             CASE WHEN :sortOrder = 'artist_name_za' THEN artists.name END COLLATE NOCASE DESC,

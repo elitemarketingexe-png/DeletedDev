@@ -277,7 +277,17 @@ class MusicRepositoryImpl @Inject constructor(
                 )
             }.flatMapLatest { it }
         }.map { pagingData ->
-            pagingData.map { entity -> entity.toArtist() }
+            pagingData.map { entity ->
+                val artist = entity.toArtist()
+                if (artist.effectiveImageUrl.isNullOrBlank() && artist.name.isNotBlank()) {
+                    repositoryScope.launch(Dispatchers.IO) {
+                        runCatching {
+                            artistImageRepository.getArtistImageUrl(artist.name, artist.id)
+                        }
+                    }
+                }
+                artist
+            }
         }.flowOn(Dispatchers.IO)
     }
 
