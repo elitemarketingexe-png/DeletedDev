@@ -995,9 +995,9 @@ private fun ShareableCard(
                         ),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = darkScheme.surfaceContainerLowest
+                        containerColor = darkScheme.primaryContainer
                     ),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
                 ) {
                     SongMiniCard(song = song, albumScheme = darkScheme)
                 }
@@ -1130,7 +1130,14 @@ private fun SongMiniCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(albumScheme.surfaceContainerLowest),
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        albumScheme.primaryContainer,
+                        albumScheme.surfaceContainerLowest
+                    )
+                )
+            ),
         horizontalAlignment = Alignment.Start
     ) {
         // Flush Album Artwork
@@ -1157,7 +1164,7 @@ private fun SongMiniCard(
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
                 lineHeight = 16.sp,
-                color = albumScheme.onSurface,
+                color = albumScheme.onPrimaryContainer,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1168,7 +1175,7 @@ private fun SongMiniCard(
                 fontWeight = FontWeight.Medium,
                 fontSize = 10.sp,
                 lineHeight = 13.sp,
-                color = albumScheme.onSurfaceVariant,
+                color = albumScheme.onPrimaryContainer.copy(alpha = 0.75f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1186,7 +1193,7 @@ private fun SongMiniCard(
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 8.sp,
-                    color = albumScheme.onSurfaceVariant
+                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.65f)
                 )
                 LinearWavyProgressIndicator(
                     progress = { progressRatio },
@@ -1194,7 +1201,7 @@ private fun SongMiniCard(
                         .weight(1f)
                         .height(8.dp),
                     color = albumScheme.primary,
-                    trackColor = albumScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                    trackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.2f),
                     stroke = stroke,
                     trackStroke = stroke,
                     wavelength = 8.dp,
@@ -1206,7 +1213,7 @@ private fun SongMiniCard(
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 8.sp,
-                    color = albumScheme.onSurfaceVariant
+                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.65f)
                 )
             }
         }
