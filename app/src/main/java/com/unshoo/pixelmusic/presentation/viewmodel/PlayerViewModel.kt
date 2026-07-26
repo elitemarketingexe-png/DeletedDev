@@ -3350,6 +3350,7 @@ class PlayerViewModel @Inject constructor(
         playlistId: String? = null
     ) {
         Log.i("ArchiveTuneBuilder", "playWithArchiveTuneQueueBuilder: starting for song '${song.title}' (${song.id})")
+        val requestToken = beginDirectPlaybackRequest()
         
         // 1. Play the seed song immediately so there is zero delay!
         viewModelScope.launch {
@@ -3375,6 +3376,8 @@ class PlayerViewModel @Inject constructor(
             val result = withContext(Dispatchers.IO) {
                 unshoo.ianshulyadav.pixelmusic.innertube.YouTube.next(endpoint)
             }
+            if (isDirectPlaybackRequestStale(requestToken)) return@launch
+
             result.onSuccess { nextResult ->
                 val relatedSongs = nextResult.items.map { it.toNativeSong() }
                 if (relatedSongs.isNotEmpty()) {
@@ -3384,26 +3387,21 @@ class PlayerViewModel @Inject constructor(
                     
                     saveYoutubeSongsToDb(fullQueue)
                     
-                    // Delay/wait until the player starts playing the first song to avoid race conditions
-                    var retries = 0
-                    while (stablePlayerState.value.currentSong?.id != song.id && retries < 50) {
-                        delay(100)
-                        retries++
-                    }
-                    
-                    if (stablePlayerState.value.currentSong?.id == song.id) {
-                        try {
-                            val newSongs = fullQueue.drop(1)
-                            val mediaItems = newSongs.map { MediaItemBuilder.build(it) }.toMutableList()
-                            // Resolve only the immediate next track (LOW) so auto-advance
-                            // never hits an unresolved youtube:// URI on weak networks.
-                            if (mediaItems.isNotEmpty()) {
-                                runCatching {
-                                    mediaItems[0] = dualPlayerEngine.preResolveForPlayback(mediaItems[0])
-                                }
+                    if (isDirectPlaybackRequestStale(requestToken)) return@launch
+
+                    try {
+                        val newSongs = fullQueue.drop(1)
+                        val mediaItems = newSongs.map { MediaItemBuilder.build(it) }.toMutableList()
+                        if (mediaItems.isNotEmpty()) {
+                            runCatching {
+                                mediaItems[0] = dualPlayerEngine.preResolveForPlayback(mediaItems[0])
                             }
-                            withContext(Dispatchers.Main) {
-                                val player = dualPlayerEngine.masterPlayer
+                        }
+                        withContext(Dispatchers.Main.immediate) {
+                            if (isDirectPlaybackRequestStale(requestToken)) return@withContext
+                            val player = dualPlayerEngine.masterPlayer
+                            val currentItem = player.currentMediaItem
+                            if (currentItem?.mediaId == song.id || player.mediaItemCount <= 1) {
                                 val totalCount = player.mediaItemCount
                                 if (totalCount > 1) {
                                     player.removeMediaItems(1, totalCount)
@@ -3416,22 +3414,19 @@ class PlayerViewModel @Inject constructor(
                                     )
                                 }
                             }
-                            // Warm the rest of the mix off the critical path.
-                            if (mediaItems.size > 1) {
-                                launch(Dispatchers.IO) {
-                                    mediaItems.drop(1).take(3).forEach { item ->
-                                        runCatching { dualPlayerEngine.preResolveForPlayback(item) }
-                                    }
+                        }
+                        if (mediaItems.size > 1) {
+                            launch(Dispatchers.IO) {
+                                mediaItems.drop(1).take(3).forEach { item ->
+                                    runCatching { dualPlayerEngine.preResolveForPlayback(item) }
                                 }
                             }
-                        } catch (e: Exception) {
-                            Timber.e(e, "ArchiveTune Queue Builder: Error dynamically updating ExoPlayer queue")
                         }
+                    } catch (e: Exception) {
+                        Timber.e(e, "ArchiveTune Queue Builder: Error dynamically updating ExoPlayer queue")
                     }
                     
                     val lastSong = fullQueue.last()
-                    // Only seed from a valid YouTube video ID; fall back to the original
-                    // videoId when the last song in the queue is a local-only track.
                     val lastVideoId = lastSong.youtubeId
                         ?: if (lastSong.id.startsWith("youtube_")) lastSong.id.substringAfter("youtube_") else videoId
                     if (!lastVideoId.isNullOrBlank()) {
@@ -3445,7 +3440,6 @@ class PlayerViewModel @Inject constructor(
                 _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
             }.onFailure { e ->
                 Timber.e(e, "ArchiveTune Queue Builder: Failed to fetch related queue")
-                sendToast("Failed to generate mix: ${e.localizedMessage ?: "Unknown error"}")
                 _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
             }
         }

@@ -54,7 +54,11 @@ fun FavoriteArtistReleasesSection(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            items(releases) { item ->
+            items(
+                items = releases,
+                key = { item -> item.id },
+                contentType = { item -> item::class.java.simpleName }
+            ) { item ->
                 when (item) {
                     is SongItem -> {
                         ArtistReleaseCard(

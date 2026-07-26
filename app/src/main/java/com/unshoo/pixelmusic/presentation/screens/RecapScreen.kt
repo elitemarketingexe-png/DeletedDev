@@ -430,7 +430,10 @@ private fun TopArtistsCard(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            itemsIndexed(state.topArtists.take(5)) { index, artist ->
+            itemsIndexed(
+                items = state.topArtists.take(5),
+                key = { _, artist -> artist.artist }
+            ) { index, artist ->
                 val size = if (index == 0) 90.dp else 64.dp
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(

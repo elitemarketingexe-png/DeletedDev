@@ -348,19 +348,25 @@ fun ExploreScreen(
                     } else {
                         contentSlice.homePageSections
                     }
-                    val homeSectionsFiltered = remember(homeSectionsRaw) {
-                        homeSectionsRaw.filter { section ->
+                    val (cardShelfSections, fromYourLibraryAlbums, remainingSections) = remember(homeSectionsRaw) {
+                        val filtered = homeSectionsRaw.filter { section ->
                             val title = section.title.lowercase()
                             !title.contains("cover") && 
                             !title.contains("remix") &&
                             !title.contains("new music videos") &&
                             !title.contains("new albums & singles")
                         }
-                    }
-                    val cardShelfSections = remember(homeSectionsFiltered) {
-                        homeSectionsFiltered.filter { section ->
-                            val isBento = isBentoSection(section.title, section.items.size)
+                        val cardShelf = mutableListOf<HomePage.Section>()
+                        var libraryAlbums = emptyList<AlbumItem>()
+                        val remaining = mutableListOf<HomePage.Section>()
+
+                        for (section in filtered) {
                             val title = section.title.lowercase()
+                            if (title.contains("from your library")) {
+                                libraryAlbums = section.items.filterIsInstance<AlbumItem>()
+                                continue
+                            }
+                            val isBento = isBentoSection(section.title, section.items.size)
                             val isLocalDuplicate = title.contains("local")
                             val isSug = !isBento && !isLocalDuplicate &&
                                         (title.contains("mix") || title.contains("listen again") || 
@@ -370,19 +376,14 @@ fun ExploreScreen(
                                         title.contains("liked") || title.contains("cached") ||
                                         title.contains("you might like") || title.contains("recently") ||
                                         title.contains("most"))
-                            val hasSongs = section.items.filterIsInstance<SongItem>().isNotEmpty()
-                            isSug && hasSongs
+                            val hasSongs = section.items.any { it is SongItem }
+                            if (isSug && hasSongs) {
+                                cardShelf.add(section)
+                            } else {
+                                remaining.add(section)
+                            }
                         }
-                    }
-                    val fromYourLibraryAlbums = remember(homeSectionsFiltered) {
-                        val section = homeSectionsFiltered.find { it.title.lowercase().contains("from your library") }
-                        section?.items?.filterIsInstance<AlbumItem>().orEmpty()
-                    }
-                    val remainingSections = remember(homeSectionsFiltered, cardShelfSections) {
-                        homeSectionsFiltered.filter { section ->
-                            !cardShelfSections.contains(section) &&
-                            !section.title.lowercase().contains("from your library")
-                        }
+                        Triple(cardShelf, libraryAlbums, remaining)
                     }
                     val bottomPadding = if (currentSongId != null) MiniPlayerHeight else 0.dp
                     LazyColumn(
@@ -395,7 +396,7 @@ fun ExploreScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // 2. Category Filter Chips (All, Smart Mix, For You, Charts, Recap)
-                        item(key = "explore_category_filters") {
+                        item(key = "explore_category_filters", contentType = "CategoryFilters") {
                             var showMoodRow by remember { mutableStateOf(false) }
                             Column(
                                 modifier = Modifier.fillMaxWidth(),

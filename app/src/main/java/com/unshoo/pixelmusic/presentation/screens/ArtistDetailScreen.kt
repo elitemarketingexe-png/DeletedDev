@@ -809,21 +809,23 @@ private fun ArtistPopularSongItem(
     onMoreOptionsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val containerShape = when {
-        rank == 1 && isLast -> AbsoluteSmoothCornerShape(20.dp, 60)
-        rank == 1 -> AbsoluteSmoothCornerShape(
-            cornerRadiusTR = 20.dp, smoothnessAsPercentTR = 60,
-            cornerRadiusTL = 20.dp, smoothnessAsPercentTL = 60,
-            cornerRadiusBR = 4.dp, smoothnessAsPercentBR = 0,
-            cornerRadiusBL = 4.dp, smoothnessAsPercentBL = 0
-        )
-        isLast -> AbsoluteSmoothCornerShape(
-            cornerRadiusTR = 4.dp, smoothnessAsPercentTR = 0,
-            cornerRadiusTL = 4.dp, smoothnessAsPercentTL = 0,
-            cornerRadiusBR = 20.dp, smoothnessAsPercentBR = 60,
-            cornerRadiusBL = 20.dp, smoothnessAsPercentBL = 60
-        )
-        else -> RoundedCornerShape(4.dp)
+    val containerShape = remember(rank, isLast) {
+        when {
+            rank == 1 && isLast -> AbsoluteSmoothCornerShape(20.dp, 60)
+            rank == 1 -> AbsoluteSmoothCornerShape(
+                cornerRadiusTR = 20.dp, smoothnessAsPercentTR = 60,
+                cornerRadiusTL = 20.dp, smoothnessAsPercentTL = 60,
+                cornerRadiusBR = 4.dp, smoothnessAsPercentBR = 0,
+                cornerRadiusBL = 4.dp, smoothnessAsPercentBL = 0
+            )
+            isLast -> AbsoluteSmoothCornerShape(
+                cornerRadiusTR = 4.dp, smoothnessAsPercentTR = 0,
+                cornerRadiusTL = 4.dp, smoothnessAsPercentTL = 0,
+                cornerRadiusBR = 20.dp, smoothnessAsPercentBR = 60,
+                cornerRadiusBL = 20.dp, smoothnessAsPercentBL = 60
+            )
+            else -> RoundedCornerShape(4.dp)
+        }
     }
     val topPad = if (rank == 1) 0.dp else 1.dp
     val bottomPad = if (isLast) 0.dp else 1.dp

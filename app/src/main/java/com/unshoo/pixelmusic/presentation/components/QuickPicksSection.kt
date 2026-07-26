@@ -240,6 +240,7 @@ fun QuickPicksSection(
                 }
             }
 
+            val cardShape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
             LazyRow(
                 state = lazyListState,
                 contentPadding = PaddingValues(start = 16.dp, end = 60.dp),
@@ -252,7 +253,6 @@ fun QuickPicksSection(
                             .width(cardSize)
                             .clickable { onSongClick(song) }
                     ) {
-                        val cardShape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
                         Card(
                             modifier = Modifier
                                 .size(cardSize)

@@ -21,6 +21,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -128,7 +129,7 @@ fun ShareBottomSheet(
         EntryPointAccessors.fromApplication(appContext, ShareBottomSheetEntryPoint::class.java)
     }
     val themeStateHolder = entryPoint.themeStateHolder()
-    val albumColorSchemeState by themeStateHolder.getAlbumColorSchemeFlow(song.albumArtUriString.orEmpty()).collectAsState()
+    val albumColorSchemeState by themeStateHolder.getAlbumColorSchemeFlow(song.albumArtUriString.orEmpty()).collectAsStateWithLifecycle(initialValue = null)
 
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
