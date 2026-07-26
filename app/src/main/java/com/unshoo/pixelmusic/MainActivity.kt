@@ -210,17 +210,6 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
-        // Force high refresh rate (120Hz / highest available) on supported hardware for 120Hz launch & UI smoothness
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val modes = window.windowManager.defaultDisplay.supportedModes
-            val maxMode = modes.maxByOrNull { it.refreshRate }
-            if (maxMode != null) {
-                val params = window.attributes
-                params.preferredDisplayModeId = maxMode.modeId
-                params.preferredRefreshRate = maxMode.refreshRate
-                window.attributes = params
-            }
-        }
         super.onCreate(savedInstanceState)
 
         // MD3 Optimization: Release Splash Screen immediately to render UI skeleton.
@@ -927,12 +916,13 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxSize(),
                 bottomBar = {
                     if (shouldRenderNavigationBar) {
+                        val playerUiState by playerViewModel.playerUiState.collectAsStateWithLifecycle()
                         val currentSongId by remember {
                             playerViewModel.stablePlayerState
                                 .map { it.currentSong?.id }
                                 .distinctUntilChanged()
                         }.collectAsStateWithLifecycle(initialValue = null)
-                        val showPlayerContentArea = currentSongId != null
+                        val showPlayerContentArea = currentSongId != null || playerUiState.preparingSongId != null
                         val navBarElevation = 3.dp
 
                         val animatedNavBarCornerRadius by animateDpAsState(
@@ -1043,9 +1033,9 @@ class MainActivity : ComponentActivity() {
                         val showPlayerContentInitially by remember {
                             kotlinx.coroutines.flow.combine(
                                 playerViewModel.stablePlayerState.map { it.currentSong?.id != null },
-                                playerViewModel.isSheetVisible
-                            ) { hasSong, isVisible ->
-                                hasSong || isVisible
+                                playerViewModel.playerUiState.map { it.preparingSongId != null }
+                            ) { hasSong, isPreparing ->
+                                hasSong || isPreparing
                             }.distinctUntilChanged()
                         }.collectAsStateWithLifecycle(initialValue = false)
                         val routesWithHiddenMiniPlayer = remember { setOf(Screen.NavBarCrRad.route) }
