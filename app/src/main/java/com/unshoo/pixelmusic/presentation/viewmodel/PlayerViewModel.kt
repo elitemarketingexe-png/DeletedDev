@@ -2711,6 +2711,20 @@ class PlayerViewModel @Inject constructor(
             }
             return
         }    // Local playback logic
+        // Immediate optimistic UI update so player bar/sheet reflects tapped song instantly
+        playbackStateHolder.setCurrentPosition(0L)
+        playbackStateHolder.updateStablePlayerState { state ->
+            state.copy(
+                currentSong = song,
+                isPlaying = true,
+                playWhenReady = true,
+                totalDuration = song.duration.coerceAtLeast(0L),
+                lyrics = null,
+                isLoadingLyrics = true
+            )
+        }
+        _isSheetVisible.value = true
+
         // Local playback logic
         if (playbackContext.size <= 1) {
             if (isVoluntaryPlay) incrementSongScore(song)
@@ -3505,9 +3519,9 @@ class PlayerViewModel @Inject constructor(
 
                 val resolvedItem = if (targetItem != null && needsResolve) {
                     withContext(Dispatchers.IO) {
-                        kotlinx.coroutines.withTimeoutOrNull(5_000L) {
+                        kotlinx.coroutines.withTimeoutOrNull(2_000L) {
                             dualPlayerEngine.preResolveForPlayback(targetItem)
-                        } ?: dualPlayerEngine.preResolveForPlayback(targetItem)
+                        } ?: targetItem
                     }
                 } else {
                     targetItem

@@ -10,6 +10,11 @@ import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -601,7 +606,12 @@ fun ShareBottomSheet(
                                 onClick = {
                                     captureAndShare { bitmap ->
                                         val file = saveBitmapToCache(bitmap)
-                                        shareToSnapchat(context, file)
+                                        val attachmentUrl = if (!song.youtubeId.isNullOrEmpty()) {
+                                            "https://music.youtube.com/watch?v=${song.youtubeId}"
+                                        } else {
+                                            GITHUB_LINK
+                                        }
+                                        shareToSnapchat(context, file, attachmentUrl)
                                     }
                                 }
                             )
@@ -984,11 +994,11 @@ private fun ShareableCard(
                         ),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = darkScheme.primaryContainer
+                        containerColor = lightScheme.surfaceContainerLowest
                     ),
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
                 ) {
-                    SongMiniCard(song = song, albumScheme = darkScheme)
+                    SongMiniCard(song = song, albumScheme = lightScheme)
                 }
                 } // end bloom Box
             } else {
@@ -1119,17 +1129,10 @@ private fun SongMiniCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        albumScheme.primaryContainer,
-                        albumScheme.surfaceContainerLowest
-                    )
-                )
-            ),
+            .background(albumScheme.surfaceContainerLowest),
         horizontalAlignment = Alignment.Start
     ) {
-        // Flush Album Artwork with subtle bottom inner border
+        // Flush Album Artwork
         SmartImage(
             model = song.albumArtUriString,
             contentDescription = null,
@@ -1143,17 +1146,17 @@ private fun SongMiniCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             // Song Title
             Text(
                 text = song.title,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                lineHeight = 20.sp,
-                color = albumScheme.onPrimaryContainer,
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
+                color = albumScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -1162,47 +1165,47 @@ private fun SongMiniCard(
                 text = song.displayArtist,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Medium,
-                fontSize = 12.sp,
-                lineHeight = 15.sp,
-                color = albumScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
+                color = albumScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
 
             // Expressive Wavy Progress Bar + Timestamps
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = formattedProgress,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 9.sp,
-                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.65f)
+                    fontSize = 8.sp,
+                    color = albumScheme.onSurfaceVariant
                 )
                 LinearWavyProgressIndicator(
                     progress = { progressRatio },
                     modifier = Modifier
                         .weight(1f)
-                        .height(10.dp),
+                        .height(8.dp),
                     color = albumScheme.primary,
-                    trackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.2f),
+                    trackColor = albumScheme.onSurfaceVariant.copy(alpha = 0.2f),
                     stroke = stroke,
                     trackStroke = stroke,
-                    wavelength = 10.dp,
-                    amplitude = { 0.4f },
+                    wavelength = 8.dp,
+                    amplitude = { 0.35f },
                     waveSpeed = 4.dp
                 )
                 Text(
                     text = formattedDuration,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 9.sp,
-                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.65f)
+                    fontSize = 8.sp,
+                    color = albumScheme.onSurfaceVariant
                 )
             }
         }
@@ -1228,28 +1231,78 @@ private fun LyricsGlassPanel(
     val progressTrackColor = if (isSolid) lightScheme.onPrimaryContainer.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.22f)
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Header: properly sized thumbnail + title + artist
+        // Header: Capsule container with rotating Vinyl CD disc + title & artist
+        val infiniteTransition = rememberInfiniteTransition(label = "vinylSpinTransition")
+        val vinylAngle by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 6000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "vinylSpinAngle"
+        )
+
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth()
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(CircleShape)
+                .background(
+                    if (isSolid) lightScheme.surfaceContainerHigh.copy(alpha = 0.6f)
+                    else Color.White.copy(alpha = 0.12f)
+                )
+                .border(
+                    width = 1.dp,
+                    color = if (isSolid) lightScheme.outlineVariant.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.18f),
+                    shape = CircleShape
+                )
+                .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            SmartImage(
-                model = song.albumArtUriString,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
+            // Rotating Vinyl CD Capsule Disc
+            Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .shadow(4.dp, RoundedCornerShape(8.dp), clip = true)
-                    .clip(RoundedCornerShape(8.dp))
-            )
+                    .size(38.dp)
+                    .graphicsLayer { rotationZ = vinylAngle }
+                    .shadow(4.dp, CircleShape, clip = true)
+                    .clip(CircleShape)
+                    .background(Color(0xFF111111)),
+                contentAlignment = Alignment.Center
+            ) {
+                // Vinyl outer ridges
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize(0.92f)
+                        .clip(CircleShape)
+                        .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                )
+                // Center Album Artwork Label
+                SmartImage(
+                    model = song.albumArtUriString,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize(0.55f)
+                        .clip(CircleShape)
+                )
+                // Center Spindle Hole
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black)
+                        .border(1.dp, Color.White.copy(alpha = 0.4f), CircleShape)
+                )
+            }
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = song.title,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp,
+                    fontSize = 12.sp,
+                    lineHeight = 15.sp,
                     color = textColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1258,8 +1311,8 @@ private fun LyricsGlassPanel(
                     text = song.displayArtist,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 10.sp,
-                    lineHeight = 13.sp,
+                    fontSize = 9.sp,
+                    lineHeight = 12.sp,
                     color = artistColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1580,13 +1633,13 @@ private fun isPackageInstalled(context: Context, packageName: String): Boolean {
     }
 }
 
-private fun shareToSnapchat(context: Context, imageFile: File) {
+private fun shareToSnapchat(context: Context, imageFile: File, attachmentUrl: String = GITHUB_LINK) {
     try {
         val snapCreative = SnapCreative.getApi(context)
         val mediaFactory = SnapCreative.getMediaFactory(context)
         val snapPhotoFile = mediaFactory.getSnapPhotoFromFile(imageFile)
         val snapPhotoContent = SnapPhotoContent(snapPhotoFile).apply {
-            attachmentUrl = GITHUB_LINK
+            this.attachmentUrl = attachmentUrl
         }
         snapCreative.send(snapPhotoContent)
     } catch (e: Exception) {
