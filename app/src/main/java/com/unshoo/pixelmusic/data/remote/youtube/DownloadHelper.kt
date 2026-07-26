@@ -19,6 +19,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.net.URL
+import kotlin.coroutines.cancellation.CancellationException
 
 object DownloadHelper {
     private val client = YoutubeHelper.client
@@ -109,41 +110,48 @@ object DownloadHelper {
         }
 
         val chunkSize = total / connections
-        val tempFiles = mutableListOf<File>()
+        // Pre-compute every chunk's temp file path up front (instead of only tracking
+        // successfully-awaited results). This guarantees we always know the full set of
+        // files that *could* have been written, so cleanup on cancel/failure is complete
+        // even when some chunks finished before a sibling chunk failed or the download
+        // was cancelled. Previously, only chunks captured by a completed `awaitAll()` were
+        // tracked, so any chunk that finished successfully right before a cancellation or a
+        // sibling failure was silently leaked to disk forever (never cleaned up, since
+        // enforceStorageLimit only runs after a *successful* download).
+        val tempFiles = (0 until connections).map { i -> File(audioDir, "${song.youtubeId}.part$i") }
+
+        fun cleanupTempFiles() {
+            tempFiles.forEach { it.delete() }
+        }
 
         try {
             (0 until connections).map { i ->
                 async {
                     val start = i * chunkSize
                     val end = if (i == connections - 1) total - 1 else (start + chunkSize - 1)
-                    val temp = File(audioDir, "${song.youtubeId}.part$i")
+                    val temp = tempFiles[i]
 
-                    try {
-                        val req = Request.Builder()
-                            .url(url)
-                            .header("Range", "bytes=$start-$end")
-                            .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
-                            .build()
+                    val req = Request.Builder()
+                        .url(url)
+                        .header("Range", "bytes=$start-$end")
+                        .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
+                        .build()
 
-                        client.newCall(req).execute().use { response ->
-                            if (!response.isSuccessful) {
-                                throw IOException("Failed to download chunk $i: ${response.code}")
-                            }
-
-                            response.body?.byteStream()?.use { input ->
-                                FileOutputStream(temp).use { output ->
-                                    input.copyTo(output)
-                                }
-                            } ?: throw IOException("Empty response body for chunk $i")
+                    client.newCall(req).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            throw IOException("Failed to download chunk $i: ${response.code}")
                         }
 
-                        temp
-                    } catch (e: Exception) {
-                        temp.delete()
-                        throw e
+                        response.body?.byteStream()?.use { input ->
+                            FileOutputStream(temp).use { output ->
+                                input.copyTo(output)
+                            }
+                        } ?: throw IOException("Empty response body for chunk $i")
                     }
+
+                    temp
                 }
-            }.awaitAll().also { tempFiles.addAll(it) }
+            }.awaitAll()
 
             if (customPath.isNotBlank()) {
                 val treeUri = Uri.parse(customPath)
@@ -171,9 +179,19 @@ object DownloadHelper {
             enforceStorageLimit(context, keepFile = outputFile)
             return@withContext outputFile.absolutePath
 
+        } catch (e: CancellationException) {
+            // Never swallow cancellation: doing so breaks structured concurrency and can make
+            // a user-initiated pause/cancel look like a normal function return to callers
+            // (e.g. WorkManager workers up the stack), which previously caused false
+            // "download failed" states. Clean up partial files, then rethrow so cancellation
+            // propagates correctly.
+            UmihiHelper.printd("Download cancelled for ${song.youtubeId}, cleaning up partial files")
+            cleanupTempFiles()
+            outputFile.delete()
+            throw e
         } catch (e: Exception) {
             UmihiHelper.printe("Download failed for ${song.youtubeId}: ${e.message}")
-            tempFiles.forEach { it.delete() }
+            cleanupTempFiles()
             outputFile.delete()
             return@withContext null
         }

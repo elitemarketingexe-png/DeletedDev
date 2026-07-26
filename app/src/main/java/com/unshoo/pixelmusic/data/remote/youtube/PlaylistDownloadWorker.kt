@@ -6,6 +6,7 @@ import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.unshoo.pixelmusic.data.database.youtube.AppDatabase
 import com.unshoo.pixelmusic.data.model.youtube.Song
 import com.unshoo.pixelmusic.data.model.youtube.PlaylistSongCrossRef
@@ -15,6 +16,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.cancellation.CancellationException
 
 import dagger.hilt.EntryPoint
@@ -53,7 +55,14 @@ class PlaylistDownloadWorker(
 
             try {
                 val totalSongs = playlist.songs.size
-                var downloadedSongs = 0
+                // Was a plain `var Int` incremented with `++downloadedSongs` from inside
+                // concurrent `async` blocks running under a shared semaphore. Dispatchers.IO
+                // is backed by a multi-thread pool, so concurrent non-atomic increments from
+                // different songs could race and lose updates, leaving the progress
+                // notification/UI stuck below the real count. AtomicInteger makes the
+                // increment safe across threads.
+                val processedSongs = AtomicInteger(0)
+                val succeededSongs = AtomicInteger(0)
 
                 UmihiNotificationManager.showPlaylistDownloadProgress(
                     appContext,
@@ -61,6 +70,7 @@ class PlaylistDownloadWorker(
                     0,
                     totalSongs
                 )
+                setProgress(workDataOf(PROGRESS_CURRENT to 0, PROGRESS_TOTAL to totalSongs))
 
                 val semaphore = Semaphore(Constants.Downloads.MAX_CONCURRENT_DOWNLOADS)
                 val playlistImage =
@@ -122,16 +132,31 @@ class PlaylistDownloadWorker(
                                             position = currentDownloadedSize + index
                                         )
                                     )
+                                    succeededSongs.incrementAndGet()
+                                } else {
+                                    // Previously this branch still counted the song as
+                                    // "downloaded" in the progress notification even though no
+                                    // audio file was written, making a playlist with failed
+                                    // songs falsely appear 100% complete.
+                                    UmihiNotificationManager.showSongDownloadFailed(appContext, song)
                                 }
+
+                                val processed = processedSongs.incrementAndGet()
                                 UmihiNotificationManager.showPlaylistDownloadProgress(
                                     appContext,
                                     playlist,
-                                    ++downloadedSongs,
+                                    processed,
                                     totalSongs
                                 )
+                                setProgress(workDataOf(PROGRESS_CURRENT to processed, PROGRESS_TOTAL to totalSongs))
 
                             } catch (e: CancellationException) {
+                                // Rethrow: swallowing cancellation here would make this child
+                                // coroutine look like it "completed" to awaitAll(), instead of
+                                // properly propagating the cancellation up so the whole
+                                // playlist download stops promptly and is reported correctly.
                                 UmihiHelper.printd("Song download canceled ${song.title}")
+                                throw e
                             } catch (e: Exception) {
                                 UmihiNotificationManager.showSongDownloadFailed(
                                     appContext,
@@ -141,14 +166,34 @@ class PlaylistDownloadWorker(
                                     message = "Error downloading song: ${song.title}",
                                     exception = e
                                 )
+                                val processed = processedSongs.incrementAndGet()
+                                UmihiNotificationManager.showPlaylistDownloadProgress(
+                                    appContext,
+                                    playlist,
+                                    processed,
+                                    totalSongs
+                                )
+                                setProgress(workDataOf(PROGRESS_CURRENT to processed, PROGRESS_TOTAL to totalSongs))
                             }
                         }
                     }
                 }.awaitAll()
 
-                UmihiNotificationManager.showPlaylistDownloadSuccess(appContext, playlist)
-                UmihiHelper.printd("Playlist download complete")
-                Result.success()
+                if (succeededSongs.get() == totalSongs) {
+                    UmihiNotificationManager.showPlaylistDownloadSuccess(appContext, playlist)
+                    UmihiHelper.printd("Playlist download complete")
+                    Result.success()
+                } else {
+                    // At least one song failed to download: don't claim full success, but the
+                    // songs that did succeed are already saved, so this isn't a total failure
+                    // either. Result.failure() (no automatic retry configured) with an accurate
+                    // notification best reflects a partially-completed playlist download.
+                    UmihiNotificationManager.showPlaylistDownloadFailure(appContext, playlist)
+                    UmihiHelper.printd(
+                        "Playlist download finished with failures: ${succeededSongs.get()}/$totalSongs"
+                    )
+                    Result.failure()
+                }
             } catch (e: CancellationException) {
                 UmihiNotificationManager.showPlaylistDownloadCanceled(appContext, playlist)
                 UmihiHelper.printd("Playlist download canceled ${playlist.info.title}")
@@ -291,5 +336,7 @@ class PlaylistDownloadWorker(
 
     companion object {
         const val PLAYLIST_KEY = "playlist"
+        const val PROGRESS_CURRENT = "progress_current"
+        const val PROGRESS_TOTAL = "progress_total"
     }
 }

@@ -63,6 +63,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -239,6 +240,14 @@ fun PlaylistDetailScreen(
             songsInPlaylist.isNotEmpty() && songsInPlaylist.all { it.path.isNotBlank() }
         }
     }
+    // remember() the Flow itself (keyed on playlistId), not just collectAsState, because
+    // observePlaylistDownloadStatus() builds a fresh WorkManager Flow on every call -- without
+    // remember() a recomposition would resubscribe to WorkManager's Flow repeatedly instead of
+    // observing one stable subscription.
+    val playlistDownloadStatus by remember(playlistId) {
+        playerViewModel.observePlaylistDownloadStatus(playlistId)
+    }.collectAsStateWithLifecycle(initialValue = PlayerViewModel.PlaylistDownloadStatus())
+    val isPlaylistDownloading = playlistDownloadStatus.isActive
 
     var transitionCompleted by remember { mutableStateOf(false) }
     LaunchedEffect(playlistId) {
@@ -745,24 +754,50 @@ fun PlaylistDetailScreen(
                                 )
                             }
 
-                            FilledTonalIconButton(
-                                onClick = {
-                                    if (isPlaylistFullyDownloaded) {
-                                        Toast.makeText(context, "Playlist already fully downloaded", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        playerViewModel.downloadPlaylistSongs(currentPlaylist.id, currentPlaylist.songIds)
-                                    }
-                                },
-                                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = if (isPlaylistFullyDownloaded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    contentColor = if (isPlaylistFullyDownloaded) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                                ),
-                                modifier = Modifier.size(actionButtonsHeight)
+                            Box(
+                                modifier = Modifier.size(actionButtonsHeight),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = if (isPlaylistFullyDownloaded) Icons.Rounded.Check else Icons.Rounded.Download,
-                                    contentDescription = downloadPlaylistLabel
-                                )
+                                if (isPlaylistDownloading) {
+                                    val total = playlistDownloadStatus.total
+                                    if (total > 0) {
+                                        val fraction = (playlistDownloadStatus.completed / total.toFloat())
+                                            .coerceIn(0f, 1f)
+                                        CircularProgressIndicator(
+                                            progress = { fraction },
+                                            modifier = Modifier.size(actionButtonsHeight),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(actionButtonsHeight),
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
+                                }
+                                FilledTonalIconButton(
+                                    onClick = {
+                                        when {
+                                            isPlaylistDownloading -> playerViewModel.cancelPlaylistDownload(currentPlaylist.id)
+                                            isPlaylistFullyDownloaded -> Toast.makeText(context, "Playlist already fully downloaded", Toast.LENGTH_SHORT).show()
+                                            else -> playerViewModel.downloadPlaylistSongs(currentPlaylist.id, currentPlaylist.songIds)
+                                        }
+                                    },
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        containerColor = if (isPlaylistFullyDownloaded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        contentColor = if (isPlaylistFullyDownloaded) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    modifier = Modifier.size(if (isPlaylistDownloading) actionButtonsHeight - 10.dp else actionButtonsHeight)
+                                ) {
+                                    Icon(
+                                        imageVector = when {
+                                            isPlaylistDownloading -> Icons.Rounded.Close
+                                            isPlaylistFullyDownloaded -> Icons.Rounded.Check
+                                            else -> Icons.Rounded.Download
+                                        },
+                                        contentDescription = if (isPlaylistDownloading) "Cancel download" else downloadPlaylistLabel
+                                    )
+                                }
                             }
                         }
                     }
@@ -1015,12 +1050,16 @@ fun PlaylistDetailScreen(
                 }
                 if (!isPlaylistFullyDownloaded) {
                     PlaylistActionItem(
-                        icon = rememberVectorPainter(Icons.Rounded.Download),
-                        label = downloadPlaylistLabel,
+                        icon = rememberVectorPainter(if (isPlaylistDownloading) Icons.Rounded.Close else Icons.Rounded.Download),
+                        label = if (isPlaylistDownloading) "Cancel Download" else downloadPlaylistLabel,
                         onClick = {
                             showPlaylistOptionsSheet = false
                             currentPlaylist?.let { playlist ->
-                                playerViewModel.downloadPlaylistSongs(playlist.id, playlist.songIds)
+                                if (isPlaylistDownloading) {
+                                    playerViewModel.cancelPlaylistDownload(playlist.id)
+                                } else {
+                                    playerViewModel.downloadPlaylistSongs(playlist.id, playlist.songIds)
+                                }
                             }
                         }
                     )

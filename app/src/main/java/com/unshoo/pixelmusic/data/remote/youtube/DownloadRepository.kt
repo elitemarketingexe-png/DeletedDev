@@ -66,7 +66,7 @@ class DownloadRepository(appContext: Context) {
     }
 
     suspend fun downloadSong(playlist: Playlist, song: Song) {
-        val id = "${playlist.info.id}${song.youtubeId}"
+        val id = "${Constants.Downloads.DOWNLOADED_PLAYLIST_ID}${song.youtubeId}"
         val existingWork = getExistingJobs(id)
         if (existingWork.isNotEmpty()) {
             UmihiHelper.printd("Download is already ongoing for song ${playlist.info.title}")

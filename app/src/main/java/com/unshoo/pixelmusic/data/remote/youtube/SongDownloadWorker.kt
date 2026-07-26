@@ -117,10 +117,17 @@ class SongDownloadWorker(
                             position = 0
                         )
                     )
+                    UmihiNotificationManager.showSongDownloadSuccess(appContext, song)
+                    Result.success()
+                } else {
+                    // audioPath == null means the audio file was never actually written
+                    // (network error, storage limit, or resolution failure). Previously this
+                    // still reported success, which caused WorkInfo.State.SUCCEEDED to be
+                    // observed by the UI (marking the song as "downloaded" even though no
+                    // file exists) and showed a misleading success notification.
+                    UmihiNotificationManager.showSongDownloadFailed(appContext, song)
+                    Result.failure()
                 }
-
-                UmihiNotificationManager.showSongDownloadSuccess(appContext, song)
-                Result.success()
             } catch (_: CancellationException) {
                 UmihiHelper.printd("Song download canceled ${song.title}")
                 Result.failure()

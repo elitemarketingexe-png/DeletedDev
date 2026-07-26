@@ -8,6 +8,7 @@ import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.WorkInfo
 import androidx.work.workDataOf
 import androidx.work.ExistingWorkPolicy
 import com.unshoo.pixelmusic.data.remote.youtube.SongDownloadWorker
@@ -5508,6 +5509,7 @@ class PlayerViewModel @Inject constructor(
 
     fun downloadPlaylistSongs(playlistId: String, songIds: List<String>) {
         viewModelScope.launch(Dispatchers.IO) {
+            val downloadTag = playlistDownloadTag(playlistId)
             val ytDb = com.unshoo.pixelmusic.data.database.youtube.AppDatabase.getInstance(context)
             val ytPlaylist = ytDb.playlistRepository().getPlaylistById(playlistId)
             if (ytPlaylist != null) {
@@ -5518,6 +5520,10 @@ class PlayerViewModel @Inject constructor(
                             "user_initiated" to true
                         )
                     )
+                    // Tagged so cancelPlaylistDownload() can stop this regardless of which of
+                    // the two enqueue paths below was taken (single worker vs per-song
+                    // fallback), without the caller needing to know which one ran.
+                    .addTag(downloadTag)
                     .setConstraints(
                         Constraints.Builder()
                             .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -5543,6 +5549,7 @@ class PlayerViewModel @Inject constructor(
                     if (videoId != null) {
                         val workRequest = OneTimeWorkRequestBuilder<SongDownloadWorker>()
                             .setInputData(workDataOf(SongDownloadWorker.SONG_KEY to videoId))
+                            .addTag(downloadTag)
                             .setConstraints(
                                 Constraints.Builder()
                                     .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -5560,6 +5567,68 @@ class PlayerViewModel @Inject constructor(
             }
         }
     }
+
+    private fun playlistDownloadTag(playlistId: String) = "playlist_dl_$playlistId"
+
+    /**
+     * Cancels an in-progress playlist download started via [downloadPlaylistSongs]. Previously
+     * there was no way to cancel a playlist download at all: the work was enqueued under unique
+     * names that nothing in the app ever called `cancelUniqueWork` on. Cancelling here stops
+     * whichever of the two enqueue strategies is actually running, since both are tagged with
+     * the same [playlistDownloadTag].
+     *
+     * Songs that already finished downloading are left on disk (`DownloadHelper.downloadAudio`
+     * skips files that already exist), so calling [downloadPlaylistSongs] again later resumes
+     * from where this left off instead of starting over. That combination -- cancel now, resume
+     * later by re-invoking the same download call -- is how pause/resume is implemented, since
+     * WorkManager itself has no native "pause" primitive for running work.
+     */
+    fun cancelPlaylistDownload(playlistId: String) {
+        WorkManager.getInstance(context).cancelAllWorkByTag(playlistDownloadTag(playlistId))
+    }
+
+    data class PlaylistDownloadStatus(
+        val isActive: Boolean = false,
+        val completed: Int = 0,
+        val total: Int = 0,
+    )
+
+    /**
+     * Live download state for a playlist, so the UI can show real progress and a working
+     * cancel/pause action instead of a single "Download" button with no feedback once tapped.
+     */
+    fun observePlaylistDownloadStatus(playlistId: String): Flow<PlaylistDownloadStatus> {
+        return WorkManager.getInstance(context)
+            .getWorkInfosByTagFlow(playlistDownloadTag(playlistId))
+            .map { infos -> toPlaylistDownloadStatus(infos) }
+    }
+
+    private fun toPlaylistDownloadStatus(infos: List<WorkInfo>): PlaylistDownloadStatus {
+        if (infos.isEmpty()) return PlaylistDownloadStatus()
+
+        val isActive = infos.any {
+            it.state == WorkInfo.State.RUNNING ||
+                it.state == WorkInfo.State.ENQUEUED ||
+                it.state == WorkInfo.State.BLOCKED
+        }
+
+        // Single-worker path: one PlaylistDownloadWorker reports aggregate progress via
+        // setProgress(). Detect it by the presence of the total-count key.
+        val singleWorkerInfo = infos.firstOrNull { info ->
+            info.progress.getInt(PlaylistDownloadWorker.PROGRESS_TOTAL, -1) >= 0
+        }
+        if (singleWorkerInfo != null) {
+            val total = singleWorkerInfo.progress.getInt(PlaylistDownloadWorker.PROGRESS_TOTAL, 0)
+            val current = singleWorkerInfo.progress.getInt(PlaylistDownloadWorker.PROGRESS_CURRENT, 0)
+            return PlaylistDownloadStatus(isActive = isActive, completed = current, total = total)
+        }
+
+        // Per-song fallback path: one SongDownloadWorker WorkInfo per song, no shared progress.
+        val total = infos.size
+        val completed = infos.count { it.state == WorkInfo.State.SUCCEEDED }
+        return PlaylistDownloadStatus(isActive = isActive, completed = completed, total = total)
+    }
+
     fun addSongToQueue(song: Song) {
         if (song.id.startsWith("youtube_") || song.youtubeId != null) {
             viewModelScope.launch(Dispatchers.IO) {

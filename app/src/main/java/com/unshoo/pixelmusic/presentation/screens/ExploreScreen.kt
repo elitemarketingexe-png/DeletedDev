@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -516,9 +517,10 @@ fun ExploreScreen(
                                 val songItems = chartSection.items.filterIsInstance<SongItem>()
                                 if (songItems.isNotEmpty()) {
                                     val songListNative = songItems.map { it.toNativeSong() }
-                                    items(songItems.size) { idx ->
-                                        val songItem = songItems[idx]
-                                        val songNative = songListNative[idx]
+                                    items(
+                                        items = songListNative,
+                                        key = { song -> "chart_${chartSection.title}_${index}_song_${song.id}" }
+                                    ) { songNative ->
                                         EnhancedSongListItem(
                                             modifier = Modifier.padding(horizontal = 16.dp),
                                             song = songNative,
@@ -928,7 +930,7 @@ fun YTItemCarousel(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        items(items) { item ->
+        items(items = items, key = { it.id }) { item ->
             when (item) {
                 is SongItem -> {
                     val songNative = item.toNativeSong()
@@ -1653,7 +1655,7 @@ fun SimilarArtistsCarousel(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        items(artists) { artist ->
+        items(items = artists, key = { it.id }) { artist ->
             SimilarArtistBentoCard(
                 artist = artist,
                 onClick = {
@@ -2067,7 +2069,10 @@ fun MixedForYouSection(
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(sections) { section ->
+            itemsIndexed(
+                items = sections,
+                key = { index, section -> "mixed_for_you_${section.title}_$index" }
+            ) { _, section ->
                 MixedForYouCard(
                     section = section,
                     playerViewModel = playerViewModel,
