@@ -86,6 +86,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
 import com.snapchat.kit.sdk.SnapCreative
 import com.snapchat.kit.sdk.creative.models.SnapPhotoContent
+import com.snapchat.kit.sdk.creative.models.SnapVideoContent
 
 private const val GITHUB_LINK = "https://github.com/ianshulyadav/PixelMusic"
 private const val SNAPCHAT_PACKAGE = "com.snapchat.android"
@@ -1644,6 +1645,20 @@ private fun shareToSnapchat(context: Context, imageFile: File, attachmentUrl: St
         snapCreative.send(snapPhotoContent)
     } catch (e: Exception) {
         Toast.makeText(context, "Snapchat sharing failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun shareVideoToSnapchat(context: Context, videoFile: File, attachmentUrl: String = GITHUB_LINK) {
+    try {
+        val snapCreative = SnapCreative.getApi(context)
+        val mediaFactory = SnapCreative.getMediaFactory(context)
+        val snapVideoFile = mediaFactory.getSnapVideoFromFile(videoFile)
+        val snapVideoContent = SnapVideoContent(snapVideoFile).apply {
+            this.attachmentUrl = attachmentUrl
+        }
+        snapCreative.send(snapVideoContent)
+    } catch (e: Exception) {
+        Toast.makeText(context, "Snapchat video sharing failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
     }
 }
 
