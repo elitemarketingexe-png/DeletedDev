@@ -995,11 +995,11 @@ private fun ShareableCard(
                         ),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = lightScheme.surfaceContainerLowest
+                        containerColor = darkScheme.surfaceContainerLowest
                     ),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f))
                 ) {
-                    SongMiniCard(song = song, albumScheme = lightScheme)
+                    SongMiniCard(song = song, albumScheme = darkScheme)
                 }
                 } // end bloom Box
             } else {
