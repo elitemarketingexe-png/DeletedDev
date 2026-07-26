@@ -423,7 +423,6 @@ class MainActivity : ComponentActivity() {
         when {
             // Handle shuffle all shortcut / tile
             intent.action == MainActivityIntentContract.ACTION_SHUFFLE_ALL -> {
-                android.util.Log.d("TileDebug", "handleIntent: ACTION_SHUFFLE_ALL received")
                 playerViewModel.triggerShuffleAllFromTile()
                 intent.action = null // Clear action to prevent re-triggering
             }

@@ -1652,15 +1652,25 @@ class MusicService : MediaLibraryService() {
                         }
                         Timber.tag(TAG).i("Recovered from player error by re-resolving stream")
                     } catch (recover: Exception) {
-                        Timber.tag(TAG).e(recover, "In-place stream recovery failed; skipping to next")
+                        Timber.tag(TAG).e(recover, "In-place stream recovery failed (attempt $streamRecoveryAttempts)")
                         withContext(Dispatchers.Main.immediate) {
                             try {
-                                streamRecoveryAttempts = 0
-                                lastStreamRecoveryMediaId = null
-                                if (player.hasNextMediaItem()) {
-                                    player.seekToNextMediaItem()
-                                    player.prepare()
-                                    player.play()
+                                if (streamRecoveryAttempts >= 2) {
+                                    // Only skip after multiple failed recovery attempts — not on the first one.
+                                    // A single IOException here (e.g. resolve timeout on a slow connection)
+                                    // must not immediately skip the track the user selected.
+                                    Timber.tag(TAG).w("Recovery exhausted after $streamRecoveryAttempts attempts; skipping to next")
+                                    streamRecoveryAttempts = 0
+                                    lastStreamRecoveryMediaId = null
+                                    if (player.hasNextMediaItem()) {
+                                        player.seekToNextMediaItem()
+                                        player.prepare()
+                                        player.play()
+                                    }
+                                } else {
+                                    // Increment and let onPlayerError re-fire on the next error event
+                                    streamRecoveryAttempts++
+                                    Timber.tag(TAG).w("Recovery attempt $streamRecoveryAttempts failed; will retry on next error")
                                 }
                             } catch (skipErr: Exception) {
                                 Timber.tag(TAG).e(skipErr, "Skip-after-error also failed")

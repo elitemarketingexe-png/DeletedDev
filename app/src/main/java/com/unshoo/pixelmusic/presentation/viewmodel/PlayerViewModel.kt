@@ -1699,7 +1699,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun shuffleAllSongs(queueName: String = "All Songs (Shuffled)") {
-        Log.d("ShuffleDebug", "shuffleAllSongs called.")
         
         // Load random songs from DB instead of materializing the entire library
         viewModelScope.launch {
@@ -1773,7 +1772,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun shuffleFavoriteSongs() {
-        Log.d("ShuffleDebug", "shuffleFavoriteSongs called.")
 
         // Load favorite songs from DB on-demand instead of holding them in memory
         viewModelScope.launch {
@@ -2764,7 +2762,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun showAndPlaySong(song: Song) {
-        Log.d("ShuffleDebug", "showAndPlaySong (single song overload) called for '${song.title}'")
         val castSession = castStateHolder.castSession.value
         val contextSongs = if (castSession != null && castSession.remoteMediaClient != null) {
             libraryStateHolder.allSongs.value.takeIf { songs ->
@@ -3630,7 +3627,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playAlbum(album: Album) {
-        Log.d("ShuffleDebug", "playAlbum called for album: ${album.title}")
         viewModelScope.launch {
             try {
                 val mappedBrowseId = SearchStateHolder.albumIdMap[album.id]
@@ -3677,7 +3673,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playArtist(artist: Artist) {
-        Log.d("ShuffleDebug", "playArtist called for artist: ${artist.name}")
         viewModelScope.launch {
             try {
                 val songsList: List<Song> = withContext(Dispatchers.IO) {
@@ -3790,23 +3785,16 @@ class PlayerViewModel @Inject constructor(
 
     fun triggerAlbumNavigationFromPlayer(albumIdStr: String) {
         if (albumIdStr.isBlank() || albumIdStr == "-1" || albumIdStr == "0") {
-            Log.d("AlbumDebug", "triggerAlbumNavigationFromPlayer ignored invalid albumId=$albumIdStr")
             return
         }
 
         val existingJob = albumNavigationJob
         if (existingJob != null && existingJob.isActive) {
-            Log.d("AlbumDebug", "triggerAlbumNavigationFromPlayer ignored; navigation already in progress for albumId=$albumIdStr")
             return
         }
 
         albumNavigationJob?.cancel()
         albumNavigationJob = viewModelScope.launch {
-            val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
-            Log.d(
-                "AlbumDebug",
-                "triggerAlbumNavigationFromPlayer: albumId=$albumIdStr, songId=${currentSong?.id}, title=${currentSong?.title}"
-            )
             collapsePlayerSheet()
 
             withTimeoutOrNull(900) {
@@ -3824,13 +3812,11 @@ class PlayerViewModel @Inject constructor(
 
     fun triggerArtistNavigationFromPlayer(artistIdStr: String) {
         if (artistIdStr.isBlank() || artistIdStr == "0" || artistIdStr == "-1") {
-            Log.d("ArtistDebug", "triggerArtistNavigationFromPlayer ignored invalid artistId=$artistIdStr")
             return
         }
 
         val existingJob = artistNavigationJob
         if (existingJob != null && existingJob.isActive) {
-            Log.d("ArtistDebug", "triggerArtistNavigationFromPlayer ignored; navigation already in progress for artistId=$artistIdStr")
             return
         }
 
@@ -3847,14 +3833,9 @@ class PlayerViewModel @Inject constructor(
             }
 
             if (resolvedId == "0" || resolvedId == "-1") {
-                Log.d("ArtistDebug", "triggerArtistNavigationFromPlayer: could not resolve artistId for name=${currentSong?.artist}")
                 return@launch
             }
 
-            Log.d(
-                "ArtistDebug",
-                "triggerArtistNavigationFromPlayer: artistId=$resolvedId, songId=${currentSong?.id}, title=${currentSong?.title}"
-            )
             collapsePlayerSheet()
 
             withTimeoutOrNull(900) {
@@ -5932,9 +5913,6 @@ class PlayerViewModel @Inject constructor(
             }.onFailure { error ->
                 _toastEvents.emit(
                     context.getString(R.string.player_share_zip_failed_format, error.localizedMessage ?: ""),
-                )
-                println(
-                    "Failed to share: ${error.localizedMessage}"
                 )
             }
         }

@@ -771,7 +771,7 @@ class DualPlayerEngine @Inject constructor(
                 enableAudioOutputPlaybackParams: Boolean
             ): AudioSink {
                 return DefaultAudioSink.Builder(context)
-                    .setEnableFloatOutput(true)
+                    .setEnableFloatOutput(hiFiModeEnabled)
                     .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
                     .setAudioProcessorChain(
                         DefaultAudioSink.DefaultAudioProcessorChain(
@@ -860,10 +860,10 @@ class DualPlayerEngine @Inject constructor(
                     }
 
                     // Prefer a short cooperative wait if a resolve is already in-flight
-                    // (started by preResolve/play path). Cap at 2.5s so we never freeze
-                    // the process like the old runBlocking path did.
+                    // (started by preResolve/play path). Cap at 800ms so we never freeze
+                    // the process — a real resolution takes <400ms when pre-warmed.
                     kickBackgroundResolve(uri)
-                    val deadline = android.os.SystemClock.elapsedRealtime() + 2_500L
+                    val deadline = android.os.SystemClock.elapsedRealtime() + 800L
                     while (android.os.SystemClock.elapsedRealtime() < deadline) {
                         val ready = resolvedUriCache.get(originalUri)
                             ?: activePlaybackResolvedUris[originalUri]

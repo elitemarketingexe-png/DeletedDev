@@ -3,6 +3,7 @@ package com.unshoo.pixelmusic.presentation.viewmodel
 import android.net.Uri
 import android.content.ComponentCallbacks2
 import android.os.Trace
+import android.util.Log
 import androidx.compose.ui.graphics.Color
 import com.unshoo.pixelmusic.data.preferences.AlbumArtColorAccuracy
 import com.unshoo.pixelmusic.data.preferences.AlbumArtPaletteStyle
@@ -244,8 +245,8 @@ class ThemeStateHolder @Inject constructor(
              return
          }
 
-         android.util.Log.d("ThemeStateHolder", "forceRegenerateColorScheme called for: $uriString")
-         android.util.Log.d("ThemeStateHolder", "Current tracked global URI: ${_currentAlbumArtUri.value}")
+         Log.d("ThemeStateHolder", "forceRegenerateColorScheme called for: $uriString")
+         Log.d("ThemeStateHolder", "Current tracked global URI: ${_currentAlbumArtUri.value}")
          
          colorSchemeProcessor.invalidateScheme(uriString)
 
@@ -281,10 +282,10 @@ class ThemeStateHolder @Inject constructor(
          // Also update the main current album art scheme if it matches the one we are tracking
          // We use equality check. If they are the same string object or equal content.
          if (_currentAlbumArtUri.value == uriString) {
-             android.util.Log.d("ThemeStateHolder", "Updating global color scheme flow directly.")
+             Log.d("ThemeStateHolder", "Updating global color scheme flow directly.")
              _currentAlbumArtColorSchemePair.value = newScheme
          } else {
-             android.util.Log.d("ThemeStateHolder", "Global URI did not match. Skipping global update.")
+             Log.d("ThemeStateHolder", "Global URI did not match. Skipping global update.")
          }
     }
 
