@@ -89,6 +89,8 @@ class ExploreViewModel @Inject constructor(
         }
     }
 
+    private var isDataLoaded = false
+
     private val gson by lazy {
         com.google.gson.GsonBuilder()
             .registerTypeAdapter(YTItem::class.java, YTItemTypeAdapter())
@@ -99,24 +101,29 @@ class ExploreViewModel @Inject constructor(
         java.io.File(context.cacheDir, "explore_cache.json")
     }
 
-    private fun restoreFromCache() {
+    private fun restoreFromCache(): Boolean {
         try {
             if (cacheFile.exists()) {
                 val json = cacheFile.readText()
                 val cache = gson.fromJson(json, ExploreCacheModel::class.java)
-                _uiState.update {
-                    it.copy(
-                        isLoading = true, // still loading fresh data
-                        homePageSections = cache.sections,
-                        homePageContinuation = cache.continuation,
-                        newReleaseAlbums = cache.albums,
-                        chartsPage = cache.charts
-                    )
+                if (cache != null && (cache.sections.isNotEmpty() || cache.albums.isNotEmpty() || cache.charts != null)) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            homePageSections = cache.sections,
+                            homePageContinuation = cache.continuation,
+                            newReleaseAlbums = cache.albums,
+                            chartsPage = cache.charts
+                        )
+                    }
+                    isDataLoaded = true
+                    return true
                 }
             }
         } catch (e: Exception) {
             Timber.e(e, "Failed to restore explore data from cache")
         }
+        return false
     }
 
     private fun persistToCache(state: ExploreUiState) {
@@ -147,14 +154,16 @@ class ExploreViewModel @Inject constructor(
         stage2Job?.cancel()
         stage3Job?.cancel()
 
-        if (forceRefresh) {
-            _uiState.update { it.copy(isRefreshing = true, error = null) }
-        } else {
-            // Only show loading spinner if we have no cached data at all
+        if (!forceRefresh) {
             val hasCachedData = _uiState.value.homePageSections.isNotEmpty() ||
                     _uiState.value.newReleaseAlbums.isNotEmpty() ||
                     _uiState.value.chartsPage != null
-            _uiState.update { it.copy(isLoading = !hasCachedData, error = null) }
+            if (isDataLoaded || hasCachedData) {
+                _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = null) }
+                return
+            }
+        } else {
+            _uiState.update { it.copy(isRefreshing = true, error = null) }
         }
         try {
             // 1. Get history and candidateArtistId immediately (fast database/prefs calls)
@@ -255,7 +264,8 @@ class ExploreViewModel @Inject constructor(
                 }
                 return
             }
-
+            isDataLoaded = true
+            persistToCache(_uiState.value)
 
             // --- STAGE 2: Fetch and display Library & Recommendations in background ---
             stage2Job = viewModelScope.launch(Dispatchers.IO) {

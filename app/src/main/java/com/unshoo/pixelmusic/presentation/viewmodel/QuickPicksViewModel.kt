@@ -80,7 +80,7 @@ class QuickPicksViewModel @Inject constructor(
     }
 
     fun refresh() {
-        loadQuickPicks(_selectedCategory.value)
+        loadQuickPicks(_selectedCategory.value, forceRefresh = true)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -171,8 +171,12 @@ class QuickPicksViewModel @Inject constructor(
     // Main load entry point
     // ─────────────────────────────────────────────────────────────────────────
 
-    private fun loadQuickPicks(category: String) {
+    private fun loadQuickPicks(category: String, forceRefresh: Boolean = false) {
         viewModelScope.launch {
+            if (category == "All" && !forceRefresh && _quickPicks.value.isNotEmpty()) {
+                _isLoading.value = false
+                return@launch
+            }
             if (_quickPicks.value.isEmpty()) {
                 _isLoading.value = true
             }
