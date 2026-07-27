@@ -17,22 +17,22 @@ package com.unshoo.pixelmusic.data.preferences
  * @property label Human-readable label for Settings UI
  */
 enum class StreamingAudioQuality(val maxBitrateKbps: Int, val label: String) {
-    LOW(64, "Low (64 kbps) — Saves data"),
-    MEDIUM(128, "Medium (128 kbps) — Balanced"),
-    HIGH(256, "High (256 kbps) — Best quality");
+    AUTO(-1, "Auto (recommended)"),
+    LOW(64, "Low (64 kbps)"),
+    MEDIUM(128, "Medium (128 kbps)"),
+    HIGH(256, "High (256 kbps)");
 
     companion object {
         /**
-         * Parse stored preference. Unset values default to [HIGH] for Wi‑Fi-oriented
-         * callers; use [fromNameOrLow] for mobile/low-connectivity paths.
+         * Parse stored preference. Unset values default to [AUTO].
          */
         fun fromName(name: String?): StreamingAudioQuality {
-            return entries.find { it.name == name } ?: HIGH
+            return entries.find { it.name == name } ?: AUTO
         }
 
         /** Safe default for weak/metered networks when preference is unset. */
         fun fromNameOrLow(name: String?): StreamingAudioQuality {
-            return entries.find { it.name == name } ?: LOW
+            return entries.find { it.name == name } ?: AUTO
         }
     }
 }

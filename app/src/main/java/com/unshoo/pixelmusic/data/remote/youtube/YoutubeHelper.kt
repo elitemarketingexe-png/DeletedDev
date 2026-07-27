@@ -589,6 +589,22 @@ object YoutubeHelper {
             }
 
             when (targetQuality) {
+                StreamingAudioQuality.AUTO -> {
+                    val isWifi = !isMetered
+                    val speed = connectivityStateHolder.linkDownstreamBandwidthKbps.value
+                    val recentlyUnstable = connectivityStateHolder.isNetworkRecentlyUnstable.value
+                    val isConnectionFastAndStable = speed >= 6_000 && !recentlyUnstable
+                    val targetCeiling = if (isMetered && !forceHigh) {
+                        StreamingAudioQuality.MEDIUM.maxBitrateKbps
+                    } else {
+                        0
+                    }
+                    StreamQualityPlan(
+                        quality = StreamingAudioQuality.AUTO,
+                        maxBitrateKbps = targetCeiling,
+                        preferLowFirst = !isConnectionFastAndStable
+                    )
+                }
                 StreamingAudioQuality.HIGH -> StreamQualityPlan(
                     quality = StreamingAudioQuality.HIGH,
                     maxBitrateKbps = 0, // no ceiling → highest available
@@ -665,10 +681,19 @@ object YoutubeHelper {
         val plan = resolveStreamQualityPlan(context)
         val maxBitrate = plan.maxBitrateKbps
         val preferLowFirst = plan.preferLowFirst
-        val targetCacheKey = when {
-            preferLowFirst -> "${videoId}_low"
-            maxBitrate > 0 -> "${videoId}_q$maxBitrate"
-            else -> "${videoId}_high"
+        val targetCacheKey = if (plan.quality == StreamingAudioQuality.AUTO) {
+            val preferredKey = if (maxBitrate > 0) "${videoId}_q$maxBitrate" else "${videoId}_high"
+            if (streamUrlLruCache.get(preferredKey)?.let { isYoutubeUrlValid(it) } == true) {
+                preferredKey
+            } else {
+                "${videoId}_low"
+            }
+        } else {
+            when {
+                preferLowFirst -> "${videoId}_low"
+                maxBitrate > 0 -> "${videoId}_q$maxBitrate"
+                else -> "${videoId}_high"
+            }
         }
 
         // ── Cache hit at the quality the user actually wants ───────────────────
@@ -703,7 +728,11 @@ object YoutubeHelper {
         // HIGH  → lowQuality=false, maxBitrate=0  → highest available instantly
         // MEDIUM→ lowQuality=false, maxBitrate=128 → best under ceiling
         // LOW   → lowQuality=true                  → lowest available
-        val useLowQuality = preferLowFirst
+        val useLowQuality = if (plan.quality == StreamingAudioQuality.AUTO) {
+            targetCacheKey == "${videoId}_low"
+        } else {
+            preferLowFirst
+        }
         val result = try {
             getSongUrlFromYoutube(
                 context = context,
@@ -760,9 +789,14 @@ object YoutubeHelper {
             bitrate?.let { streamBitrateLruCache.put("${videoId}_high", it) }
         }
 
+        // Trigger background warming for the actual desired target quality if we had to start on LOW first
+        if (plan.quality == StreamingAudioQuality.AUTO && targetCacheKey == "${videoId}_low") {
+            warmHigherQualityInBackground(context, song, maxBitrate)
+        }
+
         UmihiHelper.printd(
             "$videoId : INSTANT ${plan.quality} stream ready " +
-                "(ceiling=${maxBitrate}kbps lowFirst=$preferLowFirst bitrate=$bitrate)"
+                "(ceiling=${maxBitrate}kbps lowFirst=$preferLowFirst targetCacheKey=$targetCacheKey bitrate=$bitrate)"
         )
         return newUri
     }
