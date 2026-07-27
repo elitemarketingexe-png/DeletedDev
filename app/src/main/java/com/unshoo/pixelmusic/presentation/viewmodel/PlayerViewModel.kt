@@ -2538,17 +2538,19 @@ class PlayerViewModel @Inject constructor(
                 stopProgressUpdates()
             }
         } else {
-            playbackStateHolder.updateStablePlayerState {
-                it.copy(
-                    currentSong = null,
-                    isPlaying = false,
-                    playWhenReady = false,
-                    totalDuration = 0L
-                )
+            if (_playerUiState.value.preparingSongId == null) {
+                playbackStateHolder.updateStablePlayerState {
+                    it.copy(
+                        currentSong = null,
+                        isPlaying = false,
+                        playWhenReady = false,
+                        totalDuration = 0L
+                    )
+                }
+                playbackStateHolder.clearCurrentPositionHints()
+                playbackStateHolder.setCurrentPosition(0L)
+                stopProgressUpdates()
             }
-            playbackStateHolder.clearCurrentPositionHints()
-            playbackStateHolder.setCurrentPosition(0L)
-            stopProgressUpdates()
         }
         updateCurrentPlaybackQueueFromPlayer(playerCtrl)
     }
@@ -4327,16 +4329,18 @@ class PlayerViewModel @Inject constructor(
                     startProgressUpdates()
                 }
             } else {
-                playbackStateHolder.updateStablePlayerState {
-                    it.copy(
-                        currentSong = null,
-                        isPlaying = false,
-                        playWhenReady = false
-                    )
+                if (_playerUiState.value.preparingSongId == null) {
+                    playbackStateHolder.updateStablePlayerState {
+                        it.copy(
+                            currentSong = null,
+                            isPlaying = false,
+                            playWhenReady = false
+                        )
+                    }
+                    playbackStateHolder.clearCurrentPositionHints()
+                    playbackStateHolder.setCurrentPosition(0L)
+                    resetPlaybackAudioMetadata()
                 }
-                playbackStateHolder.clearCurrentPositionHints()
-                playbackStateHolder.setCurrentPosition(0L)
-                resetPlaybackAudioMetadata()
             }
         }
 
