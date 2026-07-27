@@ -65,9 +65,10 @@ class QuickPicksViewModel @Inject constructor(
         // Immediately populate from cache so the UI shows something on relaunch
         loadFromCache()
         viewModelScope.launch {
+            loadQuickPicks(_selectedCategory.value, forceRefresh = isCacheExpired())
             userPreferencesRepository.discoverFlow.collect { _ ->
                 if (_selectedCategory.value == "All") {
-                    loadQuickPicks("All")
+                    loadQuickPicks("All", forceRefresh = isCacheExpired())
                 }
             }
         }
@@ -80,6 +81,7 @@ class QuickPicksViewModel @Inject constructor(
     }
 
     fun refresh() {
+        clearCache()
         loadQuickPicks(_selectedCategory.value, forceRefresh = true)
     }
 
@@ -87,9 +89,23 @@ class QuickPicksViewModel @Inject constructor(
     // Cache helpers
     // ─────────────────────────────────────────────────────────────────────────
 
+    private fun isCacheExpired(): Boolean {
+        val timestamp = prefs.getLong(KEY_CACHE_TIMESTAMP, 0L)
+        if (timestamp == 0L) return true
+        return (System.currentTimeMillis() - timestamp) > CACHE_MAX_AGE_MS
+    }
+
+    private fun clearCache() {
+        prefs.edit().clear().apply()
+        _quickPicks.value = emptyList()
+    }
+
     private fun loadFromCache() {
         try {
-            prefs.getString(KEY_SONGS, null) ?: return
+            if (isCacheExpired()) {
+                clearCache()
+                return
+            }
             val songsJson = prefs.getString(KEY_SONGS, null) ?: return
             val categoriesJson = prefs.getString(KEY_CATEGORIES, null)
 
@@ -173,9 +189,14 @@ class QuickPicksViewModel @Inject constructor(
 
     private fun loadQuickPicks(category: String, forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            if (category == "All" && !forceRefresh && _quickPicks.value.isNotEmpty()) {
+            val cacheExpired = isCacheExpired()
+            val shouldRefresh = forceRefresh || cacheExpired
+            if (category == "All" && !shouldRefresh && _quickPicks.value.isNotEmpty()) {
                 _isLoading.value = false
                 return@launch
+            }
+            if (cacheExpired) {
+                clearCache()
             }
             if (_quickPicks.value.isEmpty()) {
                 _isLoading.value = true
