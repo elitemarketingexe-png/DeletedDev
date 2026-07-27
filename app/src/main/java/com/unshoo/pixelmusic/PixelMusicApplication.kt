@@ -242,10 +242,12 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         // that original intent isn't silently dropped for the devices it mattered most for.
         botGuardWarmUpJob = warmUpScope.launch {
             try {
+                // Defer WebView initialization until after initial UI frames finish rendering (2.5s delay)
+                kotlinx.coroutines.delay(2500L)
                 val isLowRam = (getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)
                     ?.isLowRamDevice == true
                 if (!isLowRam) {
-                    // Pre-warm the WebView bootstrap immediately on startup.
+                    // Pre-warm the WebView bootstrap after initial launch completes.
                     // If the first playback uses a different sessionId, it will
                     // cheaply re-mint the session token on the same warm engine.
                     BotGuardTokenGenerator.preWarm("default")

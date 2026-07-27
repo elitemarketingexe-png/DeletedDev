@@ -593,11 +593,11 @@ object YoutubeHelper {
                     val isWifi = !isMetered
                     val speed = connectivityStateHolder.linkDownstreamBandwidthKbps.value
                     val recentlyUnstable = connectivityStateHolder.isNetworkRecentlyUnstable.value
-                    val isConnectionFastAndStable = speed >= 6_000 && !recentlyUnstable
-                    val targetCeiling = if (isMetered && !forceHigh) {
+                    val isConnectionFastAndStable = isWifi || (speed >= 4_000 && !recentlyUnstable)
+                    val targetCeiling = if (isMetered && !forceHigh && !isConnectionFastAndStable) {
                         StreamingAudioQuality.MEDIUM.maxBitrateKbps
                     } else {
-                        0
+                        0 // No ceiling → highest available quality (256+ kbps)
                     }
                     StreamQualityPlan(
                         quality = StreamingAudioQuality.AUTO,
