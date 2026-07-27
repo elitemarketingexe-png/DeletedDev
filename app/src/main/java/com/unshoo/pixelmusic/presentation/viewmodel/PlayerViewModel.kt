@@ -2748,7 +2748,7 @@ class PlayerViewModel @Inject constructor(
 
             if (controller != null && reusableTargetIndex != null) {
                 cancelPendingDirectPlaybackBuild()
-                playLoadedControllerItem(controller, reusableTargetIndex, song)
+                directPlaybackApplyJob = playLoadedControllerItem(controller, reusableTargetIndex, song)
                 if (isVoluntaryPlay) {
                     incrementSongScore(song)
                     if (playlistId != null && queueName != "None") {
@@ -3477,10 +3477,11 @@ class PlayerViewModel @Inject constructor(
         return songIndexInQueue.takeIf { mediaIdAtTarget == songId }
     }
 
-    private fun playLoadedControllerItem(controller: MediaController, targetIndex: Int, targetSong: Song? = null) {
+    private fun playLoadedControllerItem(controller: MediaController, targetIndex: Int, targetSong: Song? = null): Job {
         // Optimistic UI first so the miniplayer/card respond instantly.
         runOnMainImmediate {
             targetSong?.let { song ->
+                setPreparingSong(song.id)
                 playbackStateHolder.setCurrentPosition(0L)
                 playbackStateHolder.updateStablePlayerState { state ->
                     state.copy(
@@ -3501,7 +3502,7 @@ class PlayerViewModel @Inject constructor(
         // FREEZE FIX: queue reuse used to seekTo() a still-unresolved youtube:// URI.
         // ResolvingDataSource no longer runBlocks, so that left the player stuck until
         // force-stop. Resolve the target item (LOW stream) before seek/prepare/play.
-        viewModelScope.launch {
+        return viewModelScope.launch {
             try {
                 val targetItem = withContext(Dispatchers.Main.immediate) {
                     runCatching {
@@ -3614,10 +3615,17 @@ class PlayerViewModel @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "playLoadedControllerItem failed")
                 runOnMainImmediate {
+                    clearPreparingSongIfMatching(targetSong?.id)
                     runCatching {
                         controller.seekTo(targetIndex, 0L)
                         controller.prepare()
                         controller.play()
+                    }
+                }
+            } finally {
+                if (coroutineContext[Job]?.isCancelled == true) {
+                    runOnMainImmediate {
+                        clearPreparingSongIfMatching(targetSong?.id)
                     }
                 }
             }
