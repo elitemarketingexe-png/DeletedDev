@@ -1,4 +1,4 @@
-﻿package com.unshoo.pixelmusic.data.remote.youtube
+package com.unshoo.pixelmusic.data.remote.youtube
 
 import android.util.Log
 import kotlinx.coroutines.*
@@ -103,12 +103,14 @@ class YouTubeTelemetryManager {
                     .getSignatureTimestamp(videoId)
                     .getOrNull()
 
+                val authStateWithoutPoToken = YouTube.currentPlaybackAuthState().copy(webClientPoTokenEnabled = false)
                 YouTube.player(
                     videoId = videoId,
                     playlistId = null,
                     client = unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.WEB_REMIX,
                     signatureTimestamp = signatureTimestamp,
-                    setLogin = true
+                    setLogin = true,
+                    authState = authStateWithoutPoToken
                 ).getOrNull()
             }.onSuccess { playerResult ->
                 activePlaybackUrl = playerResult?.playbackTracking?.videostatsPlaybackUrl?.baseUrl
