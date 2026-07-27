@@ -3516,7 +3516,10 @@ class PlayerViewModel @Inject constructor(
 
                 val resolvedItem = if (targetItem != null && needsResolve) {
                     withContext(Dispatchers.IO) {
-                        kotlinx.coroutines.withTimeoutOrNull(2_000L) {
+                        // 3s budget for queue-skip path: the URL should already be in
+                        // resolvedUriCache from the initial queue build, so this is only
+                        // needed on a cache miss. 3s is generous without blocking navigation.
+                        kotlinx.coroutines.withTimeoutOrNull(3_000L) {
                             dualPlayerEngine.preResolveForPlayback(targetItem)
                         } ?: targetItem
                     }
@@ -3558,28 +3561,39 @@ class PlayerViewModel @Inject constructor(
                     controller.currentMediaItem?.let { registerYoutubePlaybackHistoryIfNeeded(it) }
                 }
 
-                // Stuck recovery: re-resolve LOW stream once if still not progressing.
-                delay(2_000L)
-                withContext(Dispatchers.Main.immediate) {
-                    val stuckAtStart = controller.currentMediaItemIndex == targetIndex &&
-                        controller.playWhenReady &&
-                        !controller.isPlaying &&
-                        controller.currentPosition < 800L &&
-                        (controller.playbackState == Player.STATE_BUFFERING ||
-                            controller.playbackState == Player.STATE_IDLE ||
-                            controller.playbackState == Player.STATE_ENDED) &&
-                        !dualPlayerEngine.isTransitionRunning()
-                    if (stuckAtStart) {
-                        Timber.w("playLoadedControllerItem stuck — re-resolving LOW stream")
-                        val item = runCatching { controller.getMediaItemAt(targetIndex) }.getOrNull()
-                        val uri = item?.localConfiguration?.uri?.toString()
-                        if (!uri.isNullOrBlank()) {
-                            dualPlayerEngine.invalidateResolvedUri(uri)
+                // Stuck recovery: poll every 500ms so the coroutine exits immediately
+                // once playback starts (typical case on good networks: 1-3s).
+                // Only trigger the expensive re-resolve if still stuck after 8s.
+                // PERF: blind delay(8_000L) was holding the coroutine alive for the full
+                // 8s even on songs that started playing fine after 1.5s.
+                var stuckAfterPolling = false
+                run {
+                    var elapsed = 0L
+                    while (elapsed < 8_000L) {
+                        delay(500L)
+                        elapsed += 500L
+                        // Exit early the moment playback has begun — no recovery needed.
+                        if (controller.isPlaying || controller.currentPosition > 500L) return@run
+                    }
+                    // Only reach here if still stuck after 8s — mark for recovery below
+                    withContext(Dispatchers.Main.immediate) {
+                        stuckAfterPolling = controller.currentMediaItemIndex == targetIndex &&
+                            controller.playWhenReady &&
+                            !controller.isPlaying &&
+                            controller.currentPosition < 500L &&
+                            controller.playbackState != Player.STATE_READY &&
+                            !dualPlayerEngine.isTransitionRunning()
+                        if (stuckAfterPolling) {
+                            Timber.w("playLoadedControllerItem genuinely stuck after 8s — re-resolving LOW stream")
+                            val stuckItem = runCatching { controller.getMediaItemAt(targetIndex) }.getOrNull()
+                            val uri = stuckItem?.localConfiguration?.uri?.toString()
+                            if (!uri.isNullOrBlank()) {
+                                dualPlayerEngine.invalidateResolvedUri(uri)
+                            }
                         }
-                    } else {
-                        return@withContext
                     }
                 }
+                if (!stuckAfterPolling) return@launch
                 val item = withContext(Dispatchers.Main.immediate) {
                     runCatching { controller.getMediaItemAt(targetIndex) }.getOrNull()
                 } ?: return@launch
@@ -4534,8 +4548,15 @@ class PlayerViewModel @Inject constructor(
                     startProgressUpdates()
                 }
                 if (playbackState == Player.STATE_IDLE && playerCtrl.mediaItemCount == 0) {
-                    clearPreparingSongIfMatching()
-                    if (!isCastConnecting.value && !isRemotePlaybackActive.value) {
+                    // DO NOT call clearPreparingSongIfMatching() here.
+                    // STATE_IDLE with 0 items is a normal transient state that occurs
+                    // between setMediaItems() clearing the old queue and the new queue
+                    // being set. Clearing preparingSongId here prematurely removes the
+                    // guard that prevents onMediaItemTransition(null) from wiping
+                    // currentSong, which causes the miniplayer to vanish.
+                    // preparingSongId is correctly cleared in STATE_READY (line above)
+                    // and in onIsPlayingChanged(true).
+                    if (!isCastConnecting.value && !isRemotePlaybackActive.value && _playerUiState.value.preparingSongId == null) {
                         lyricsStateHolder.cancelLoading()
                         playbackStateHolder.updateStablePlayerState {
                             it.copy(
@@ -4592,6 +4613,11 @@ class PlayerViewModel @Inject constructor(
     // rebuildPlayerQueue functionality moved to PlaybackStateHolder (simplified)
     fun playSongs(songsToPlay: List<Song>, startSong: Song, queueName: String = "None", playlistId: String? = null) {
         cancelPendingFullQueuePlayback()
+        // FIX (miniplayer vanish on tap): Set preparingSongId IMMEDIATELY so the miniplayer
+        // becomes visible before any async hydration work starts. Without this, the miniplayer
+        // is invisible during the hydrateSongsIfNeeded() suspend call below, and the
+        // STATE_IDLE protection has nothing to guard against.
+        setPreparingSong(startSong.id)
         val requestToken = beginDirectPlaybackRequest()
         directPlaybackJob = viewModelScope.launch {
             transitionSchedulerJob?.cancel()
@@ -4600,6 +4626,9 @@ class PlayerViewModel @Inject constructor(
             throwIfDirectPlaybackRequestIsStale(requestToken)
 
             if (validSongs.isEmpty()) {
+                // FIX: clear the preparingSongId we set before this coroutine — without this,
+                // the miniplayer shows a song that can never play and stays stuck forever.
+                clearPreparingSongIfMatching()
                 _toastEvents.emit(context.getString(R.string.no_valid_songs))
                 return@launch
             }
@@ -5183,7 +5212,19 @@ class PlayerViewModel @Inject constructor(
             // even though we aren't using it for the heavy lifting anymore.
             if (mediaController == null) {
                 Timber.w("MediaController not available. Queuing playback action.")
-                pendingPlaybackAction = playSongsAction
+                // FIX (queue state mismatch): Capture requestToken in the pending action so
+                // that when the controller connects and fires this lambda, it first checks
+                // whether a newer tap has already superseded this request. Without this guard,
+                // an action queued for song A can fire after song B was already tapped and
+                // started playing, overwriting B's state with A's.
+                val capturedToken = requestToken
+                pendingPlaybackAction = {
+                    if (!isDirectPlaybackRequestStale(capturedToken)) {
+                        playSongsAction()
+                    } else {
+                        Timber.d("Skipping stale pendingPlaybackAction (token=%d, current=%d)", capturedToken, directPlaybackToken)
+                    }
+                }
             } else {
                 playSongsAction()
             }
