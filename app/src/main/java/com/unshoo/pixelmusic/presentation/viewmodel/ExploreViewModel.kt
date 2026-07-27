@@ -316,30 +316,55 @@ class ExploreViewModel @Inject constructor(
                             )
                         }
 
-                        // You Might Like (Recommendations based on top 3 most-played artists in history)
+                        // You Might Like (Wide variety of similar songs & diverse artists based on top played history)
                         val topArtists = history
                             .mapNotNull { it.artist }
-                            .filter { it.isNotBlank() }
+                            .filter { it.isNotBlank() && !it.contains("unknown", ignoreCase = true) }
                             .groupingBy { it }
                             .eachCount()
                             .entries
                             .sortedByDescending { it.value }
-                            .take(3)
+                            .take(6)
                             .map { it.key }
+
+                        val playedSongIds = (history.mapNotNull { it.songId } + allLocalSongs.map { it.id.toString() }).toSet()
 
                         val searchJobs = topArtists.map { artistName ->
                             async {
-                                YouTube.search(query = artistName, filter = YouTube.SearchFilter.FILTER_SONG)
+                                // Search for radio/mix of top artist to get similar artists in the same style
+                                val mixResults = YouTube.search(query = "$artistName mix", filter = YouTube.SearchFilter.FILTER_SONG)
                                     .getOrNull()?.items?.filterIsInstance<SongItem>() ?: emptyList()
+                                val songResults = if (mixResults.size < 5) {
+                                    YouTube.search(query = artistName, filter = YouTube.SearchFilter.FILTER_SONG)
+                                        .getOrNull()?.items?.filterIsInstance<SongItem>() ?: emptyList()
+                                } else emptyList()
+                                (mixResults + songResults).distinctBy { it.id }
                             }
                         }
-                        val searchResults = searchJobs.flatMap { it.await() }
 
-                        val playedSongIds = (history.mapNotNull { it.songId } + allLocalSongs.map { it.id.toString() }).toSet()
-                        val youMightLikeItems = searchResults
-                            .distinctBy { it.id }
-                            .filter { it.id !in playedSongIds }
-                            .take(10)
+                        val perArtistResults = searchJobs.map { it.await().filter { item -> item.id !in playedSongIds } }
+
+                        // Round-robin sampling across all top artists to guarantee wide artist diversity
+                        val interleavedItems = mutableListOf<SongItem>()
+                        val maxItems = perArtistResults.maxOfOrNull { it.size } ?: 0
+
+                        for (i in 0 until maxItems) {
+                            for (list in perArtistResults) {
+                                if (i < list.size) {
+                                    val item = list[i]
+                                    val primaryArtist = item.artists.firstOrNull()?.name?.lowercase()?.trim() ?: ""
+                                    // Limit max 2 songs per artist to enforce wide variety
+                                    val artistCount = interleavedItems.count {
+                                        it.artists.firstOrNull()?.name?.lowercase()?.trim() == primaryArtist
+                                    }
+                                    if (artistCount < 2 && interleavedItems.none { it.id == item.id }) {
+                                        interleavedItems.add(item)
+                                    }
+                                }
+                            }
+                        }
+
+                        val youMightLikeItems = interleavedItems.take(15)
 
                         // Recently Played and Most Played local history auto-shelves
                         val localSongsMap = allLocalSongs.associateBy { it.id.toString() }
