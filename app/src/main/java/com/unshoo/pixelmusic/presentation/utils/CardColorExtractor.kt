@@ -162,6 +162,12 @@ fun rememberDominantCardColor(
         }
     }
 
+    // Fast path: if color is already in L1 memory cache, return static targetColor directly.
+    // This avoids registering an active Compose animation spec for pre-cached cards, saving recomposition overhead during scroll.
+    if (initialArgb != null) {
+        return targetColor
+    }
+
     val animatedColor by animateColorAsState(
         targetValue = targetColor,
         animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
