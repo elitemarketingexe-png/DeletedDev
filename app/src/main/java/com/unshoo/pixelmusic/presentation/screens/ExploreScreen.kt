@@ -683,30 +683,39 @@ fun ExploreScreen(
                             }
                         }
 
-                        // Daily Discover Cards — flat lazy items, one per section.
-                        // Each card is its own lazy item: composed only when scrolled into view.
-                        // Color extracted per-index from theme (no Palette/bitmap work).
+                        // Daily Discover Cards — horizontal LazyRow inside one item.
+                        // LazyRow only composes cards as user swipes to them (true lazy loading).
+                        // No HorizontalPager: LazyRow gives same horizontal feel with better recycling.
                         if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && cardShelfSections.isNotEmpty()) {
                             item(key = "daily_discover_header", contentType = "section_header") {
                                 SectionHeader(title = "Your Daily Discover")
                             }
-                            itemsIndexed(
-                                items = cardShelfSections,
-                                key = { index, section -> "dd_card_${index}_${section.title}" },
-                                contentType = { _, _ -> "daily_discover_card" }
-                            ) { index, section ->
-                                ExpressiveDailyDiscoverCard(
-                                    section = section,
-                                    playerViewModel = playerViewModel,
-                                    navController = navController,
-                                    localSongs = localSongs,
-                                    cardIndex = index,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                                )
+                            item(key = "daily_discover_cards", contentType = "daily_discover_row") {
+                                val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
+                                val cardWidth = remember(screenWidth) {
+                                    (screenWidth * 0.85f).coerceIn(280.dp, 360.dp)
+                                }
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    itemsIndexed(
+                                        items = cardShelfSections,
+                                        key = { index, section -> "dd_card_${index}_${section.title}" }
+                                    ) { index, section ->
+                                        ExpressiveDailyDiscoverCard(
+                                            section = section,
+                                            playerViewModel = playerViewModel,
+                                            navController = navController,
+                                            localSongs = localSongs,
+                                            cardIndex = index,
+                                            modifier = Modifier.width(cardWidth)
+                                        )
+                                    }
+                                }
                             }
                         }
+
 
                         // Move New Releases here - shown under New Releases filter as full 2-column grid or main All/For You filters as carousel
                         if (filterSlice.selectedFilter == "New Releases" && contentSlice.newReleaseAlbums.isNotEmpty()) {
