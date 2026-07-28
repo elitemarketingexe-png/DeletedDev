@@ -3590,36 +3590,57 @@ class PlayerViewModel @Inject constructor(
     ) {
         Log.i("ArchiveTuneBuilder", "playWithArchiveTuneQueueBuilder: starting for song '${song.title}' (${song.id})")
         val requestToken = beginDirectPlaybackRequest()
-        
+
         val isAlreadyPlaying = dualPlayerEngine.masterPlayer.currentMediaItem?.mediaId == song.id
-        
+
         // 1. Play the seed song immediately if not already playing so there is zero delay!
+        // BUGFIX: Assign this launch to directPlaybackJob so that if the user taps a different
+        // song while this is still running (saving to DB + resolving start song), the
+        // beginDirectPlaybackRequest() call in the new tap will cancel it immediately.
+        // Previously this was a fire-and-forget launch — uncancellable, causing the old song
+        // to start playing AFTER the new song had already started.
         if (!isAlreadyPlaying) {
-            viewModelScope.launch {
+            directPlaybackJob = viewModelScope.launch {
+                if (isDirectPlaybackRequestStale(requestToken)) return@launch
                 withContext(Dispatchers.IO) {
                     saveYoutubeSongsToDb(listOf(song))
                 }
-                playSongs(listOf(song), song, queueName, playlistId)
+                if (isDirectPlaybackRequestStale(requestToken)) return@launch
+                // Pass the already-minted requestToken directly into internalPlaySongs
+                // so it does NOT call beginDirectPlaybackRequest() again (which would bump
+                // the token and break the staleness check in the recommendations coroutine below).
+                internalPlaySongs(listOf(song), song, queueName, playlistId, requestToken)
+                if (requestToken == directPlaybackToken) {
+                    directPlaybackJob = null
+                }
             }
         }
-        
-        // 2. Fetch related recommendations in the background and update the player's queue
-        viewModelScope.launch {
+
+        // 2. Fetch related recommendations in the background and update the player's queue.
+        // BUGFIX: Store in directPlaybackApplyJob so beginDirectPlaybackRequest() on the next
+        // tap cancels it — previously this was also fire-and-forget and could overwrite the
+        // new song's queue with old recommendations after the user had already moved on.
+        directPlaybackApplyJob = viewModelScope.launch {
             val videoId = resolveQuickPicksVideoId(song)
             if (videoId.isNullOrBlank()) {
                 Timber.w("ArchiveTune Queue Builder: Could not resolve videoId for seed song '${song.title}'")
                 return@launch
             }
+            if (isDirectPlaybackRequestStale(requestToken)) return@launch
+
             val endpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
                 videoId = videoId,
                 playlistId = "RDAMVM$videoId"
             )
-            
+
             _playerUiState.update { it.copy(isLoadingInitialSongs = true) }
             val result = withContext(Dispatchers.IO) {
                 unshoo.ianshulyadav.pixelmusic.innertube.YouTube.next(endpoint)
             }
-            if (isDirectPlaybackRequestStale(requestToken)) return@launch
+            if (isDirectPlaybackRequestStale(requestToken)) {
+                _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+                return@launch
+            }
 
             result.onSuccess { nextResult ->
                 val relatedSongs = nextResult.items.map { it.toNativeSong() }
@@ -3627,9 +3648,9 @@ class PlayerViewModel @Inject constructor(
                     val fullQueue = withContext(Dispatchers.IO) {
                         com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.buildMixQueue(song, relatedSongs)
                     }
-                    
+
                     saveYoutubeSongsToDb(fullQueue)
-                    
+
                     if (isDirectPlaybackRequestStale(requestToken)) return@launch
 
                     try {
@@ -3668,7 +3689,7 @@ class PlayerViewModel @Inject constructor(
                     } catch (e: Exception) {
                         Timber.e(e, "ArchiveTune Queue Builder: Error dynamically updating ExoPlayer queue")
                     }
-                    
+
                     val lastSong = fullQueue.last()
                     val lastVideoId = lastSong.youtubeId
                         ?: if (lastSong.id.startsWith("youtube_")) lastSong.id.substringAfter("youtube_") else videoId
@@ -3687,6 +3708,7 @@ class PlayerViewModel @Inject constructor(
             }
         }
     }
+
 
     private fun List<Song>.matchesSongOrder(contextSongs: List<Song>): Boolean {
         if (size != contextSongs.size) return false
