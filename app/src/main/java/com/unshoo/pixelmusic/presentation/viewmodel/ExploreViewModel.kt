@@ -100,7 +100,6 @@ class ExploreViewModel @Inject constructor(
         }
     }
 
-    private var isDataLoaded = false
 
     /** Wall-clock time the content currently in [_uiState] was fetched (0 = unknown/never). */
     private var lastContentTimestamp: Long = 0L
@@ -115,7 +114,7 @@ class ExploreViewModel @Inject constructor(
         java.io.File(context.cacheDir, "explore_cache.json")
     }
 
-    private fun restoreFromCache(): Boolean {
+    private fun restoreFromCache() {
         try {
             if (cacheFile.exists()) {
                 val json = cacheFile.readText()
@@ -123,22 +122,19 @@ class ExploreViewModel @Inject constructor(
                 if (cache != null && (cache.sections.isNotEmpty() || cache.albums.isNotEmpty() || cache.charts != null)) {
                     _uiState.update {
                         it.copy(
-                            isLoading = false,
+                            isLoading = true, // still loading fresh data
                             homePageSections = cache.sections,
                             homePageContinuation = cache.continuation,
                             newReleaseAlbums = cache.albums,
                             chartsPage = cache.charts
                         )
                     }
-                    isDataLoaded = true
                     lastContentTimestamp = cache.timestamp
-                    return true
                 }
             }
         } catch (e: Exception) {
             Timber.e(e, "Failed to restore explore data from cache")
         }
-        return false
     }
 
     private fun persistToCache(state: ExploreUiState) {
@@ -169,29 +165,14 @@ class ExploreViewModel @Inject constructor(
         stage2Job?.cancel()
         stage3Job?.cancel()
 
-        if (!forceRefresh) {
+        if (forceRefresh) {
+            _uiState.update { it.copy(isRefreshing = true, error = null) }
+        } else {
+            // Only show loading spinner if we have no cached data at all
             val hasCachedData = _uiState.value.homePageSections.isNotEmpty() ||
                     _uiState.value.newReleaseAlbums.isNotEmpty() ||
                     _uiState.value.chartsPage != null
-            if (isDataLoaded || hasCachedData) {
-                // Unblock the UI immediately - we already have something to show, cached or live.
-                _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = null) }
-
-                val isStale = lastContentTimestamp > 0L &&
-                        (System.currentTimeMillis() - lastContentTimestamp) >= STALE_CONTENT_MS
-                if (!isStale) {
-                    return
-                }
-                // BUGFIX (Explore cache never refreshing): previously ANY cached/already-loaded
-                // data short-circuited here unconditionally, permanently, for the lifetime of
-                // this ViewModel instance - once restored from the on-disk cache once, Explore
-                // would keep showing that same YouTube Music homepage snapshot (possibly hours
-                // or days old) until the user manually pulled to refresh. Fall through to a
-                // silent background refetch (no isRefreshing spinner - the user didn't ask for
-                // one) instead of returning, so the feed self-heals on normal navigation.
-            }
-        } else {
-            _uiState.update { it.copy(isRefreshing = true, error = null) }
+            _uiState.update { it.copy(isLoading = !hasCachedData, error = null) }
         }
         try {
             // 1. Get history and candidateArtistId immediately (fast database/prefs calls)
@@ -292,7 +273,6 @@ class ExploreViewModel @Inject constructor(
                 }
                 return
             }
-            isDataLoaded = true
             lastContentTimestamp = System.currentTimeMillis()
             persistToCache(_uiState.value)
 

@@ -1686,61 +1686,110 @@ private fun ArtistMixRadioButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "mix_radio_pulse")
-    
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.96f,
-        targetValue = 1.04f,
+    val infiniteTransition = rememberInfiniteTransition(label = "mix_radio_wave")
+
+    // Outer ring: slow expanding pulse — simulates radio broadcast rings
+    val ring1Alpha by infiniteTransition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
         ),
-        label = "breathing_scale"
+        label = "ring1_alpha"
+    )
+    val ring1Scale by infiniteTransition.animateFloat(
+        initialValue = 0.75f,
+        targetValue = 1.45f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "ring1_scale"
     )
 
-    val alphaGlow by infiniteTransition.animateFloat(
-        initialValue = 0.7f,
-        targetValue = 1.0f,
+    // Inner ring: offset by half cycle for staggered effect
+    val ring2Alpha by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0.55f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
         ),
-        label = "alpha_glow"
+        label = "ring2_alpha"
+    )
+    val ring2Scale by infiniteTransition.animateFloat(
+        initialValue = 1.45f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "ring2_scale"
     )
 
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.3f * alphaGlow)
-        ),
-        modifier = modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .clip(CircleShape)
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val containerColor = MaterialTheme.colorScheme.secondaryContainer
+    val onContainerColor = MaterialTheme.colorScheme.onSecondaryContainer
+    val pillShape = AbsoluteSmoothCornerShape(50.dp, 100)
+
+    Box(contentAlignment = Alignment.Center, modifier = modifier) {
+        // Pulsing radio-wave rings behind the button
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer {
+                    scaleX = ring1Scale
+                    scaleY = ring1Scale
+                    alpha = ring1Alpha
+                }
+                .clip(pillShape)
+                .background(primaryColor.copy(alpha = 0.18f))
+        )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer {
+                    scaleX = ring2Scale
+                    scaleY = ring2Scale
+                    alpha = ring2Alpha
+                }
+                .clip(pillShape)
+                .background(primaryColor.copy(alpha = 0.12f))
+        )
+
+        // M3 Expressive pill button — matches the FilledTonalIconButton style used by Shuffle
+        Surface(
+            shape = pillShape,
+            color = containerColor,
+            contentColor = onContainerColor,
+            tonalElevation = 2.dp,
+            shadowElevation = 0.dp,
+            modifier = Modifier
+                .clip(pillShape)
+                .clickable(onClick = onClick)
         ) {
-            Icon(
-                imageVector = Icons.Rounded.QueueMusic,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp)
-            )
-            Text(
-                text = "Mix Radio",
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // SurroundSound = radio wave / broadcast icon — semantically correct for a radio mix
+                Icon(
+                    imageVector = Icons.Rounded.SurroundSound,
+                    contentDescription = "Mix Radio",
+                    modifier = Modifier.size(18.dp),
+                    tint = onContainerColor
                 )
-            )
+                Text(
+                    text = "Mix Radio",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = GoogleSansRounded,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = onContainerColor
+                )
+            }
         }
     }
 }

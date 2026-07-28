@@ -3278,23 +3278,37 @@ class PlayerViewModel @Inject constructor(
                     }
                     com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
                     
-                    val mainArtistSongs = finalMixList.filter { 
-                        it.artist.contains(cleanArtistName, ignoreCase = true) 
-                    }
-                    val restSongs = finalMixList.filterNot { 
-                        it.artist.contains(cleanArtistName, ignoreCase = true) 
-                    }
-                    
+                    // DIVERSITY FIX: enforce 40% artist / 60% related so the mix
+                    // doesn't become a single-artist playlist. Cap main artist at 40%.
+                    val targetTotal = finalMixList.size.coerceAtMost(40)
+                    val maxMainArtist = (targetTotal * 0.40f).toInt().coerceAtLeast(1)
+
+                    val mainArtistSongs = finalMixList
+                        .filter { it.artist.contains(cleanArtistName, ignoreCase = true) }
+                        .shuffled()
+                        .take(maxMainArtist)
+
+                    val diverseSongs = finalMixList
+                        .filterNot { it.artist.contains(cleanArtistName, ignoreCase = true) }
+                        .shuffled()
+                        .toMutableList()
+
+                    // Interleave 1 main-artist : 2 diverse for a rich, varied experience
                     val shuffledMix = mutableListOf<Song>()
                     if (mainArtistSongs.isNotEmpty()) {
-                        shuffledMix.add(mainArtistSongs.first())
-                        val remainingMain = mainArtistSongs.drop(1)
-                        shuffledMix.addAll((remainingMain + restSongs).shuffled())
+                        shuffledMix.add(mainArtistSongs.first()) // seed song first for instant play
+                        val mainTail = mainArtistSongs.drop(1).toMutableList()
+                        while (mainTail.isNotEmpty() || diverseSongs.isNotEmpty()) {
+                            if (mainTail.isNotEmpty()) shuffledMix.add(mainTail.removeFirst())
+                            if (diverseSongs.isNotEmpty()) shuffledMix.add(diverseSongs.removeFirst())
+                            if (diverseSongs.isNotEmpty()) shuffledMix.add(diverseSongs.removeFirst())
+                        }
                     } else {
                         shuffledMix.addAll(finalMixList.shuffled())
                     }
-                    
+
                     playSongs(shuffledMix, shuffledMix.first(), "$artistName Mix Radio")
+
                 } else {
                     sendToast("No songs found to build Mix Radio")
                 }
