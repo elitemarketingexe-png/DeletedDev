@@ -360,21 +360,22 @@ class ExploreViewModel @Inject constructor(
                         val playedSongIds = (history.mapNotNull { it.songId } + allLocalSongIds.map { it.toString() }).toSet()
 
                         val perArtistResults = mutableListOf<List<SongItem>>()
-                        for (artistName in topArtists) {
-                            // Single search per artist (mix query with good variety)
-                            val results = runCatching {
-                                YouTube.search(query = "$artistName mix", filter = YouTube.SearchFilter.FILTER_SONG)
-                                    .getOrNull()?.items?.filterIsInstance<SongItem>() ?: emptyList()
-                            }.getOrDefault(emptyList())
-                                .filter { it.id !in playedSongIds }
-                                .take(10)
-                            perArtistResults.add(results)
-                            kotlinx.coroutines.delay(80) // throttle: avoid back-to-back burst
+                        if (topArtists.isNotEmpty()) {
+                            for (artistName in topArtists) {
+                                val results = runCatching {
+                                    YouTube.search(query = "$artistName mix", filter = YouTube.SearchFilter.FILTER_SONG)
+                                        .getOrNull()?.items?.filterIsInstance<SongItem>() ?: emptyList()
+                                }.getOrDefault(emptyList())
+                                    .filter { it.id !in playedSongIds }
+                                    .take(10)
+                                perArtistResults.add(results)
+                                kotlinx.coroutines.delay(120) // throttle: avoid back-to-back thread competition
+                            }
                         }
 
                         // Round-robin sampling across all top artists to guarantee wide artist diversity
                         val interleavedItems = mutableListOf<SongItem>()
-                        val maxItems = perArtistResults.maxOfOrNull { it.size } ?: 0
+                        val maxItems = if (perArtistResults.isNotEmpty()) perArtistResults.maxOf { it.size } else 0
 
                         for (i in 0 until maxItems) {
                             for (list in perArtistResults) {
@@ -397,13 +398,6 @@ class ExploreViewModel @Inject constructor(
                         val historyMap = history.associateBy { it.songId }
                         val mostPlayedSongs = playbackStatsRepository.loadSongPlayCounts(limit = 15)
 
-                        // PERF: localSongsMap is only ever looked up for the (at most ~45) song
-                        // ids referenced by `history` and `mostPlayedSongs` below - it doesn't
-                        // need the whole library. Query just those ids instead of hashing every
-                        // row in getAllSongsList(). Non-numeric ids (e.g. YouTube-sourced
-                        // "youtube_xxx" history entries that were never in the local `songs`
-                        // table) are dropped here exactly as they were implicitly dropped
-                        // before by a map lookup miss.
                         val neededLocalSongIds = (history.map { it.songId } + mostPlayedSongs.map { it.songId })
                             .mapNotNull { it.toLongOrNull() }
                             .distinct()
@@ -523,9 +517,6 @@ class ExploreViewModel @Inject constructor(
                             }
 
                             val finalNewReleases = if (YouTube.hasLoginCookie()) {
-                                // PERF: was allLocalSongs.map { it.artistName... } - loading every
-                                // column of every song just to read one field. getAllDistinctArtistNames()
-                                // is a single-column DISTINCT query instead.
                                 val localSongArtistNames = try {
                                     musicDao.getAllDistinctArtistNames()
                                 } catch (e: Exception) {
@@ -537,11 +528,6 @@ class ExploreViewModel @Inject constructor(
                                     history.mapNotNull { it.artist?.lowercase()?.trim() }
                                 ).filter { it.isNotBlank() }.toSet()
                                 
-                                // OPT: Stage 1 (above) already fetched newReleaseAlbums() into
-                                // `newReleasesResult` a few hundred ms ago when logged in - reuse
-                                // it instead of issuing a second identical network request on
-                                // every single Explore load. Only refetch if Stage 1's call
-                                // failed/returned null (e.g. transient network error).
                                 val globalReleases = newReleasesResult
                                     ?: YouTube.newReleaseAlbums().getOrNull().orEmpty()
                                 val globalFiltered = globalReleases.filter { album ->
@@ -558,10 +544,9 @@ class ExploreViewModel @Inject constructor(
                                     .eachCount()
                                     .entries
                                     .sortedByDescending { it.value }
-                                    .take(3)
+                                    .take(2) // reduced from 3 to 2 to minimize network load
                                     .map { it.key }
                                     
-                                // PERF: sequential album searches with 80ms gap (was all parallel)
                                 val searchResults = mutableListOf<AlbumItem>()
                                 for (artistName in topArtistNames) {
                                     val items = runCatching {
@@ -569,7 +554,7 @@ class ExploreViewModel @Inject constructor(
                                             .getOrNull()?.items?.filterIsInstance<AlbumItem>() ?: emptyList()
                                     }.getOrDefault(emptyList())
                                     searchResults.addAll(items)
-                                    kotlinx.coroutines.delay(80)
+                                    kotlinx.coroutines.delay(120)
                                 }
                                 
                                 (enrichedReleases + searchResults)
