@@ -91,12 +91,10 @@ import unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage
 @Composable
 private fun dailyDiscoverCardColor(cardIndex: Int, isDark: Boolean): Color {
     val colors = MaterialTheme.colorScheme
-    val base = colors.surface
-    val blendFraction = if (isDark) 0.38f else 0.45f
     return when (cardIndex % 3) {
-        0 -> lerp(base, colors.primaryContainer, blendFraction)
-        1 -> lerp(base, colors.secondaryContainer, blendFraction)
-        else -> lerp(base, colors.tertiaryContainer, blendFraction)
+        0 -> if (isDark) colors.surfaceContainerHigh else colors.surfaceContainerLowest
+        1 -> if (isDark) colors.surfaceContainerHighest else colors.surfaceContainerLow
+        else -> if (isDark) colors.surfaceContainer else colors.surfaceContainer
     }
 }
 
@@ -119,12 +117,10 @@ fun ExpressiveDailyDiscoverCard(
     }
 
     // Pre-convert to native only for play controls (small, bounded list)
-    // Per-item thumbnail cards convert on-demand below
     val nativeSongs = remember(songs, localSongs) {
         songs.take(20).map { item -> localSongs[item.id] ?: item.toNativeSong() }
     }
 
-    // Theme-based color — zero CPU (pure math, synchronous)
     val cardColor = dailyDiscoverCardColor(cardIndex, isDark)
 
     val outerShape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
@@ -135,22 +131,16 @@ fun ExpressiveDailyDiscoverCard(
     var showSongList by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    Card(
+    Surface(
         modifier = modifier
             .wrapContentHeight()
             .clickable { showSongList = true },
         shape = outerShape,
-        colors = CardDefaults.cardColors(containerColor = cardColor),
-        // NO elevation — removed shadows entirely
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            focusedElevation = 0.dp,
-            hoveredElevation = 0.dp
-        ),
+        color = cardColor,
+        tonalElevation = 2.dp,
         border = androidx.compose.foundation.BorderStroke(
-            width = 0.8.dp,
-            color = colors.outlineVariant.copy(alpha = 0.35f)
+            width = 1.dp,
+            color = colors.outlineVariant.copy(alpha = 0.5f)
         )
     ) {
         Column(
