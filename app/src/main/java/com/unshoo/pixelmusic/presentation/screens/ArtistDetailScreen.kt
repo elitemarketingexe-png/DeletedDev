@@ -1697,92 +1697,53 @@ private fun ArtistMixRadioButton(
         label = "mix_radio_button_press_scale"
     )
 
-    val infiniteTransition = rememberInfiniteTransition(label = "expressive_radio_pulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.95f,
-        targetValue = 1.35f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "expressive_radio_pulse_scale"
-    )
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "expressive_radio_pulse_alpha"
-    )
-
-    val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    val contentColor = MaterialTheme.colorScheme.primary
+    val containerColor = MaterialTheme.colorScheme.secondaryContainer
+    val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
     val shape = CircleShape
 
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .graphicsLayer {
-                scaleX = buttonScale
-                scaleY = buttonScale
-            }
-    ) {
-        // Pulsing radio broadcast ring (M3 Expressive motion)
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .graphicsLayer {
-                    scaleX = pulseScale
-                    scaleY = pulseScale
-                    alpha = pulseAlpha
-                }
-                .clip(shape)
-                .background(contentColor.copy(alpha = 0.25f))
-        )
-
-        // Material 3 Expressive Pill Button
-        Surface(
-            onClick = onClick,
-            shape = shape,
-            color = containerColor,
-            contentColor = contentColor,
-            tonalElevation = 6.dp,
-            shadowElevation = 2.dp,
-            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }.also { interactionSource ->
-                LaunchedEffect(interactionSource) {
-                    interactionSource.interactions.collect { interaction ->
-                        when (interaction) {
-                            is androidx.compose.foundation.interaction.PressInteraction.Press -> isPressed = true
-                            is androidx.compose.foundation.interaction.PressInteraction.Release -> isPressed = false
-                            is androidx.compose.foundation.interaction.PressInteraction.Cancel -> isPressed = false
-                        }
+    Surface(
+        onClick = onClick,
+        shape = shape,
+        color = containerColor,
+        contentColor = contentColor,
+        tonalElevation = 2.dp,
+        shadowElevation = 0.dp,
+        modifier = modifier.graphicsLayer {
+            scaleX = buttonScale
+            scaleY = buttonScale
+        },
+        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }.also { interactionSource ->
+            LaunchedEffect(interactionSource) {
+                interactionSource.interactions.collect { interaction ->
+                    when (interaction) {
+                        is androidx.compose.foundation.interaction.PressInteraction.Press -> isPressed = true
+                        is androidx.compose.foundation.interaction.PressInteraction.Release -> isPressed = false
+                        is androidx.compose.foundation.interaction.PressInteraction.Cancel -> isPressed = false
                     }
                 }
             }
+        }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Radio,
-                    contentDescription = "Mix Radio",
-                    modifier = Modifier.size(20.dp),
-                    tint = contentColor
-                )
-                Text(
-                    text = "Mix Radio",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontFamily = GoogleSansRounded,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.3.sp
-                    ),
-                    color = contentColor
-                )
-            }
+            Icon(
+                imageVector = Icons.Rounded.Radio,
+                contentDescription = "Mix Radio",
+                modifier = Modifier.size(18.dp),
+                tint = contentColor
+            )
+            Text(
+                text = "Mix Radio",
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.2.sp
+                ),
+                color = contentColor
+            )
         }
     }
 }
