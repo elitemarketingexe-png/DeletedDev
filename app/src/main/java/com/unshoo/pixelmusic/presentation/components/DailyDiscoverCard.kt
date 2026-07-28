@@ -1,5 +1,8 @@
 package com.unshoo.pixelmusic.presentation.components
 
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -15,99 +18,139 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import coil.compose.AsyncImagePainter
+import coil.size.Size
 import com.unshoo.pixelmusic.data.model.Song
 import com.unshoo.pixelmusic.data.remote.youtube.toNativeSong
-import com.unshoo.pixelmusic.presentation.navigation.Screen
-import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
-import com.unshoo.pixelmusic.presentation.screens.SectionHeader
-import com.unshoo.pixelmusic.presentation.utils.rememberDominantCardColor
+import com.unshoo.pixelmusic.presentation.components.subcomps.EnhancedSongListItem
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem
 import unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage
 
 /**
- * OPTIMIZED Material 3 Expressive Daily Discover Card.
+ * OPTIMIZED Daily Discover Card — v3
  *
- * Fixes lag introduced by previous Daily Discover implementation:
- * - Partition logic called toNativeSong() for every SongItem on every recomposition (heavy allocation)
- *   Replaced with lightweight check using localSongs map + numeric ID heuristic
- * - Shuffled sections on every remember caused recomposition + reordering jank; now stable deterministic order
- * - HorizontalPager with dynamic card width is okay, but avoid nested scrollable inside LazyColumn causing issues
- * - Card's LazyRow items previously called toNativeSong fallback even when nativeSongs already available
- * - Using rememberDominantCardColor which is now optimized (disk cache file + semaphore)
+ * Key changes vs previous version:
+ * - Removed rememberDominantCardColor (Palette bitmap extraction) entirely.
+ *   Colors now derived purely from MaterialTheme based on card index — zero CPU, zero coroutines.
+ * - Removed all Card/Surface elevation (shadowElevation = 0) — no RenderThread shadow passes.
+ * - LazyRow song thumbnails show shimmer while image loads (SubcomposeAsyncImage via SmartImage onState).
+ * - toNativeSong() is deferred per-item in the LazyRow, not pre-computed for all songs upfront.
+ * - Card click opens DailyDiscoverSongListSheet (ModalBottomSheet) with full LazyColumn song list.
+ * - Subtle border replaces shadow for card definition.
  */
 
+/**
+ * Returns the card background color for index [cardIndex] based purely on the theme.
+ * Cycles through primary → secondary → tertiary container, blended 45% with surface.
+ * Zero allocations, zero coroutines, zero CPU work.
+ */
+@Composable
+private fun dailyDiscoverCardColor(cardIndex: Int, isDark: Boolean): Color {
+    val colors = MaterialTheme.colorScheme
+    val base = colors.surface
+    val blendFraction = if (isDark) 0.38f else 0.45f
+    return when (cardIndex % 3) {
+        0 -> lerp(base, colors.primaryContainer, blendFraction)
+        1 -> lerp(base, colors.secondaryContainer, blendFraction)
+        else -> lerp(base, colors.tertiaryContainer, blendFraction)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpressiveDailyDiscoverCard(
     section: HomePage.Section,
     playerViewModel: PlayerViewModel,
     navController: NavController,
     modifier: Modifier = Modifier,
-    localSongs: Map<String, Song> = emptyMap()
+    localSongs: Map<String, Song> = emptyMap(),
+    cardIndex: Int = 0
 ) {
     val colors = MaterialTheme.colorScheme
     val isDark = isSystemInDarkTheme()
 
-    // Filter once, stable
+    // Only filter SongItems once — stable
     val songs = remember(section.items) {
         section.items.filterIsInstance<SongItem>()
     }
-    // Convert to native only once; reuse localSongs map if present (DB hit already cached in VM)
+
+    // Pre-convert to native only for play controls (small, bounded list)
+    // Per-item thumbnail cards convert on-demand below
     val nativeSongs = remember(songs, localSongs) {
-        // Avoid mapping entire list if localSongs large? It's map lookup O(1)
-        songs.map { item -> localSongs[item.id] ?: item.toNativeSong() }
+        songs.take(20).map { item -> localSongs[item.id] ?: item.toNativeSong() }
     }
 
-    val cardThumbnail = remember(section, songs) {
-        section.thumbnail.takeIf { !it.isNullOrBlank() }
-            ?: songs.firstOrNull()?.thumbnail
-    }
-
-    val animatedBackground = rememberDominantCardColor(
-        imageUrl = cardThumbnail,
-        baseColor = colors.surfaceContainerHigh,
-        isDarkTheme = isDark,
-        darkBlendFraction = 0.28f,
-        lightBlendFraction = 0.42f
-    )
+    // Theme-based color — zero CPU (pure math, synchronous)
+    val cardColor = dailyDiscoverCardColor(cardIndex, isDark)
 
     val outerShape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
-    val songCardShape = remember { AbsoluteSmoothCornerShape(18.dp, 60) }
+    val thumbShape = remember { AbsoluteSmoothCornerShape(12.dp, 60) }
+    val innerSongCardShape = remember { AbsoluteSmoothCornerShape(18.dp, 60) }
+
+    // Bottom sheet state
+    var showSongList by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Card(
-        modifier = modifier.wrapContentHeight(),
+        modifier = modifier
+            .wrapContentHeight()
+            .clickable { showSongList = true },
         shape = outerShape,
-        colors = CardDefaults.cardColors(containerColor = animatedBackground),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        // NO elevation — removed shadows entirely
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
+            focusedElevation = 0.dp,
+            hoveredElevation = 0.dp
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 0.8.dp,
+            color = colors.outlineVariant.copy(alpha = 0.35f)
+        )
     ) {
         Column(
             modifier = Modifier
@@ -115,7 +158,7 @@ fun ExpressiveDailyDiscoverCard(
                 .padding(vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Header: Badge & Controls
+            // ── Header: Badge & Controls ──────────────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -166,7 +209,7 @@ fun ExpressiveDailyDiscoverCard(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Shuffle,
-                            contentDescription = "Radio ${section.title}",
+                            contentDescription = "Shuffle ${section.title}",
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -195,6 +238,7 @@ fun ExpressiveDailyDiscoverCard(
                 }
             }
 
+            // ── Title & Label ─────────────────────────────────────────────────
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 Text(
                     text = section.title,
@@ -212,19 +256,36 @@ fun ExpressiveDailyDiscoverCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                // Tap hint
+                Text(
+                    text = "Tap to see all songs",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(top = 1.dp)
+                )
             }
 
-            // Horizontal song cards - limited to first 8 for performance
+            // ── Horizontal Song Thumbnail Strip ───────────────────────────────
+            // LazyRow naturally lazy-loads thumbnails as you scroll — only visible items composed.
+            // toNativeSong() deferred per-item (not pre-computed for all upfront).
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Limit to 8 for the strip — full list shown in the bottom sheet
                 itemsIndexed(songs.take(8)) { index, songItem ->
-                    val nativeSong = nativeSongs.getOrNull(index) ?: return@itemsIndexed
+                    // Convert on-demand per-item, NOT all upfront
+                    val nativeSong = remember(songItem.id, localSongs) {
+                        localSongs[songItem.id] ?: songItem.toNativeSong()
+                    }
+
+                    // Shimmer loading state tracking
+                    var imageLoaded by remember(songItem.thumbnail) { mutableStateOf(false) }
+
                     Surface(
                         modifier = Modifier
                             .width(96.dp)
-                            .clip(songCardShape)
+                            .clip(innerSongCardShape)
                             .clickable {
                                 playerViewModel.showAndPlaySong(
                                     song = nativeSong,
@@ -232,9 +293,10 @@ fun ExpressiveDailyDiscoverCard(
                                     queueName = section.title
                                 )
                             },
-                        shape = songCardShape,
+                        shape = innerSongCardShape,
                         color = colors.surfaceContainerLowest,
-                        tonalElevation = 1.dp
+                        // No elevation on inner cards either
+                        tonalElevation = 0.dp
                     ) {
                         Column(
                             modifier = Modifier.padding(6.dp),
@@ -246,14 +308,33 @@ fun ExpressiveDailyDiscoverCard(
                                     .height(84.dp),
                                 contentAlignment = Alignment.BottomEnd
                             ) {
+                                // Shimmer placeholder shown while image loads
+                                if (!imageLoaded) {
+                                    ShimmerBox(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(thumbShape)
+                                    )
+                                }
+
+                                // Image fades in once loaded
                                 SmartImage(
                                     model = songItem.thumbnail,
                                     contentDescription = songItem.title,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .clip(AbsoluteSmoothCornerShape(12.dp, 60)),
-                                    contentScale = ContentScale.Crop
+                                        .clip(thumbShape),
+                                    contentScale = ContentScale.Crop,
+                                    targetSize = Size(96, 96),
+                                    alpha = if (imageLoaded) 1f else 0f,
+                                    onState = { state ->
+                                        if (state is AsyncImagePainter.State.Success) {
+                                            imageLoaded = true
+                                        }
+                                    }
                                 )
+
+                                // Play badge — fades in once image is loaded via alpha
                                 Surface(
                                     shape = CircleShape,
                                     color = colors.primary,
@@ -261,6 +342,7 @@ fun ExpressiveDailyDiscoverCard(
                                     modifier = Modifier
                                         .padding(4.dp)
                                         .size(22.dp)
+                                        .graphicsLayer { alpha = if (imageLoaded) 1f else 0f }
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.PlayArrow,
@@ -271,6 +353,7 @@ fun ExpressiveDailyDiscoverCard(
                                     )
                                 }
                             }
+
                             Column {
                                 Text(
                                     text = songItem.title,
@@ -294,72 +377,203 @@ fun ExpressiveDailyDiscoverCard(
             }
         }
     }
+
+    // ── Full Song List Bottom Sheet ───────────────────────────────────────────
+    if (showSongList) {
+        DailyDiscoverSongListSheet(
+            section = section,
+            nativeSongs = nativeSongs,
+            playerViewModel = playerViewModel,
+            sheetState = sheetState,
+            onDismiss = { showSongList = false }
+        )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DailyDiscoverSection(
-    sections: List<HomePage.Section>,
+private fun DailyDiscoverSongListSheet(
+    section: HomePage.Section,
+    nativeSongs: List<Song>,
     playerViewModel: PlayerViewModel,
-    navController: NavController,
-    localSongs: Map<String, Song> = emptyMap()
+    sheetState: androidx.compose.material3.SheetState,
+    onDismiss: () -> Unit
 ) {
-    if (sections.isEmpty()) return
+    val colors = MaterialTheme.colorScheme
+    val listState = rememberLazyListState()
 
-    // OPTIMIZED sorting: avoid heavy toNativeSong() in partition
-    // Use light heuristic: if SongItem.id is numeric or exists in localSongs map => offline/local
-    // Deterministic order: offline first, then online, preserving original order (no shuffle = no jank)
-    val sortedSections = remember(sections, localSongs) {
-        val offline = mutableListOf<HomePage.Section>()
-        val online = mutableListOf<HomePage.Section>()
-        for (sec in sections) {
-            val songItems = sec.items.filterIsInstance<SongItem>().take(3)
-            if (songItems.isEmpty()) {
-                online.add(sec)
-                continue
-            }
-            val hasLocal = songItems.any { item ->
-                // Fast checks: numeric id (DB) or present in localSongs
-                localSongs.containsKey(item.id) || item.id.toLongOrNull() != null
-            }
-            if (hasLocal) offline.add(sec) else online.add(sec)
-        }
-        // Deterministic, no shuffle to avoid recomposition thrashing
-        offline + online
-    }
-
-    val configuration = LocalConfiguration.current
-    val screenWidth = configuration.screenWidthDp.dp
-    val cardWidth = remember(screenWidth) { (screenWidth * 0.84f).coerceIn(280.dp, 340.dp) }
-    val pagerState = androidx.compose.foundation.pager.rememberPagerState { sortedSections.size }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = colors.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
-        SectionHeader(
-            title = "Your Daily Discover",
-            actionLabel = "See All",
-            onActionClick = {
-                navController.navigateSafely(Screen.PlaylistDetail.createRoute("daily_discover_all"))
-            }
-        )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // ── Sheet Header ──────────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 12.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = colors.primary
+                        )
+                        Text(
+                            text = "Daily Discover",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = section.title,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                        color = colors.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "${nativeSongs.size} songs",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant
+                    )
+                }
 
-        androidx.compose.foundation.pager.HorizontalPager(
-            state = pagerState,
-            pageSize = androidx.compose.foundation.pager.PageSize.Fixed(cardWidth),
-            pageSpacing = 12.dp,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            beyondViewportPageCount = 1, // only preload 1 page, not all
-            modifier = Modifier.fillMaxWidth()
-        ) { pageIndex ->
-            val section = sortedSections.getOrNull(pageIndex) ?: return@HorizontalPager
-            ExpressiveDailyDiscoverCard(
-                section = section,
-                playerViewModel = playerViewModel,
-                navController = navController,
-                localSongs = localSongs,
-                modifier = Modifier.width(cardWidth)
-            )
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Close",
+                        tint = colors.onSurfaceVariant
+                    )
+                }
+            }
+
+            // ── Play Controls Row ─────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .clickable {
+                            if (nativeSongs.isNotEmpty()) {
+                                playerViewModel.showAndPlaySong(
+                                    nativeSongs.first(),
+                                    nativeSongs,
+                                    section.title
+                                )
+                                onDismiss()
+                            }
+                        },
+                    color = colors.primary,
+                    shape = RoundedCornerShape(22.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.PlayArrow,
+                            contentDescription = null,
+                            tint = colors.onPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Play All",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = colors.onPrimary
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .clickable {
+                            if (nativeSongs.isNotEmpty()) {
+                                val shuffled = nativeSongs.shuffled()
+                                playerViewModel.playSongs(shuffled, shuffled.first(), section.title)
+                                onDismiss()
+                            }
+                        },
+                    color = colors.secondaryContainer,
+                    shape = RoundedCornerShape(22.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Rounded.Shuffle,
+                            contentDescription = null,
+                            tint = colors.onSecondaryContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "Shuffle",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = colors.onSecondaryContainer
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // ── Song List — lazy, only renders visible rows ───────────────────
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(
+                    start = 12.dp,
+                    end = 12.dp,
+                    bottom = 32.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                itemsIndexed(
+                    items = nativeSongs,
+                    key = { _, song -> "dd_sheet_song_${song.id}" }
+                ) { _, song ->
+                    EnhancedSongListItem(
+                        song = song,
+                        isPlaying = false,
+                        isCurrentSong = false,
+                        onClick = {
+                            playerViewModel.showAndPlaySong(
+                                song = song,
+                                contextSongs = nativeSongs,
+                                queueName = section.title
+                            )
+                            onDismiss()
+                        },
+                        onMoreOptionsClick = {
+                            playerViewModel.selectSongForInfo(song)
+                        }
+                    )
+                }
+            }
         }
     }
 }

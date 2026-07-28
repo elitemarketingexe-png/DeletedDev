@@ -58,7 +58,6 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
-import com.unshoo.pixelmusic.presentation.components.DailyDiscoverSection
 import com.unshoo.pixelmusic.presentation.components.ExpressiveDailyDiscoverCard
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.animation.core.spring
@@ -684,10 +683,28 @@ fun ExploreScreen(
                             }
                         }
 
-                        // Standalone Daily Discover Section (Material 3 Expressive)
+                        // Daily Discover Cards — flat lazy items, one per section.
+                        // Each card is its own lazy item: composed only when scrolled into view.
+                        // Color extracted per-index from theme (no Palette/bitmap work).
                         if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && cardShelfSections.isNotEmpty()) {
-                            item(key = "daily_discover_section") {
-                                DailyDiscoverSection(cardShelfSections, playerViewModel, navController, localSongs)
+                            item(key = "daily_discover_header", contentType = "section_header") {
+                                SectionHeader(title = "Your Daily Discover")
+                            }
+                            itemsIndexed(
+                                items = cardShelfSections,
+                                key = { index, section -> "dd_card_${index}_${section.title}" },
+                                contentType = { _, _ -> "daily_discover_card" }
+                            ) { index, section ->
+                                ExpressiveDailyDiscoverCard(
+                                    section = section,
+                                    playerViewModel = playerViewModel,
+                                    navController = navController,
+                                    localSongs = localSongs,
+                                    cardIndex = index,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                                )
                             }
                         }
 
