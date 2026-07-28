@@ -145,6 +145,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.json.Json
@@ -3152,6 +3153,190 @@ class PlayerViewModel @Inject constructor(
             } finally {
                 _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
             }
+        }
+    }
+
+    fun startArtistMixRadio(
+        artistName: String,
+        popularSongs: List<Song>,
+        songsMoreEndpoint: unshoo.ianshulyadav.pixelmusic.innertube.models.BrowseEndpoint? = null
+    ) {
+        viewModelScope.launch {
+            _playerUiState.update { it.copy(isLoadingInitialSongs = true) }
+            sendToast("Tuning Mix Radio for $artistName...")
+            
+            try {
+                val mixTracks = mutableListOf<Song>()
+                val cleanArtistName = artistName.trim()
+                
+                // 1. Gather local songs by the artist
+                val localSongs = withContext(Dispatchers.IO) {
+                    musicRepository.getSongsByArtistName(cleanArtistName, limit = 50)
+                }
+                mixTracks.addAll(localSongs)
+                
+                // 2. Try Last.fm if initialized
+                var lastFmSuccess = false
+                if (LastFM.isInitialized()) {
+                    val similarRes = withContext(Dispatchers.IO) {
+                        LastFM.get("artist.getsimilar", mapOf("artist" to cleanArtistName, "limit" to "12"))
+                            .getOrNull()
+                    }
+                    if (!similarRes.isNullOrBlank() && !similarRes.contains("\"error\"")) {
+                        val similarArtists = parseLastFmSimilarArtists(similarRes)
+                        if (similarArtists.isNotEmpty()) {
+                            lastFmSuccess = true
+                            
+                            // Fetch top tracks in parallel
+                            val deferredTracks = coroutineScope {
+                                val mainArtistTracksDeferred = async(Dispatchers.IO) {
+                                    fetchLastFmArtistTopTracks(cleanArtistName, limit = 15)
+                                }
+                                val similarArtistsTracksDeferred = similarArtists.take(8).map { similarArtist ->
+                                    async(Dispatchers.IO) {
+                                        fetchLastFmArtistTopTracks(similarArtist, limit = 3)
+                                    }
+                                }
+                                mainArtistTracksDeferred to similarArtistsTracksDeferred
+                            }
+                            
+                            val rawTracksList = mutableListOf<LastFmTrack>()
+                            rawTracksList.addAll(deferredTracks.first.await())
+                            deferredTracks.second.forEach {
+                                rawTracksList.addAll(it.await())
+                            }
+                            
+                            val shuffledRaw = rawTracksList.distinctBy { "${it.name.lowercase()} - ${it.artist.lowercase()}" }.shuffled()
+                            
+                            // Resolve top 25 tracks to YouTube songs in parallel
+                            val resolvedSongs = withContext(Dispatchers.IO) {
+                                shuffledRaw.take(25).map { track ->
+                                    async {
+                                        resolveTrackToYoutubeSongForMix(track)
+                                    }
+                                }.awaitAll().filterNotNull()
+                            }
+                            
+                            mixTracks.addAll(resolvedSongs)
+                        }
+                    }
+                }
+                
+                // 3. Fallback/Enrichment using YouTube Music recommendations
+                val hasEnoughSongs = mixTracks.distinctBy { it.youtubeId ?: it.id }.size >= 15
+                if (!hasEnoughSongs) {
+                    val allArtistSongs = (popularSongs + localSongs).distinctBy { it.youtubeId ?: it.id }
+                    var seedVideoId = allArtistSongs.firstOrNull { !it.youtubeId.isNullOrBlank() }?.youtubeId
+                        ?: allArtistSongs.firstOrNull { it.id.startsWith("youtube_") }?.id?.removePrefix("youtube_")
+                    
+                    if (seedVideoId == null) {
+                        val searchResult = withContext(Dispatchers.IO) {
+                            YouTube.search(cleanArtistName, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                        }
+                        val songItem = searchResult?.items?.filterIsInstance<unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem>()?.firstOrNull()
+                        seedVideoId = songItem?.id
+                    }
+                    
+                    if (seedVideoId != null) {
+                        val radioEndpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                            playlistId = "RDAMVM$seedVideoId",
+                            videoId = seedVideoId
+                        )
+                        val nextResult = withContext(Dispatchers.IO) {
+                            YouTube.next(radioEndpoint)
+                        }
+                        nextResult.onSuccess { nextData ->
+                            val radioSongs = nextData.items.map { it.toNativeSong() }
+                            mixTracks.addAll(radioSongs)
+                        }
+                    }
+                }
+                
+                val finalMixList = mixTracks.distinctBy { it.youtubeId ?: it.id }
+                
+                if (finalMixList.isNotEmpty()) {
+                    withContext(Dispatchers.IO) {
+                        saveYoutubeSongsToDb(finalMixList)
+                    }
+                    com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
+                    
+                    val mainArtistSongs = finalMixList.filter { 
+                        it.artist.contains(cleanArtistName, ignoreCase = true) 
+                    }
+                    val restSongs = finalMixList.filterNot { 
+                        it.artist.contains(cleanArtistName, ignoreCase = true) 
+                    }
+                    
+                    val shuffledMix = mutableListOf<Song>()
+                    if (mainArtistSongs.isNotEmpty()) {
+                        shuffledMix.add(mainArtistSongs.first())
+                        val remainingMain = mainArtistSongs.drop(1)
+                        shuffledMix.addAll((remainingMain + restSongs).shuffled())
+                    } else {
+                        shuffledMix.addAll(finalMixList.shuffled())
+                    }
+                    
+                    playSongs(shuffledMix, shuffledMix.first(), "$artistName Mix Radio")
+                } else {
+                    sendToast("No songs found to build Mix Radio")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Error launching artist Mix Radio")
+                sendToast("Failed to tune Mix Radio: ${e.localizedMessage ?: "Unknown error"}")
+            } finally {
+                _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+            }
+        }
+    }
+
+    private fun parseLastFmSimilarArtists(res: String): List<String> {
+        return try {
+            val json = Json { isLenient = true; ignoreUnknownKeys = true }
+            val root = json.parseToJsonElement(res).jsonObject
+            val artistArray = root["similarartists"]?.jsonObject?.get("artist") ?: return emptyList()
+            
+            val elements = if (artistArray is JsonArray) {
+                artistArray
+            } else {
+                buildJsonArray { add(artistArray) }
+            }
+            
+            elements.mapNotNull { element ->
+                element.jsonObject["name"]?.jsonPrimitive?.content
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private suspend fun fetchLastFmArtistTopTracks(artistName: String, limit: Int): List<LastFmTrack> {
+        return try {
+            val res = LastFM.get("artist.gettoptracks", mapOf("artist" to artistName, "limit" to limit.toString())).getOrNull()
+            if (res.isNullOrBlank() || res.contains("\"error\"")) return emptyList()
+            
+            val json = Json { isLenient = true; ignoreUnknownKeys = true }
+            val root = json.parseToJsonElement(res).jsonObject
+            val trackArray = root["toptracks"]?.jsonObject?.get("track") ?: return emptyList()
+            
+            val elements = if (trackArray is JsonArray) {
+                trackArray
+            } else {
+                buildJsonArray { add(trackArray) }
+            }
+            
+            elements.mapNotNull { element ->
+                val obj = element.jsonObject
+                val name = obj["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                val artistElement = obj["artist"]
+                val artist = when (artistElement) {
+                    is JsonPrimitive -> artistElement.content
+                    is JsonObject -> artistElement["name"]?.jsonPrimitive?.content ?: artistElement["#text"]?.jsonPrimitive?.content ?: ""
+                    else -> ""
+                }
+                LastFmTrack(name, if (artist.isNotBlank()) artist else artistName)
+            }
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 
