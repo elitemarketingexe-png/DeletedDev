@@ -697,7 +697,7 @@ fun ExploreScreen(
                             item(key = "daily_discover_cards", contentType = "daily_discover_row") {
                                 val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
                                 val cardWidth = remember(screenWidth) {
-                                    (screenWidth * 0.90f).coerceIn(280.dp, 400.dp)
+                                    (screenWidth - 32.dp).coerceAtLeast(280.dp)
                                 }
                                 LazyRow(
                                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
