@@ -301,9 +301,8 @@ class QuickPicksViewModel @Inject constructor(
         val uniqueSeedArtistNames = seedArtistNames.distinct().shuffled()
         val uniqueSeedArtistIds = seedArtistIds.distinct().shuffled()
 
-        // 2. Query different recommendation endpoints concurrently
-        // Bucket A: Song Mix Radios (fetch related radio mix for up to 3 distinct seed songs)
-        val songMixesDeferred = uniqueSeedSongs.take(3).map { (videoId, _) ->
+        // 2. Query recommendation endpoints concurrently (capped to 2 song mixes, 1 artist mix for performance)
+        val songMixesDeferred = uniqueSeedSongs.take(2).map { (videoId, _) ->
             async(Dispatchers.IO) {
                 try {
                     val radioResult = YouTube.next(
@@ -317,8 +316,8 @@ class QuickPicksViewModel @Inject constructor(
             }
         }
 
-        // Bucket B: Similar Artist Radios (fetch similar artist radio for up to 2 subscribed/frequent artists)
-        val artistRadiosDeferred = uniqueSeedArtistIds.take(2).map { artistId ->
+        // Bucket B: Similar Artist Radios (capped to 1 artist)
+        val artistRadiosDeferred = uniqueSeedArtistIds.take(1).map { artistId ->
             async(Dispatchers.IO) {
                 try {
                     val artistPage = YouTube.artist(artistId).getOrNull()
@@ -326,7 +325,6 @@ class QuickPicksViewModel @Inject constructor(
                     if (radioEndpoint != null) {
                         YouTube.next(radioEndpoint).getOrNull()?.items?.filterIsInstance<SongItem>()?.filterVideo(pureYtMusicOnly) ?: emptyList()
                     } else {
-                        // Fallback to top song's mix radio
                         val songsSection = artistPage?.sections?.find {
                             it.title.contains("songs", ignoreCase = true) ||
                             it.title.contains("popular", ignoreCase = true)
@@ -345,9 +343,9 @@ class QuickPicksViewModel @Inject constructor(
             }
         }
 
-        // If artist IDs are not available but we have artist names, search and fetch their radio
+        // If artist IDs are not available but we have artist names, search and fetch their radio (capped to 1)
         val artistNameRadiosDeferred = if (uniqueSeedArtistIds.isEmpty() && uniqueSeedArtistNames.isNotEmpty()) {
-            uniqueSeedArtistNames.take(2).map { artistName ->
+            uniqueSeedArtistNames.take(1).map { artistName ->
                 async(Dispatchers.IO) {
                     try {
                         val searchResult = YouTube.search(artistName, YouTube.SearchFilter.FILTER_ARTIST).getOrNull()
@@ -428,74 +426,48 @@ class QuickPicksViewModel @Inject constructor(
         val onlineHistorySongs = ytHistoryDeferred.await()
         val localPopularSongs = localPopularDeferred.await()
 
-        // 3. Blend, map, and de-duplicate
-        val combinedCandidates = mutableListOf<Song>()
-        (songMixSongs + artistRadioSongs + artistNameRadioSongs + homeRecSongs + onlineHistorySongs)
-            .map { it.toNativeSong() }
-            .let { combinedCandidates.addAll(it) }
-        combinedCandidates.addAll(localPopularSongs)
+        // 3. Blend, map, and de-duplicate on Default dispatcher (prevents main thread jank)
+        val deduplicated = withContext(Dispatchers.Default) {
+            val combinedCandidates = mutableListOf<Song>()
+            (songMixSongs + artistRadioSongs + artistNameRadioSongs + homeRecSongs + onlineHistorySongs)
+                .map { it.toNativeSong() }
+                .let { combinedCandidates.addAll(it) }
+            combinedCandidates.addAll(localPopularSongs)
 
-        var deduplicated = combinedCandidates.distinctBy { song ->
-            song.youtubeId?.takeIf { it.isNotBlank() } ?: "${song.title.lowercase()}|${song.artist.lowercase()}"
+            combinedCandidates.distinctBy { song ->
+                song.youtubeId?.takeIf { it.isNotBlank() } ?: "${song.title.lowercase()}|${song.artist.lowercase()}"
+            }
         }
 
-        // 4. Fallback: If not enough personalized items (e.g. fresh install/no history), fetch location-based trending charts/releases
-        if (deduplicated.size < 20) {
+        // 4. Fallback: If not enough items, fetch charts (skip heavy album detail parsing)
+        val finalDeduplicated = if (deduplicated.size < 15) {
             val countryCode = userPreferencesRepository.contentCountryFlow.first().uppercase()
-            
-            val chartsDeferred = async(Dispatchers.IO) {
-                try {
-                    val charts = YouTube.getChartsPage(countryCode).getOrNull()
-                        ?: YouTube.getChartsPage().getOrNull()
-                    charts?.sections
-                        ?.flatMap { it.items }
-                        ?.filterIsInstance<SongItem>()
-                        ?.filterVideo(pureYtMusicOnly)
-                        ?.map { it.toNativeSong() } ?: emptyList()
-                } catch (e: Exception) {
-                    emptyList()
+            val fallbackCharts = try {
+                val charts = withContext(Dispatchers.IO) {
+                    YouTube.getChartsPage(countryCode).getOrNull() ?: YouTube.getChartsPage().getOrNull()
                 }
+                charts?.sections
+                    ?.flatMap { it.items }
+                    ?.filterIsInstance<SongItem>()
+                    ?.filterVideo(pureYtMusicOnly)
+                    ?.map { it.toNativeSong() } ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
             }
 
-            val newReleasesDeferred = async(Dispatchers.IO) {
-                try {
-                    val albums = YouTube.newReleaseAlbums().getOrNull() ?: emptyList()
-                    val selectedAlbums = albums.shuffled().take(8)
-                    val songsPool = coroutineScope {
-                        selectedAlbums.map { album ->
-                            async {
-                                try {
-                                    YouTube.album(album.browseId).getOrNull()?.songs ?: emptyList()
-                                } catch (e: Exception) {
-                                    emptyList()
-                                }
-                            }
-                        }.flatMap { it.await() }
-                    }
-                    songsPool.filter { item ->
-                        if (pureYtMusicOnly) {
-                            val mvType = item.endpoint?.watchEndpointMusicSupportedConfigs
-                                ?.watchEndpointMusicConfig?.musicVideoType
-                            mvType == "MUSIC_VIDEO_TYPE_ATV" || mvType == null
-                        } else true
-                    }
-                    .map { it.toNativeSong() }
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            }
-
-            val fallbackCharts = chartsDeferred.await()
-            val fallbackNewReleases = newReleasesDeferred.await()
-
-            deduplicated = (deduplicated + fallbackCharts + fallbackNewReleases)
-                .distinctBy { song ->
+            withContext(Dispatchers.Default) {
+                (deduplicated + fallbackCharts).distinctBy { song ->
                     song.youtubeId?.takeIf { it.isNotBlank() } ?: "${song.title.lowercase()}|${song.artist.lowercase()}"
                 }
+            }
+        } else {
+            deduplicated
         }
 
         // Shuffle completely to make it dynamic on every view/refresh
-        deduplicated.shuffled().take(20)
+        withContext(Dispatchers.Default) {
+            finalDeduplicated.shuffled().take(20)
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
