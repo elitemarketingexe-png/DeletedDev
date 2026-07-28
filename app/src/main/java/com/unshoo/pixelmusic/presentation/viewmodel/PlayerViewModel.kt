@@ -2837,17 +2837,42 @@ class PlayerViewModel @Inject constructor(
             val query = "${track.name} ${track.artist}"
             val result = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
             val songsList = result?.items?.filterIsInstance<SongItem>()?.filterVideo(true).orEmpty()
-            
-            // Prefer ATV (official audio tracks)
-            val songItem = songsList.firstOrNull {
-                val musicVideoType = it.endpoint?.watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType
-                musicVideoType == "MUSIC_VIDEO_TYPE_ATV"
-            } ?: songsList.firstOrNull() ?: return null
 
+            // Prefer ATV (official audio tracks) that actually match the requested artist.
+            // Normalise both sides for a loose containment check so we reject unrelated
+            // videos that YouTube search surfaces (covers, remixes from wrong artists, etc.).
+            val trackArtistNorm = track.artist.trim().lowercase()
+            val trackTitleNorm  = track.name.trim().lowercase()
+
+            fun SongItem.isRelevant(): Boolean {
+                val native = this.toNativeSong()
+                val ytArtistNorm = native.artist.trim().lowercase()
+                val ytTitleNorm  = native.title.trim().lowercase()
+                // Accept if either artist contains the other, or title contains track name
+                val artistMatch = ytArtistNorm.contains(trackArtistNorm) ||
+                    trackArtistNorm.contains(ytArtistNorm)
+                val titleMatch  = ytTitleNorm.contains(trackTitleNorm) ||
+                    trackTitleNorm.contains(ytTitleNorm)
+                return artistMatch || titleMatch
+            }
+
+            // 1st preference: ATV + relevant
+            val songItem = songsList.firstOrNull { item ->
+                val musicVideoType = item.endpoint
+                    ?.watchEndpointMusicSupportedConfigs
+                    ?.watchEndpointMusicConfig?.musicVideoType
+                musicVideoType == "MUSIC_VIDEO_TYPE_ATV" && item.isRelevant()
+            }
+                // 2nd preference: any relevant result
+                ?: songsList.firstOrNull { it.isRelevant() }
+                // Reject entirely if no result matches — don't return random videos
+                ?: return null
+
+            // Keep YouTube's native metadata (title, artist, artwork, videoId) as-is.
+            // Overwriting with Last.fm strings was the original bug: it hid wrong videos
+            // behind the correct-looking name while the audio was completely different.
             val native = songItem.toNativeSong()
             native.copy(
-                title = if (track.name.isNotBlank()) track.name else native.title,
-                artist = if (track.artist.isNotBlank()) track.artist else native.artist,
                 album = native.album.takeIf { it.isNotBlank() && it != "YouTube Music" } ?: "YouTube Music"
             )
         } catch (e: Exception) {
@@ -2968,9 +2993,23 @@ class PlayerViewModel @Inject constructor(
             }
             
             if (songs.isNotEmpty()) {
-                val isAlreadyPlaying = dualPlayerEngine.masterPlayer.currentMediaItem?.mediaId == song.id
-                if (isAlreadyPlaying) {
-                    val player = dualPlayerEngine.masterPlayer
+                val player = dualPlayerEngine.masterPlayer
+                // BUGFIX: Never interrupt the currently playing song when building a Last.fm mix.
+                // The old code called playSongs() when the mediaId didn't match (e.g. local song
+                // id vs youtube_ id), which stopped & restarted playback from scratch.
+                // Instead, always do the non-disruptive queue replacement: clear everything after
+                // the current item and append the resolved mix tracks behind it.
+                withContext(Dispatchers.Main.immediate) {
+                    val currentItem = player.currentMediaItem
+                    val currentSongForQueue: Song = if (currentItem != null) {
+                        // Try to find the currently playing song in our queue state so the
+                        // displayed queue shows the real current track as position 0.
+                        _playerUiState.value.currentPlaybackQueue
+                            .firstOrNull { it.id == currentItem.mediaId } ?: song
+                    } else {
+                        song
+                    }
+
                     val totalCount = player.mediaItemCount
                     if (totalCount > 1) {
                         player.removeMediaItems(1, totalCount)
@@ -2979,16 +3018,12 @@ class PlayerViewModel @Inject constructor(
                     player.addMediaItems(mediaItems)
                     _playerUiState.update {
                         it.copy(
-                            currentPlaybackQueue = (listOf(song) + songs).toPlaybackQueue(),
+                            currentPlaybackQueue = (listOf(currentSongForQueue) + songs).toPlaybackQueue(),
                             currentQueueSourceName = "Mix: ${song.title}"
                         )
                     }
-                    sendToast("Tuned similar mix for '${song.title}'")
-                } else {
-                    val fullQueue = listOf(song) + songs
-                    playSongs(fullQueue, song, "Mix: ${song.title}")
-                    sendToast("Playing similar mix for '${song.title}'")
                 }
+                sendToast("Last.fm mix ready — ${songs.size} tracks queued")
             } else {
                 if (lastfmFailed) {
                     sendToast("Last.fm mix failed ($lastfmFailReason). Starting YouTube Music mix...")
