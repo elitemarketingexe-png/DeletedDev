@@ -35,10 +35,8 @@ private const val PREFS_NAME = "quick_picks_cache"
 private const val KEY_SONGS = "songs_json"
 private const val KEY_CATEGORIES = "categories_json"
 private const val KEY_CACHE_TIMESTAMP = "cache_timestamp"
-// Cache valid for 24 hours before absolute invalidation (hard expiry)
-private const val CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000L
-// Background refresh TTL for silent updates (soft expiry, e.g. 10 minutes)
-private const val BACKGROUND_REFRESH_TTL_MS = 10 * 60 * 1000L
+// Cache valid for 4 hours (shorter than before so new releases appear faster)
+private const val CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000L
 
 @HiltViewModel
 class QuickPicksViewModel @Inject constructor(
@@ -67,10 +65,9 @@ class QuickPicksViewModel @Inject constructor(
         // Immediately populate from cache so the UI shows something on relaunch
         loadFromCache()
         viewModelScope.launch {
-            loadQuickPicks(_selectedCategory.value, forceRefresh = isBackgroundRefreshNeeded())
             userPreferencesRepository.discoverFlow.collect { _ ->
                 if (_selectedCategory.value == "All") {
-                    loadQuickPicks("All", forceRefresh = isBackgroundRefreshNeeded())
+                    loadQuickPicks("All")
                 }
             }
         }
@@ -83,37 +80,16 @@ class QuickPicksViewModel @Inject constructor(
     }
 
     fun refresh() {
-        clearCache()
-        loadQuickPicks(_selectedCategory.value, forceRefresh = true)
+        loadQuickPicks(_selectedCategory.value)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Cache helpers
     // ─────────────────────────────────────────────────────────────────────────
 
-    private fun isCacheExpired(): Boolean {
-        val timestamp = prefs.getLong(KEY_CACHE_TIMESTAMP, 0L)
-        if (timestamp == 0L) return true
-        return (System.currentTimeMillis() - timestamp) > CACHE_MAX_AGE_MS
-    }
-
-    private fun isBackgroundRefreshNeeded(): Boolean {
-        val timestamp = prefs.getLong(KEY_CACHE_TIMESTAMP, 0L)
-        if (timestamp == 0L) return true
-        return (System.currentTimeMillis() - timestamp) > BACKGROUND_REFRESH_TTL_MS
-    }
-
-    private fun clearCache() {
-        prefs.edit().clear().apply()
-        _quickPicks.value = emptyList()
-    }
-
     private fun loadFromCache() {
         try {
-            if (isCacheExpired()) {
-                clearCache()
-                return
-            }
+            prefs.getString(KEY_SONGS, null) ?: return
             val songsJson = prefs.getString(KEY_SONGS, null) ?: return
             val categoriesJson = prefs.getString(KEY_CATEGORIES, null)
 
@@ -195,18 +171,8 @@ class QuickPicksViewModel @Inject constructor(
     // Main load entry point
     // ─────────────────────────────────────────────────────────────────────────
 
-    private fun loadQuickPicks(category: String, forceRefresh: Boolean = false) {
+    private fun loadQuickPicks(category: String) {
         viewModelScope.launch {
-            val cacheExpired = isCacheExpired()
-            val backgroundRefreshNeeded = isBackgroundRefreshNeeded()
-            val shouldRefresh = forceRefresh || cacheExpired || backgroundRefreshNeeded
-            if (category == "All" && !shouldRefresh && _quickPicks.value.isNotEmpty()) {
-                _isLoading.value = false
-                return@launch
-            }
-            if (cacheExpired) {
-                clearCache()
-            }
             if (_quickPicks.value.isEmpty()) {
                 _isLoading.value = true
             }
