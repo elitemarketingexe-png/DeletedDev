@@ -4108,7 +4108,9 @@ class PlayerViewModel @Inject constructor(
         val mediaId = mediaItem.mediaId
         val uri = mediaItem.localConfiguration?.uri ?: return
 
-        val isYoutube = mediaId.startsWith("youtube_")
+        val playingUriString = uri.toString()
+        val isYoutube = mediaId.startsWith("youtube_") &&
+                (playingUriString.contains("googlevideo.com") || playingUriString.contains("youtube.com"))
         if (isYoutube) {
             val videoId = mediaId.substringAfter("youtube_")
             
@@ -4213,13 +4215,51 @@ class PlayerViewModel @Inject constructor(
         metadataProbeMediaId = mediaId
         metadataProbeJob = viewModelScope.launch(Dispatchers.IO) {
             val probedMetadata = runCatching {
+                var sourceUri = uri
+                var expectedSize: Long? = null
+                val uriStr = uri.toString()
+
+                if (uriStr.contains("127.0.0.1") && uriStr.contains("/stream/")) {
+                    val fileId = uriStr.substringAfter("/stream/").substringBefore("?").substringBefore("/").toIntOrNull()
+                    if (fileId != null) {
+                        val fileInfo = runCatching { musicRepository.telegramRepository.getFile(fileId) }.getOrNull()
+                        if (fileInfo != null) {
+                            expectedSize = fileInfo.expectedSize.takeIf { it > 0 }
+                            if (!fileInfo.local.path.isNullOrEmpty()) {
+                                val file = java.io.File(fileInfo.local.path)
+                                if (file.exists() && file.canRead()) {
+                                    sourceUri = Uri.fromFile(file)
+                                }
+                            }
+                        }
+                    }
+                } else if (uriStr.startsWith("telegram://")) {
+                    val fileId = runCatching { musicRepository.telegramRepository.resolveTelegramUri(uriStr)?.first }.getOrNull()
+                    if (fileId != null) {
+                        val fileInfo = runCatching { musicRepository.telegramRepository.getFile(fileId) }.getOrNull()
+                        if (fileInfo != null) {
+                            expectedSize = fileInfo.expectedSize.takeIf { it > 0 }
+                            if (!fileInfo.local.path.isNullOrEmpty()) {
+                                val file = java.io.File(fileInfo.local.path)
+                                if (file.exists() && file.canRead()) {
+                                    sourceUri = Uri.fromFile(file)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 val retriever = MediaMetadataRetriever()
                 try {
-                    retriever.setDataSource(context, uri)
+                    if (sourceUri.scheme == "file") {
+                        retriever.setDataSource(sourceUri.path)
+                    } else {
+                        retriever.setDataSource(context, sourceUri)
+                    }
                     val mimeType = retriever
                         .extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE)
                         ?.takeIf { it.isNotBlank() }
-                        ?: context.contentResolver.getType(uri)
+                        ?: context.contentResolver.getType(sourceUri)
                     val bitrate = retriever
                         .extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
                         ?.toIntOrNull()
@@ -4229,10 +4269,22 @@ class PlayerViewModel @Inject constructor(
                             ?.toIntOrNull()
                             ?.takeIf { it > 0 }
                     } else null
+                    
+                    var finalBitrate = bitrate
+                    if (finalBitrate == null || finalBitrate <= 0) {
+                        val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                        if (durationMs != null && durationMs > 0) {
+                            val sizeInBytes = expectedSize ?: (if (sourceUri.scheme == "file") sourceUri.path?.let { java.io.File(it).length() } else null)
+                            if (sizeInBytes != null && sizeInBytes > 0) {
+                                finalBitrate = ((sizeInBytes * 8) / (durationMs / 1000.0)).toInt()
+                            }
+                        }
+                    }
+                    
                     PlaybackAudioMetadata(
                         mediaId = mediaId,
                         mimeType = mimeType,
-                        bitrate = bitrate,
+                        bitrate = finalBitrate,
                         sampleRate = sampleRate
                     )
                 } finally {
