@@ -1020,28 +1020,10 @@ fun AnimatedSparklesIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "sparkle_animation")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "sparkle_scale"
-    )
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = -12f,
-        targetValue = 12f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "sparkle_rotation"
-    )
-
+    // OPTIMIZED: Removed rememberInfiniteTransition (2 continuous animations running in top bar)
+    // Previous version had scale + rotation infinite loops constantly invalidating composition.
+    // Now static gradient button with simple click, zero background work.
     val colors = MaterialTheme.colorScheme
-    // Exciting gradient background for the button
     val gradientBrush = remember(colors) {
         Brush.linearGradient(
             colors = listOf(
@@ -1052,19 +1034,12 @@ fun AnimatedSparklesIconButton(
     }
 
     Box(
-        modifier = modifier
-            .size(48.dp),
+        modifier = modifier.size(48.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Exciting premium icon button with gradient and micro-animation
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    rotationZ = rotation
-                }
                 .clip(CircleShape)
                 .background(gradientBrush)
                 .clickable(onClick = onClick),
@@ -1393,6 +1368,9 @@ fun ExploreTopBar(
     onCreateClick: () -> Unit,
     isScrolled: Boolean = false,
 ) {
+    // OPTIMIZED: Removed animateColorAsState and animateDpAsState that ran on every scroll threshold change.
+    // Previously each scroll past threshold triggered 300ms animation recomposing top bar each frame.
+    // Now static switch without animation - instant, zero extra recomposition.
     val baseContainerColor = MaterialTheme.colorScheme.primaryContainer
     val surfaceColor = MaterialTheme.colorScheme.surface
     val solidTintedColor = remember(baseContainerColor, surfaceColor) {
@@ -1403,28 +1381,13 @@ fun ExploreTopBar(
             alpha = 1f
         )
     }
-    val targetContainerColor = if (isScrolled) {
-        solidTintedColor
-    } else {
-        baseContainerColor.copy(alpha = 0.4f)
-    }
-    val animatedContainerColor by animateColorAsState(
-        targetValue = targetContainerColor,
-        animationSpec = tween(durationMillis = 300),
-        label = "explore_topbar_color"
-    )
-
-    val targetCornerRadius = if (isScrolled) 28.dp else 24.dp
-    val animatedCornerRadius by animateDpAsState(
-        targetValue = targetCornerRadius,
-        animationSpec = tween(durationMillis = 300),
-        label = "explore_topbar_corner"
-    )
+    val containerColor = if (isScrolled) solidTintedColor else baseContainerColor.copy(alpha = 0.4f)
+    val cornerRadius = if (isScrolled) 28.dp else 24.dp
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(bottomStart = animatedCornerRadius, bottomEnd = animatedCornerRadius),
-        color = animatedContainerColor,
+        shape = RoundedCornerShape(bottomStart = cornerRadius, bottomEnd = cornerRadius),
+        color = containerColor,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Row(
@@ -1829,26 +1792,21 @@ private fun LibrarySwipeableCarousel(
     navController: NavController,
     playerViewModel: PlayerViewModel
 ) {
-    val items = section.items.take(8)
+    // OPTIMIZED: Removed auto-scroll while(true) loop that ran continuous animateScrollToPage every 4.5s.
+    // That loop kept a coroutine active even when Composable not visible, causing jank.
+    // Now static pager, user-driven only, with precomputed native songs to avoid repeated toNativeSong()
+    val items = remember(section.items) { section.items.take(6) } // reduced from 8 to 6 for perf
     if (items.isEmpty()) return
     val pagerState = rememberPagerState(pageCount = { items.size })
     val scope = rememberCoroutineScope()
-
-    val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
-    LaunchedEffect(pagerState, isDragged) {
-        while (!isDragged && items.size > 1) {
-            kotlinx.coroutines.delay(4500L) // Increase to 4.5s for calmer, less busy visual polish
-            val nextPage = (pagerState.currentPage + 1) % items.size
-            pagerState.animateScrollToPage(
-                page = nextPage,
-                animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing)
-            )
-        }
+    // Precompute native songs once to avoid mapping inside click lambda repeatedly
+    val songItemsNative = remember(items) {
+        items.filterIsInstance<SongItem>().map { it.toNativeSong() }
     }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         SectionHeader(title = section.title)
 
@@ -1864,11 +1822,14 @@ private fun LibrarySwipeableCarousel(
                 item = item,
                 onClick = {
                     when (item) {
-                        is SongItem -> playerViewModel.showAndPlaySong(
-                            item.toNativeSong(),
-                            items.filterIsInstance<SongItem>().map { it.toNativeSong() },
-                            section.title
-                        )
+                        is SongItem -> {
+                            val native = songItemsNative.firstOrNull { it.id == item.id } ?: item.toNativeSong()
+                            playerViewModel.showAndPlaySong(
+                                native,
+                                songItemsNative,
+                                section.title
+                            )
+                        }
                         is AlbumItem -> navController.navigateSafely(Screen.AlbumDetail.createRoute(item.browseId))
                         is ArtistItem -> navController.navigateSafely(Screen.ArtistDetail.createRoute(item.id))
                         is PlaylistItem -> navController.navigateSafely(Screen.PlaylistDetail.createRoute(item.id))
@@ -1877,7 +1838,7 @@ private fun LibrarySwipeableCarousel(
             )
         }
 
-        // Dot page indicator
+        // Dot indicator - static width, no animateDpAsState per dot (reduces recomposition)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
@@ -1885,24 +1846,16 @@ private fun LibrarySwipeableCarousel(
         ) {
             repeat(items.size) { page ->
                 val isSelected = pagerState.currentPage == page
-                val animatedWidth by androidx.compose.animation.core.animateDpAsState(
-                    targetValue = if (isSelected) 22.dp else 6.dp,
-                    animationSpec = spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow),
-                    label = "indicator_width_$page"
-                )
-                val dotColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.outlineVariant,
-                    animationSpec = tween(180),
-                    label = "indicator_color_$page"
-                )
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 3.dp)
                         .height(6.dp)
-                        .width(animatedWidth)
+                        .width(if (isSelected) 20.dp else 6.dp)
                         .clip(CircleShape)
-                        .background(dotColor)
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outlineVariant
+                        )
                         .clickable { scope.launch { pagerState.animateScrollToPage(page) } }
                 )
             }

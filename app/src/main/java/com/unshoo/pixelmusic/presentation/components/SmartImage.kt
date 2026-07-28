@@ -58,6 +58,12 @@ interface SmartImageEntryPoint {
     fun userPreferencesRepository(): UserPreferencesRepository
 }
 
+// OPTIMIZED: Static pre-compiled regex to avoid allocation per SmartImage composable
+private object SmartImageRegex {
+    val sizeParamRegex = Regex("=[ws]\\d+.*")
+    val sizeParamRegex2 = Regex("/[ws]\\d+.*")
+}
+
 val SmartImageCompactListTargetSize = Size(96, 96)
 val SmartImageListTargetSize = Size(128, 128)
 private val DefaultSmartImageSize = Size(300, 300)
@@ -151,6 +157,8 @@ fun SmartImage(
         return
     }
 
+    // OPTIMIZED: Pre-compiled regex patterns (avoid compiling Regex on every composition)
+    // These were previously created inside remember{} on each SmartImage call - now static.
     val request = remember(
         context,
         model,
@@ -163,12 +171,10 @@ fun SmartImage(
         val optimizedModel = if (model is String && (model.contains("googleusercontent.com") || model.contains("ggpht.com"))) {
             val widthPx = (requestTargetSize.width as? coil.size.Dimension.Pixels)?.px ?: 300
             val heightPx = (requestTargetSize.height as? coil.size.Dimension.Pixels)?.px ?: 300
-            val sizeParamRegex = Regex("=[ws]\\d+.*")
-            val sizeParamRegex2 = Regex("/[ws]\\d+.*")
-            if (sizeParamRegex.containsMatchIn(model)) {
-                model.replace(sizeParamRegex, "=w$widthPx-h$heightPx-c-rj")
-            } else if (sizeParamRegex2.containsMatchIn(model)) {
-                model.replace(sizeParamRegex2, "/w$widthPx-h$heightPx-c-rj")
+            if (SmartImageRegex.sizeParamRegex.containsMatchIn(model)) {
+                model.replace(SmartImageRegex.sizeParamRegex, "=w$widthPx-h$heightPx-c-rj")
+            } else if (SmartImageRegex.sizeParamRegex2.containsMatchIn(model)) {
+                model.replace(SmartImageRegex.sizeParamRegex2, "/w$widthPx-h$heightPx-c-rj")
             } else if (model.contains("=")) {
                 model.substringBeforeLast("=") + "=w$widthPx-h$heightPx-c-rj"
             } else {

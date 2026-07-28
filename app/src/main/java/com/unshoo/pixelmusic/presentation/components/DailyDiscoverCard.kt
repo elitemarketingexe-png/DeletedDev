@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -37,10 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,11 +55,17 @@ import unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem
 import unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage
 
 /**
- * Material 3 Expressive Daily Discover & Mixed For You Card.
- * Designed according to Google's Material 3 Expressive guidelines for Android 17 (2026).
- * Features dynamic artwork palette extraction, layered squircle surfaces, crisp M3 typography,
- * and horizontal scrollable song list cards.
+ * OPTIMIZED Material 3 Expressive Daily Discover Card.
+ *
+ * Fixes lag introduced by previous Daily Discover implementation:
+ * - Partition logic called toNativeSong() for every SongItem on every recomposition (heavy allocation)
+ *   Replaced with lightweight check using localSongs map + numeric ID heuristic
+ * - Shuffled sections on every remember caused recomposition + reordering jank; now stable deterministic order
+ * - HorizontalPager with dynamic card width is okay, but avoid nested scrollable inside LazyColumn causing issues
+ * - Card's LazyRow items previously called toNativeSong fallback even when nativeSongs already available
+ * - Using rememberDominantCardColor which is now optimized (disk cache file + semaphore)
  */
+
 @Composable
 fun ExpressiveDailyDiscoverCard(
     section: HomePage.Section,
@@ -74,11 +77,14 @@ fun ExpressiveDailyDiscoverCard(
     val colors = MaterialTheme.colorScheme
     val isDark = isSystemInDarkTheme()
 
+    // Filter once, stable
     val songs = remember(section.items) {
         section.items.filterIsInstance<SongItem>()
     }
+    // Convert to native only once; reuse localSongs map if present (DB hit already cached in VM)
     val nativeSongs = remember(songs, localSongs) {
-        songs.map { localSongs[it.id] ?: it.toNativeSong() }
+        // Avoid mapping entire list if localSongs large? It's map lookup O(1)
+        songs.map { item -> localSongs[item.id] ?: item.toNativeSong() }
     }
 
     val cardThumbnail = remember(section, songs) {
@@ -90,8 +96,8 @@ fun ExpressiveDailyDiscoverCard(
         imageUrl = cardThumbnail,
         baseColor = colors.surfaceContainerHigh,
         isDarkTheme = isDark,
-        darkBlendFraction = 0.32f,
-        lightBlendFraction = 0.50f
+        darkBlendFraction = 0.28f,
+        lightBlendFraction = 0.42f
     )
 
     val outerShape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
@@ -100,22 +106,20 @@ fun ExpressiveDailyDiscoverCard(
     Card(
         modifier = modifier.wrapContentHeight(),
         shape = outerShape,
-        colors = CardDefaults.cardColors(
-            containerColor = animatedBackground
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        colors = CardDefaults.cardColors(containerColor = animatedBackground),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Header: Badge & Controls
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp),
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -143,8 +147,7 @@ fun ExpressiveDailyDiscoverCard(
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Radio Button
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilledTonalIconButton(
                         onClick = {
                             if (nativeSongs.isNotEmpty()) {
@@ -155,7 +158,7 @@ fun ExpressiveDailyDiscoverCard(
                                 )
                             }
                         },
-                        modifier = Modifier.size(38.dp),
+                        modifier = Modifier.size(36.dp),
                         colors = IconButtonDefaults.filledTonalIconButtonColors(
                             containerColor = colors.surfaceContainerHighest,
                             contentColor = colors.onSurface
@@ -164,11 +167,9 @@ fun ExpressiveDailyDiscoverCard(
                         Icon(
                             imageVector = Icons.Rounded.Shuffle,
                             contentDescription = "Radio ${section.title}",
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
-
-                    // Play Button
                     FilledIconButton(
                         onClick = {
                             if (nativeSongs.isNotEmpty()) {
@@ -179,7 +180,7 @@ fun ExpressiveDailyDiscoverCard(
                                 )
                             }
                         },
-                        modifier = Modifier.size(38.dp),
+                        modifier = Modifier.size(36.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = colors.primary,
                             contentColor = colors.onPrimary
@@ -188,17 +189,16 @@ fun ExpressiveDailyDiscoverCard(
                         Icon(
                             imageVector = Icons.Rounded.PlayArrow,
                             contentDescription = "Play ${section.title}",
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
             }
 
-            // Mix Title & Subtitle
-            Column(modifier = Modifier.padding(horizontal = 18.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 Text(
                     text = section.title,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
                     color = colors.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -206,7 +206,7 @@ fun ExpressiveDailyDiscoverCard(
                 if (!section.label.isNullOrBlank()) {
                     Text(
                         text = section.label,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = colors.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -214,16 +214,16 @@ fun ExpressiveDailyDiscoverCard(
                 }
             }
 
-            // Horizontal Scrollable Song Cards List (Fits exactly 3 song cards)
+            // Horizontal song cards - limited to first 8 for performance
             LazyRow(
-                contentPadding = PaddingValues(horizontal = 14.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                itemsIndexed(songs) { index, songItem ->
-                    val nativeSong = nativeSongs.getOrNull(index) ?: songItem.toNativeSong()
+                itemsIndexed(songs.take(8)) { index, songItem ->
+                    val nativeSong = nativeSongs.getOrNull(index) ?: return@itemsIndexed
                     Surface(
                         modifier = Modifier
-                            .width(98.dp)
+                            .width(96.dp)
                             .clip(songCardShape)
                             .clickable {
                                 playerViewModel.showAndPlaySong(
@@ -243,7 +243,7 @@ fun ExpressiveDailyDiscoverCard(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(86.dp),
+                                    .height(84.dp),
                                 contentAlignment = Alignment.BottomEnd
                             ) {
                                 SmartImage(
@@ -260,7 +260,7 @@ fun ExpressiveDailyDiscoverCard(
                                     contentColor = colors.onPrimary,
                                     modifier = Modifier
                                         .padding(4.dp)
-                                        .size(24.dp)
+                                        .size(22.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Rounded.PlayArrow,
@@ -305,18 +305,26 @@ fun DailyDiscoverSection(
 ) {
     if (sections.isEmpty()) return
 
-    // Order sections so offline local/downloaded cards appear first if available, followed by all online discovery cards
+    // OPTIMIZED sorting: avoid heavy toNativeSong() in partition
+    // Use light heuristic: if SongItem.id is numeric or exists in localSongs map => offline/local
+    // Deterministic order: offline first, then online, preserving original order (no shuffle = no jank)
     val sortedSections = remember(sections, localSongs) {
-        val (offline, online) = sections.partition { section ->
-            section.items.filterIsInstance<SongItem>().any { songItem ->
-                val nativeSong = songItem.toNativeSong()
-                val isLocalPath = !nativeSong.path.isNullOrEmpty() && (nativeSong.path.startsWith("/") || nativeSong.path.contains(":") || nativeSong.path.startsWith("content://") || nativeSong.path.startsWith("file://"))
-                val isContentUri = nativeSong.contentUriString.startsWith("content://") || nativeSong.contentUriString.startsWith("file://")
-                val isOnlineStream = nativeSong.telegramFileId != null || nativeSong.contentUriString.startsWith("tg://") || nativeSong.path.startsWith("tg://") || nativeSong.contentUriString.startsWith("http")
-                (isLocalPath || isContentUri) && !isOnlineStream
+        val offline = mutableListOf<HomePage.Section>()
+        val online = mutableListOf<HomePage.Section>()
+        for (sec in sections) {
+            val songItems = sec.items.filterIsInstance<SongItem>().take(3)
+            if (songItems.isEmpty()) {
+                online.add(sec)
+                continue
             }
+            val hasLocal = songItems.any { item ->
+                // Fast checks: numeric id (DB) or present in localSongs
+                localSongs.containsKey(item.id) || item.id.toLongOrNull() != null
+            }
+            if (hasLocal) offline.add(sec) else online.add(sec)
         }
-        offline.shuffled() + online.shuffled()
+        // Deterministic, no shuffle to avoid recomposition thrashing
+        offline + online
     }
 
     val configuration = LocalConfiguration.current
@@ -326,7 +334,7 @@ fun DailyDiscoverSection(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         SectionHeader(
             title = "Your Daily Discover",
@@ -341,9 +349,10 @@ fun DailyDiscoverSection(
             pageSize = androidx.compose.foundation.pager.PageSize.Fixed(cardWidth),
             pageSpacing = 12.dp,
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            beyondViewportPageCount = 1, // only preload 1 page, not all
             modifier = Modifier.fillMaxWidth()
         ) { pageIndex ->
-            val section = sortedSections[pageIndex]
+            val section = sortedSections.getOrNull(pageIndex) ?: return@HorizontalPager
             ExpressiveDailyDiscoverCard(
                 section = section,
                 playerViewModel = playerViewModel,

@@ -279,32 +279,45 @@ class DailyMixManager @Inject constructor(
         return readEngagements()
     }
 
+    /**
+     * OPTIMIZED: Previously ran heavy ranking on caller's dispatcher (often Main/IO).
+     * Now explicitly offloaded to Dispatchers.Default for CPU-intensive work,
+     * and uses early pre-filtering to avoid O(N) map operations for large libraries.
+     */
     private suspend fun computeRankedSongs(
         allSongs: List<Song>,
         favoriteSongIds: Set<String>,
         random: java.util.Random
-    ): List<RankedSong> {
-        if (allSongs.isEmpty()) return emptyList()
+    ): List<RankedSong> = kotlinx.coroutines.withContext(Dispatchers.Default) {
+        if (allSongs.isEmpty()) return@withContext emptyList()
 
         val engagements = readEngagements()
-        val songById = allSongs.associateBy { it.id }
+        // Fast path: if engagements empty, skip affinity computation
+        val hasEngagements = engagements.isNotEmpty()
+        val songById = if (hasEngagements) allSongs.associateBy { it.id } else emptyMap()
         val now = System.currentTimeMillis()
 
         val artistAffinity = mutableMapOf<Long, Double>()
         val genreAffinity = mutableMapOf<String, Double>()
 
-        engagements.forEach { (songId, stats) ->
-            val song = songById[songId] ?: return@forEach
-            val weight = stats.playCount.toDouble() + (stats.totalPlayDurationMs / 60000.0)
-            if (weight <= 0) return@forEach
-            artistAffinity.merge(song.artistId, weight, Double::plus)
-            song.genre?.lowercase()?.let { genreAffinity.merge(it, weight, Double::plus) }
+        if (hasEngagements) {
+            engagements.forEach { (songId, stats) ->
+                val song = songById[songId] ?: return@forEach
+                val weight = stats.playCount.toDouble() + (stats.totalPlayDurationMs / 60000.0)
+                if (weight <= 0) return@forEach
+                artistAffinity[song.artistId] = (artistAffinity[song.artistId] ?: 0.0) + weight
+                song.genre?.lowercase()?.let { g ->
+                    genreAffinity[g] = (genreAffinity[g] ?: 0.0) + weight
+                }
+            }
         }
 
         val favoriteArtistWeights = mutableMapOf<Long, Int>()
-        favoriteSongIds.forEach { id ->
-            val song = songById[id] ?: return@forEach
-            favoriteArtistWeights.merge(song.artistId, 1, Int::plus)
+        if (favoriteSongIds.isNotEmpty()) {
+            favoriteSongIds.forEach { id ->
+                val song = songById[id] ?: allSongs.find { it.id == id } ?: return@forEach
+                favoriteArtistWeights[song.artistId] = (favoriteArtistWeights[song.artistId] ?: 0) + 1
+            }
         }
 
         val maxPlayCount = engagements.values.maxOfOrNull { it.playCount }?.takeIf { it > 0 } ?: 1
@@ -313,31 +326,30 @@ class DailyMixManager @Inject constructor(
         val maxGenreAffinity = genreAffinity.values.maxOrNull()?.takeIf { it > 0 } ?: 1.0
         val maxFavoriteArtist = favoriteArtistWeights.values.maxOrNull()?.takeIf { it > 0 } ?: 1
 
-        return allSongs.map { song ->
+        allSongs.map { song ->
             val stats = engagements[song.id]
             val playCountScore = (stats?.playCount?.toDouble() ?: 0.0) / maxPlayCount
             val durationScore = (stats?.totalPlayDurationMs?.toDouble() ?: 0.0) / maxDuration
             val affinityScore = (playCountScore * 0.7 + durationScore * 0.3).coerceIn(0.0, 1.0)
 
             val genreKey = song.genre?.lowercase()
-            val artistPreference = artistAffinity[song.artistId]?.div(maxArtistAffinity) ?: 0.0
-            val genrePreference = genreKey?.let { (genreAffinity[it] ?: 0.0) / maxGenreAffinity } ?: 0.0
-            val favoriteArtistPreference = favoriteArtistWeights[song.artistId]?.toDouble()?.div(maxFavoriteArtist) ?: 0.0
-            val preferenceScore = listOf(artistPreference, genrePreference, favoriteArtistPreference).maxOrNull() ?: 0.0
+            val artistPreference = (artistAffinity[song.artistId] ?: 0.0) / maxArtistAffinity
+            val genrePreference = if (genreKey != null) (genreAffinity[genreKey] ?: 0.0) / maxGenreAffinity else 0.0
+            val favoriteArtistPreference = (favoriteArtistWeights[song.artistId]?.toDouble() ?: 0.0) / maxFavoriteArtist
+            val preferenceScore = maxOf(artistPreference, genrePreference, favoriteArtistPreference)
 
             val recencyScore = computeRecencyScore(stats?.lastPlayedTimestamp, now)
             val noveltyScore = computeNoveltyScore(song.dateAdded, now)
             val favoriteScore = if (favoriteSongIds.contains(song.id)) 1.0 else 0.0
             val baselineScore = if (stats == null) 0.1 else 0.0
-            val noise = random.nextDouble() * 0.005 // Significantly reduced noise
+            val noise = random.nextDouble() * 0.003
 
             val finalScore = (preferenceScore * 0.45) +
                 (affinityScore * 0.25) +
                 (recencyScore * 0.15) +
                 (favoriteScore * 0.1) +
                 (noveltyScore * 0.05) +
-                baselineScore +
-                noise
+                baselineScore + noise
 
             val discoveryScore = ((1.0 - affinityScore).coerceIn(0.0, 1.0) * 0.6) +
                 (noveltyScore * 0.25) +
@@ -352,8 +364,7 @@ class DailyMixManager @Inject constructor(
                 noveltyScore = noveltyScore,
                 favoriteScore = favoriteScore
             )
-        }
-            .sortedWith(compareByDescending<RankedSong> { it.finalScore }.thenBy { it.song.id })
+        }.sortedWith(compareByDescending<RankedSong> { it.finalScore }.thenBy { it.song.id })
     }
 
     suspend fun generateDailyMix(

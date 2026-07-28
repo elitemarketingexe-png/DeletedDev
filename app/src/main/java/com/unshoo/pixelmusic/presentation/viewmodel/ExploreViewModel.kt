@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import com.unshoo.pixelmusic.data.database.ArtistPlayCountRow
 import timber.log.Timber
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
@@ -67,17 +68,9 @@ class ExploreViewModel @Inject constructor(
     private var stage3Job: kotlinx.coroutines.Job? = null
 
     companion object {
-        /**
-         * How long cached/previously-loaded Explore content is considered fresh enough to show
-         * without a background refetch. The homepage feed is a curated/recommendation surface
-         * that changes over the course of a day, not minute to minute, so this favors instant
-         * perceived load (always show what we have immediately) over strict freshness - but
-         * without it being frozen indefinitely between manual pull-to-refreshes.
-         */
         private const val STALE_CONTENT_MS = 2 * 60 * 60 * 1000L // 2 hours
+        private const val STAGE2_DELAY_MS = 800L // increased from 500 to let first frame settle
     }
-
-    private val explorePrefs by lazy { context.getSharedPreferences("explore_guest_cache", Context.MODE_PRIVATE) }
 
     init {
         viewModelScope.launch {
@@ -100,7 +93,6 @@ class ExploreViewModel @Inject constructor(
         }
     }
 
-
     /** Wall-clock time the content currently in [_uiState] was fetched (0 = unknown/never). */
     private var lastContentTimestamp: Long = 0L
 
@@ -117,23 +109,33 @@ class ExploreViewModel @Inject constructor(
     private fun restoreFromCache() {
         try {
             if (cacheFile.exists()) {
+                // Avoid reading huge cache (>500KB) - corrupted or stale
+                if (cacheFile.length() > 512 * 1024) {
+                    cacheFile.delete()
+                    return
+                }
                 val json = cacheFile.readText()
                 val cache = gson.fromJson(json, ExploreCacheModel::class.java)
                 if (cache != null && (cache.sections.isNotEmpty() || cache.albums.isNotEmpty() || cache.charts != null)) {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = true, // still loading fresh data
-                            homePageSections = cache.sections,
-                            homePageContinuation = cache.continuation,
-                            newReleaseAlbums = cache.albums,
-                            chartsPage = cache.charts
-                        )
+                    // Check staleness: if older than 12h, don't use for UI but keep for fallback
+                    val age = System.currentTimeMillis() - cache.timestamp
+                    if (age < 12 * 60 * 60 * 1000L) {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = true,
+                                homePageSections = cache.sections,
+                                homePageContinuation = cache.continuation,
+                                newReleaseAlbums = cache.albums,
+                                chartsPage = cache.charts
+                            )
+                        }
+                        lastContentTimestamp = cache.timestamp
                     }
-                    lastContentTimestamp = cache.timestamp
                 }
             }
         } catch (e: Exception) {
             Timber.e(e, "Failed to restore explore data from cache")
+            try { cacheFile.delete() } catch (_: Exception) {}
         }
     }
 
@@ -141,14 +143,16 @@ class ExploreViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val cache = ExploreCacheModel(
-                    sections = state.homePageSections,
-                    albums = state.newReleaseAlbums,
+                    sections = state.homePageSections.take(20), // cap to 20 sections to keep file small
+                    albums = state.newReleaseAlbums.take(30),
                     charts = state.chartsPage,
                     continuation = state.homePageContinuation,
                     timestamp = System.currentTimeMillis()
                 )
                 val json = gson.toJson(cache)
-                cacheFile.writeText(json)
+                if (json.length < 400 * 1024) { // only persist if <400KB
+                    cacheFile.writeText(json)
+                }
             } catch (e: Exception) {
                 Timber.e(e, "Failed to persist explore data to cache")
             }
@@ -168,30 +172,18 @@ class ExploreViewModel @Inject constructor(
         if (forceRefresh) {
             _uiState.update { it.copy(isRefreshing = true, error = null) }
         } else {
-            // Only show loading spinner if we have no cached data at all
             val hasCachedData = _uiState.value.homePageSections.isNotEmpty() ||
                     _uiState.value.newReleaseAlbums.isNotEmpty() ||
                     _uiState.value.chartsPage != null
             _uiState.update { it.copy(isLoading = !hasCachedData, error = null) }
         }
         try {
-            // 1. Get history and candidateArtistId immediately (fast database/prefs calls)
-            // Prefer merged local + YT Music history (kept hot by ListeningStatsTracker).
-            // Fall back to disk-only local history if the tracker has not initialized yet.
+            // Fast path: history + dbArtists in single IO block
             val history = withContext(Dispatchers.IO) {
                 listeningStatsTracker.refreshMergedYoutubeHistory()
                 val merged = listeningStatsTracker.playbackHistory.value
-                if (merged.isNotEmpty()) {
-                    merged.take(30)
-                } else {
-                    playbackStatsRepository.loadPlaybackHistory(limit = 30)
-                }
+                if (merged.isNotEmpty()) merged.take(20) else playbackStatsRepository.loadPlaybackHistory(limit = 20)
             }
-            val candidateArtistId = withContext(Dispatchers.IO) {
-                userPreferencesRepository.subscribedArtistIdsFlow.first().firstOrNull()
-            }
-            
-            // Query database for library artists with valid channel IDs to personalize New Releases
             val dbArtists = withContext(Dispatchers.IO) {
                 try {
                     musicDao.getAllArtistsListRaw()
@@ -199,10 +191,6 @@ class ExploreViewModel @Inject constructor(
                     emptyList()
                 }
             }
-            val libraryArtistChannelIds = dbArtists
-                .mapNotNull { it.channelId }
-                .filter { it.isNotBlank() }
-                .distinct()
 
             val userActivityQuery = if (history.isNotEmpty()) {
                 val artistCounts = history.mapNotNull { it.artist }.groupingBy { it }.eachCount()
@@ -211,9 +199,7 @@ class ExploreViewModel @Inject constructor(
                 "Bollywood"
             }
 
-            val hasLogin = YouTube.hasLoginCookie()
-
-            // --- STAGE 1: Fetch and display core Above-the-Fold Content (Instant) ---
+            // --- STAGE 1: Core Above-the-Fold (Instant) ---
             var home: HomePage? = null
             var explore: ExplorePage? = null
             var charts: ChartsPage? = null
@@ -232,18 +218,18 @@ class ExploreViewModel @Inject constructor(
                 newReleasesResult = newReleasesDeferred.await()
                 explore = exploreDeferred.await()
 
-                 _uiState.update { currentState ->
-                    val filterSections = { sections: List<unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Section> ->
+                _uiState.update { currentState ->
+                    val filterSections = { sections: List<HomePage.Section> ->
                         sections.filter { section ->
                             val title = section.title.lowercase()
                             !title.contains("new music videos") &&
-                            !title.contains("new albums & singles") &&
-                            !title.contains("trending")
+                                    !title.contains("new albums & singles") &&
+                                    !title.contains("trending")
                         }
                     }
                     val filteredHomeSections = filterSections(home?.sections.orEmpty())
                     val filteredExploreSections = filterSections(explore?.sections.orEmpty())
-                    
+
                     val mergedSections = (filteredHomeSections + filteredExploreSections + currentState.homePageSections).distinctBy { it.title }
                     val mergedChips = ((home?.chips.orEmpty()) + (explore?.chips.orEmpty()) + currentState.moodChips).distinctBy { it.title }
                     currentState.copy(
@@ -260,7 +246,6 @@ class ExploreViewModel @Inject constructor(
             }
 
             if (home == null && explore == null && charts == null && newReleasesResult == null) {
-                // Only show error if we also have no cached data
                 val hasCachedData = _uiState.value.homePageSections.isNotEmpty() ||
                         _uiState.value.newReleaseAlbums.isNotEmpty() ||
                         _uiState.value.chartsPage != null
@@ -268,7 +253,7 @@ class ExploreViewModel @Inject constructor(
                     it.copy(
                         isLoading = false,
                         isRefreshing = false,
-                        error = if (!hasCachedData) "Failed to fetch explore data from YouTube Music. Please check your connection." else null
+                        error = if (!hasCachedData) "Failed to fetch explore data. Check connection." else null
                     )
                 }
                 return
@@ -276,147 +261,151 @@ class ExploreViewModel @Inject constructor(
             lastContentTimestamp = System.currentTimeMillis()
             persistToCache(_uiState.value)
 
-            // --- STAGE 2: Fetch and display Library & Recommendations in background ---
+            // --- STAGE 2: Library & Recommendations (background, throttled) ---
             stage2Job = viewModelScope.launch(Dispatchers.IO) {
-                // PERF: Give Stage 1 results 500ms to render on screen before we start
-                // firing background network requests. This prevents Stage 2 from
-                // stealing IO threads/bandwidth right as the first frame is being drawn.
-                kotlinx.coroutines.delay(500)
+                // Let Stage1 render first frame
+                kotlinx.coroutines.delay(STAGE2_DELAY_MS)
                 try {
-                    coroutineScope {
-                        val communityPlaylistsDeferred = async {
-                            YouTube.search(
-                                query = "$userActivityQuery playlist",
-                                filter = YouTube.SearchFilter.FILTER_COMMUNITY_PLAYLIST
-                            ).getOrNull()
-                        }
+                    // Early exit if cancelled
+                    ensureActive()
 
-                        // Liked and Cached local songs - PERF: targeted, indexed queries
-                        // (see MusicDao.getFavoriteSongsList / getSongsWithLocalFileList)
-                        // instead of loading every column of every song in the library just to
-                        // .filter{}.take(15) it down in Kotlin. `getAllSongIds()` below is a
-                        // single-column id-only query, used only to build an exclusion set for
-                        // "You Might Like" further down - much cheaper than mapping full rows.
-                        val likedSongs = try {
-                            musicDao.getFavoriteSongsListSimple(limit = 15)
-                        } catch (e: Exception) {
-                            emptyList()
-                        }
-                        val cachedSongs = try {
-                            // Overfetch past 15: some rows with a file_path may still fail the
-                            // on-disk exists() check below (moved/deleted file, unmounted SD
-                            // card), which can't be expressed in the SQL query itself.
-                            musicDao.getSongsWithLocalFileList(limit = 60)
-                                .filter { entity -> java.io.File(entity.filePath).exists() }
-                        } catch (e: Exception) {
-                            emptyList()
-                        }
-                        val allLocalSongIds = try {
-                            musicDao.getAllSongIds()
-                        } catch (e: Exception) {
-                            emptyList()
-                        }
+                    // PERF: Use indexed query only, no File.exists() heavy checks
+                    val likedSongs = try {
+                        musicDao.getFavoriteSongsListSimple(limit = 10)
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    // OPTIMIZATION: No File.exists() - trusting DB file_path. Playback handles missing file.
+                    val cachedSongs = try {
+                        musicDao.getSongsWithLocalFileList(limit = 15)
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
 
-                        val likedSongItems = likedSongs.take(15).map { entity ->
-                            SongItem(
-                                id = entity.id.toString(),
-                                title = entity.title,
-                                artists = listOf(unshoo.ianshulyadav.pixelmusic.innertube.models.Artist(entity.artistName, null)),
-                                album = if (entity.albumName.isNotBlank()) unshoo.ianshulyadav.pixelmusic.innertube.models.Album(entity.albumName, "") else null,
-                                duration = (entity.duration / 1000).toInt(),
-                                thumbnail = entity.albumArtUriString ?: "",
-                                explicit = false,
-                                endpoint = null
-                            )
-                        }
+                    val likedSongItems = likedSongs.take(10).map { entity ->
+                        SongItem(
+                            id = entity.id.toString(),
+                            title = entity.title,
+                            artists = listOf(unshoo.ianshulyadav.pixelmusic.innertube.models.Artist(entity.artistName, null)),
+                            album = if (entity.albumName.isNotBlank()) unshoo.ianshulyadav.pixelmusic.innertube.models.Album(entity.albumName, "") else null,
+                            duration = (entity.duration / 1000).toInt(),
+                            thumbnail = entity.albumArtUriString ?: "",
+                            explicit = false,
+                            endpoint = null
+                        )
+                    }
+                    val cachedSongItems = cachedSongs.take(10).map { entity ->
+                        SongItem(
+                            id = entity.id.toString(),
+                            title = entity.title,
+                            artists = listOf(unshoo.ianshulyadav.pixelmusic.innertube.models.Artist(entity.artistName, null)),
+                            album = if (entity.albumName.isNotBlank()) unshoo.ianshulyadav.pixelmusic.innertube.models.Album(entity.albumName, "") else null,
+                            duration = (entity.duration / 1000).toInt(),
+                            thumbnail = entity.albumArtUriString ?: "",
+                            explicit = false,
+                            endpoint = null
+                        )
+                    }
 
-                        val cachedSongItems = cachedSongs.take(15).map { entity ->
-                            SongItem(
-                                id = entity.id.toString(),
-                                title = entity.title,
-                                artists = listOf(unshoo.ianshulyadav.pixelmusic.innertube.models.Artist(entity.artistName, null)),
-                                album = if (entity.albumName.isNotBlank()) unshoo.ianshulyadav.pixelmusic.innertube.models.Album(entity.albumName, "") else null,
-                                duration = (entity.duration / 1000).toInt(),
-                                thumbnail = entity.albumArtUriString ?: "",
-                                explicit = false,
-                                endpoint = null
-                            )
-                        }
+                    ensureActive()
 
-                        // You Might Like (Wide variety of similar songs & diverse artists based on top played history)
-                        // PERF: Cap at 3 artists (was 6) and dispatch searches sequentially
-                        // with an 80ms gap between requests instead of firing all 12 requests
-                        // at once. This reduces peak thread-pool pressure during page load.
-                        val topArtists = history
+                    // You Might Like - capped to 2 artists, single search each, no allLocalSongIds loading
+                    val topArtists = withContext(Dispatchers.Default) {
+                        history
                             .mapNotNull { it.artist }
                             .filter { it.isNotBlank() && !it.contains("unknown", ignoreCase = true) }
                             .groupingBy { it }
                             .eachCount()
                             .entries
                             .sortedByDescending { it.value }
-                            .take(3) // was 6 — 3 artists × 1 search each = 3 requests vs 12
+                            .take(2)
                             .map { it.key }
+                    }
 
-                        val playedSongIds = (history.mapNotNull { it.songId } + allLocalSongIds.map { it.toString() }).toSet()
+                    // Only exclude played history, not entire library (getAllSongIds was heavy)
+                    val playedSongIds = history.mapNotNull { it.songId }.toSet()
 
-                        val perArtistResults = mutableListOf<List<SongItem>>()
-                        if (topArtists.isNotEmpty()) {
-                            for (artistName in topArtists) {
-                                val results = runCatching {
-                                    YouTube.search(query = "$artistName mix", filter = YouTube.SearchFilter.FILTER_SONG)
-                                        .getOrNull()?.items?.filterIsInstance<SongItem>() ?: emptyList()
-                                }.getOrDefault(emptyList())
-                                    .filter { it.id !in playedSongIds }
-                                    .take(10)
-                                perArtistResults.add(results)
-                                kotlinx.coroutines.delay(120) // throttle: avoid back-to-back thread competition
-                            }
+                    val perArtistResults = mutableListOf<List<SongItem>>()
+                    if (topArtists.isNotEmpty()) {
+                        for (artistName in topArtists) {
+                            ensureActive()
+                            val results = runCatching {
+                                YouTube.search(query = "$artistName mix", filter = YouTube.SearchFilter.FILTER_SONG)
+                                    .getOrNull()?.items?.filterIsInstance<SongItem>() ?: emptyList()
+                            }.getOrDefault(emptyList())
+                                .filter { it.id !in playedSongIds }
+                                .take(8)
+                            perArtistResults.add(results)
+                            kotlinx.coroutines.delay(250) // increased throttle to reduce thread contention
                         }
+                    }
 
-                        // Round-robin sampling across all top artists to guarantee wide artist diversity
-                        val interleavedItems = mutableListOf<SongItem>()
+                    val youMightLikeItems = withContext(Dispatchers.Default) {
+                        val interleaved = mutableListOf<SongItem>()
                         val maxItems = if (perArtistResults.isNotEmpty()) perArtistResults.maxOf { it.size } else 0
-
                         for (i in 0 until maxItems) {
                             for (list in perArtistResults) {
                                 if (i < list.size) {
                                     val item = list[i]
                                     val primaryArtist = item.artists.firstOrNull()?.name?.lowercase()?.trim() ?: ""
-                                    val artistCount = interleavedItems.count {
+                                    val artistCount = interleaved.count {
                                         it.artists.firstOrNull()?.name?.lowercase()?.trim() == primaryArtist
                                     }
-                                    if (artistCount < 2 && interleavedItems.none { it.id == item.id }) {
-                                        interleavedItems.add(item)
+                                    if (artistCount < 2 && interleaved.none { it.id == item.id }) {
+                                        interleaved.add(item)
                                     }
                                 }
                             }
                         }
+                        interleaved.take(10)
+                    }
 
-                        val youMightLikeItems = interleavedItems.take(15)
+                    ensureActive()
 
-                        // Recently Played and Most Played local history auto-shelves
-                        val historyMap = history.associateBy { it.songId }
-                        val mostPlayedSongs = playbackStatsRepository.loadSongPlayCounts(limit = 15)
+                    // Recently Played and Most Played - reuse history, no extra distinct artist query
+                    val historyMap = history.associateBy { it.songId }
+                    val mostPlayedSongs = playbackStatsRepository.loadSongPlayCounts(limit = 10)
 
-                        val neededLocalSongIds = (history.map { it.songId } + mostPlayedSongs.map { it.songId })
-                            .mapNotNull { it.toLongOrNull() }
-                            .distinct()
-                        val localSongsMap = try {
-                            if (neededLocalSongIds.isNotEmpty()) {
-                                musicDao.getSongsByIdsListSimple(neededLocalSongIds).associateBy { it.id.toString() }
-                            } else {
-                                emptyMap()
-                            }
-                        } catch (e: Exception) {
+                    val neededLocalSongIds = (history.map { it.songId } + mostPlayedSongs.map { it.songId })
+                        .mapNotNull { it.toLongOrNull() }
+                        .distinct()
+                        .take(30) // cap to avoid loading too many rows
+                    val localSongsMap = try {
+                        if (neededLocalSongIds.isNotEmpty()) {
+                            musicDao.getSongsByIdsListSimple(neededLocalSongIds).associateBy { it.id.toString() }
+                        } else {
                             emptyMap()
                         }
+                    } catch (e: Exception) {
+                        emptyMap()
+                    }
 
-                        val recentSongItems = history.take(15).map { entry ->
-                            val local = localSongsMap[entry.songId]
-                            val title = local?.title ?: entry.title ?: "Unknown"
-                            val artistName = local?.artistName ?: entry.artist ?: "Unknown Artist"
-                            val thumb = local?.albumArtUriString ?: entry.thumbnail ?: ""
-                            val dur = local?.duration?.div(1000)
+                    val recentSongItems = history.take(10).map { entry ->
+                        val local = localSongsMap[entry.songId]
+                        val title = local?.title ?: entry.title ?: "Unknown"
+                        val artistName = local?.artistName ?: entry.artist ?: "Unknown Artist"
+                        val thumb = local?.albumArtUriString ?: entry.thumbnail ?: ""
+                        val dur = local?.duration?.div(1000)
+                        SongItem(
+                            id = entry.songId,
+                            title = title,
+                            artists = listOf(unshoo.ianshulyadav.pixelmusic.innertube.models.Artist(artistName, null)),
+                            album = if (local?.albumName?.isNotBlank() == true) unshoo.ianshulyadav.pixelmusic.innertube.models.Album(local.albumName, "") else null,
+                            duration = dur?.toInt(),
+                            thumbnail = thumb,
+                            explicit = false,
+                            endpoint = null
+                        )
+                    }
+
+                    val mostPlayedSongItems = mostPlayedSongs.mapNotNull { entry ->
+                        val local = localSongsMap[entry.songId]
+                        val hist = historyMap[entry.songId]
+                        val title = local?.title ?: hist?.title
+                        val artistName = local?.artistName ?: hist?.artist ?: "Unknown Artist"
+                        val thumb = local?.albumArtUriString ?: hist?.thumbnail ?: ""
+                        val dur = local?.duration?.div(1000)
+                        if (title != null) {
                             SongItem(
                                 id = entry.songId,
                                 title = title,
@@ -427,170 +416,112 @@ class ExploreViewModel @Inject constructor(
                                 explicit = false,
                                 endpoint = null
                             )
+                        } else null
+                    }
+
+                    ensureActive()
+
+                    _uiState.update { currentState ->
+                        val updatedSections = currentState.homePageSections.toMutableList()
+
+                        if (likedSongItems.size >= 2) {
+                            updatedSections.add(HomePage.Section(
+                                title = "Your Liked Songs",
+                                label = "Favorites from your library",
+                                thumbnail = likedSongItems.firstOrNull()?.thumbnail,
+                                endpoint = null,
+                                items = likedSongItems
+                            ))
                         }
 
-                        val mostPlayedSongItems = mostPlayedSongs.mapNotNull { entry ->
-                            val local = localSongsMap[entry.songId]
-                            val hist = historyMap[entry.songId]
-                            val title = local?.title ?: hist?.title
-                            val artistName = local?.artistName ?: hist?.artist ?: "Unknown Artist"
-                            val thumb = local?.albumArtUriString ?: hist?.thumbnail ?: ""
-                            val dur = local?.duration?.div(1000)
-                            if (title != null) {
-                                SongItem(
-                                    id = entry.songId,
-                                    title = title,
-                                    artists = listOf(unshoo.ianshulyadav.pixelmusic.innertube.models.Artist(artistName, null)),
-                                    album = if (local?.albumName?.isNotBlank() == true) unshoo.ianshulyadav.pixelmusic.innertube.models.Album(local.albumName, "") else null,
-                                    duration = dur?.toInt(),
-                                    thumbnail = thumb,
-                                    explicit = false,
-                                    endpoint = null
-                                )
-                            } else null
+                        if (cachedSongItems.size >= 2) {
+                            updatedSections.add(HomePage.Section(
+                                title = "Cached & Downloaded",
+                                label = "Offline playback ready",
+                                thumbnail = cachedSongItems.firstOrNull()?.thumbnail,
+                                endpoint = null,
+                                items = cachedSongItems
+                            ))
                         }
 
-                        val communityPlaylistsResult = communityPlaylistsDeferred.await()
-                        val communityPlaylists = communityPlaylistsResult?.items?.filterIsInstance<PlaylistItem>() ?: emptyList()
+                        if (youMightLikeItems.isNotEmpty()) {
+                            updatedSections.add(HomePage.Section(
+                                title = "You Might Like",
+                                label = "Recommended for you",
+                                thumbnail = youMightLikeItems.firstOrNull()?.thumbnail,
+                                endpoint = null,
+                                items = youMightLikeItems
+                            ))
+                        }
 
-                        _uiState.update { currentState ->
-                            val updatedSections = currentState.homePageSections.toMutableList()
+                        if (recentSongItems.size >= 3) {
+                            updatedSections.add(HomePage.Section(
+                                title = "Your Recently Played",
+                                label = "Recent history",
+                                thumbnail = recentSongItems.firstOrNull()?.thumbnail,
+                                endpoint = null,
+                                items = recentSongItems
+                            ))
+                        }
 
-                            if (communityPlaylists.isNotEmpty()) {
-                                updatedSections.add(HomePage.Section(
-                                    title = "Community Playlists",
-                                    label = "Based on your activity for $userActivityQuery",
-                                    thumbnail = null,
-                                    endpoint = null,
-                                    items = communityPlaylists
-                                ))
-                            }
+                        if (mostPlayedSongItems.size >= 3) {
+                            updatedSections.add(HomePage.Section(
+                                title = "Your Most Played",
+                                label = "All-time top tracks",
+                                thumbnail = mostPlayedSongItems.firstOrNull()?.thumbnail,
+                                endpoint = null,
+                                items = mostPlayedSongItems
+                            ))
+                        }
 
-                            if (likedSongItems.size >= 3) {
-                                updatedSections.add(HomePage.Section(
-                                    title = "Your Liked Songs",
-                                    label = "Favorites from your library",
-                                    thumbnail = likedSongItems.firstOrNull()?.thumbnail,
-                                    endpoint = null,
-                                    items = likedSongItems
-                                ))
-                            }
-
-                            if (cachedSongItems.size >= 3) {
-                                updatedSections.add(HomePage.Section(
-                                    title = "Cached & Downloaded",
-                                    label = "Offline playback ready",
-                                    thumbnail = cachedSongItems.firstOrNull()?.thumbnail,
-                                    endpoint = null,
-                                    items = cachedSongItems
-                                ))
-                            }
-
-                            if (youMightLikeItems.isNotEmpty()) {
-                                updatedSections.add(HomePage.Section(
-                                    title = "You Might Like",
-                                    label = "Recommended for you",
-                                    thumbnail = youMightLikeItems.firstOrNull()?.thumbnail,
-                                    endpoint = null,
-                                    items = youMightLikeItems
-                                ))
-                            }
-
-                            if (recentSongItems.size >= 5) {
-                                updatedSections.add(HomePage.Section(
-                                    title = "Your Recently Played",
-                                    label = "Recent history",
-                                    thumbnail = recentSongItems.firstOrNull()?.thumbnail,
-                                    endpoint = null,
-                                    items = recentSongItems
-                                ))
-                            }
-
-                            if (mostPlayedSongItems.size >= 5) {
-                                updatedSections.add(HomePage.Section(
-                                    title = "Your Most Played",
-                                    label = "All-time top tracks",
-                                    thumbnail = mostPlayedSongItems.firstOrNull()?.thumbnail,
-                                    endpoint = null,
-                                    items = mostPlayedSongItems
-                                ))
-                            }
-
-                            val finalNewReleases = if (YouTube.hasLoginCookie()) {
-                                val localSongArtistNames = try {
-                                    musicDao.getAllDistinctArtistNames()
-                                } catch (e: Exception) {
-                                    emptyList()
-                                }
-                                val localArtistNames = (
-                                    localSongArtistNames.map { it.lowercase().trim() } +
+                        // OPTIMIZED New Releases: No extra album searches per artist (was 2 extra network calls)
+                        // Just filter global releases by library artist names (in-memory set, no DB query)
+                        val finalNewReleases = if (YouTube.hasLoginCookie()) {
+                            val localArtistNames = (
                                     dbArtists.map { it.name.lowercase().trim() } +
-                                    history.mapNotNull { it.artist?.lowercase()?.trim() }
-                                ).filter { it.isNotBlank() }.toSet()
-                                
-                                val globalReleases = newReleasesResult
-                                    ?: YouTube.newReleaseAlbums().getOrNull().orEmpty()
-                                val globalFiltered = globalReleases.filter { album ->
+                                            history.mapNotNull { it.artist?.lowercase()?.trim() }
+                                    ).filter { it.isNotBlank() }.toSet()
+
+                            val globalReleases = newReleasesResult
+                                ?: YouTube.newReleaseAlbums().getOrNull().orEmpty()
+                            // If we have library artists, filter, else take top 30 global
+                            if (localArtistNames.isNotEmpty()) {
+                                globalReleases.filter { album ->
                                     album.artists?.any { it.name.lowercase().trim() in localArtistNames } == true
-                                }
-                                
-                                val enrichedReleases = mutableListOf<AlbumItem>()
-                                enrichedReleases.addAll(globalFiltered)
-                                
-                                val topArtistNames = history
-                                    .mapNotNull { it.artist }
-                                    .filter { it.isNotBlank() }
-                                    .groupingBy { it }
-                                    .eachCount()
-                                    .entries
-                                    .sortedByDescending { it.value }
-                                    .take(2) // reduced from 3 to 2 to minimize network load
-                                    .map { it.key }
-                                    
-                                val searchResults = mutableListOf<AlbumItem>()
-                                for (artistName in topArtistNames) {
-                                    val items = runCatching {
-                                        YouTube.search(query = artistName, filter = YouTube.SearchFilter.FILTER_ALBUM)
-                                            .getOrNull()?.items?.filterIsInstance<AlbumItem>() ?: emptyList()
-                                    }.getOrDefault(emptyList())
-                                    searchResults.addAll(items)
-                                    kotlinx.coroutines.delay(120)
-                                }
-                                
-                                (enrichedReleases + searchResults)
-                                    .distinctBy { it.browseId }
-                                    .take(50)
+                                }.take(30).ifEmpty { globalReleases.take(30) }
                             } else {
-                                emptyList()
+                                globalReleases.take(30)
                             }
-
-                            val renderedLocalEntities = (
-                                likedSongs.take(15) + 
-                                cachedSongs.take(15) + 
-                                history.take(15).mapNotNull { entry -> localSongsMap[entry.songId] } + 
-                                mostPlayedSongs.mapNotNull { entry -> localSongsMap[entry.songId] }
-                            ).distinctBy { it.id }
-
-                            val renderedSongsMapped = renderedLocalEntities.toSongs()
-                            val localSongsMapFiltered = renderedSongsMapped.associateBy { it.id }
-
-                            currentState.copy(
-                                homePageSections = updatedSections.distinctBy { it.title },
-                                localSongs = localSongsMapFiltered,
-                                newReleaseAlbums = finalNewReleases ?: currentState.newReleaseAlbums
-                            )
+                        } else {
+                            emptyList()
                         }
+
+                        val renderedLocalEntities = (
+                                likedSongs.take(10) +
+                                        cachedSongs.take(10) +
+                                        history.take(10).mapNotNull { entry -> localSongsMap[entry.songId] } +
+                                        mostPlayedSongs.mapNotNull { entry -> localSongsMap[entry.songId] }
+                                ).distinctBy { it.id }
+
+                        val renderedSongsMapped = renderedLocalEntities.toSongs()
+                        val localSongsMapFiltered = renderedSongsMapped.associateBy { it.id }
+
+                        currentState.copy(
+                            homePageSections = updatedSections.distinctBy { it.title },
+                            localSongs = localSongsMapFiltered,
+                            newReleaseAlbums = finalNewReleases
+                        )
                     }
                 } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
                     Timber.e(e, "Error loading Stage 2 Explore data")
                 }
             }
 
-            // --- STAGE 3: Persist final state to cache ---
+            // --- STAGE 3: Persist final state ---
             stage3Job = viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    // Wait briefly for Stage 2 to settle, then persist
-                    kotlinx.coroutines.delay(2000)
+                    kotlinx.coroutines.delay(3000)
                     persistToCache(_uiState.value)
                 } catch (e: Exception) {
                     Timber.e(e, "Error persisting Stage 3 Explore data")
@@ -623,15 +554,8 @@ class ExploreViewModel @Inject constructor(
                 try {
                     val recentSongs = withContext(Dispatchers.IO) {
                         val merged = listeningStatsTracker.playbackHistory.value
-                        if (merged.isNotEmpty()) merged.take(20)
-                        else playbackStatsRepository.loadPlaybackHistory(limit = 20)
-                    }
-                    val dbArtists = withContext(Dispatchers.IO) {
-                        try {
-                            musicDao.getAllArtistsListRaw().sortedByDescending { it.trackCount }.take(15)
-                        } catch (e: Exception) {
-                            emptyList()
-                        }
+                        if (merged.isNotEmpty()) merged.take(15)
+                        else playbackStatsRepository.loadPlaybackHistory(limit = 15)
                     }
 
                     val localSections = mutableListOf<HomePage.Section>()
@@ -657,8 +581,6 @@ class ExploreViewModel @Inject constructor(
                             items = songItems
                         ))
                     }
-
-
 
                     _uiState.update { state ->
                         state.copy(

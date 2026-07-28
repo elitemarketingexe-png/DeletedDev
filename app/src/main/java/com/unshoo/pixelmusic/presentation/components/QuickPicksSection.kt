@@ -149,23 +149,7 @@ fun QuickPicksSection(
             val lazyListState = rememberLazyListState()
             val limitSongs = remember(songs) { songs.take(20) }
             
-            // Use snapshotFlow instead of LaunchedEffect(isScrollInProgress) so the
-            // coroutine doesn't restart on every user touch — it just waits inside.
-            LaunchedEffect(limitSongs) {
-                if (limitSongs.isEmpty()) return@LaunchedEffect
-                while (true) {
-                    // Wait until the user is not scrolling before auto-advancing
-                    snapshotFlow { lazyListState.isScrollInProgress }
-                        .filter { !it }
-                        .first()
-                    delay(2500)
-                    // Re-check after delay in case user started scrolling again
-                    if (!lazyListState.isScrollInProgress) {
-                        val nextIndex = (lazyListState.firstVisibleItemIndex + 1) % limitSongs.size
-                        lazyListState.animateScrollToItem(nextIndex)
-                    }
-                }
-            }
+
 
             LazyRow(
                 state = lazyListState,
@@ -221,24 +205,7 @@ fun QuickPicksSection(
                 }
             }
 
-            // Same snapshotFlow-based fix as CARD mode above
-            LaunchedEffect(limitSongs) {
-                if (limitSongs.isEmpty()) return@LaunchedEffect
-                while (true) {
-                    snapshotFlow { lazyListState.isScrollInProgress }
-                        .filter { !it }
-                        .first()
-                    delay(2500)
-                    if (!lazyListState.isScrollInProgress) {
-                        val nextIndex = (lazyListState.firstVisibleItemIndex + 1) % limitSongs.size
-                        if (isReducedMotion) {
-                            lazyListState.scrollToItem(nextIndex)
-                        } else {
-                            lazyListState.animateScrollToItem(nextIndex)
-                        }
-                    }
-                }
-            }
+
 
             val cardShape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
             LazyRow(
