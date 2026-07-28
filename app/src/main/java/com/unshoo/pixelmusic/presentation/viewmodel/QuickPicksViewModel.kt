@@ -35,8 +35,10 @@ private const val PREFS_NAME = "quick_picks_cache"
 private const val KEY_SONGS = "songs_json"
 private const val KEY_CATEGORIES = "categories_json"
 private const val KEY_CACHE_TIMESTAMP = "cache_timestamp"
-// Cache valid for 4 hours (shorter than before so new releases appear faster)
-private const val CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000L
+// Cache valid for 24 hours before absolute invalidation (hard expiry)
+private const val CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000L
+// Background refresh TTL for silent updates (soft expiry, e.g. 10 minutes)
+private const val BACKGROUND_REFRESH_TTL_MS = 10 * 60 * 1000L
 
 @HiltViewModel
 class QuickPicksViewModel @Inject constructor(
@@ -65,10 +67,10 @@ class QuickPicksViewModel @Inject constructor(
         // Immediately populate from cache so the UI shows something on relaunch
         loadFromCache()
         viewModelScope.launch {
-            loadQuickPicks(_selectedCategory.value, forceRefresh = isCacheExpired())
+            loadQuickPicks(_selectedCategory.value, forceRefresh = isBackgroundRefreshNeeded())
             userPreferencesRepository.discoverFlow.collect { _ ->
                 if (_selectedCategory.value == "All") {
-                    loadQuickPicks("All", forceRefresh = isCacheExpired())
+                    loadQuickPicks("All", forceRefresh = isBackgroundRefreshNeeded())
                 }
             }
         }
@@ -93,6 +95,12 @@ class QuickPicksViewModel @Inject constructor(
         val timestamp = prefs.getLong(KEY_CACHE_TIMESTAMP, 0L)
         if (timestamp == 0L) return true
         return (System.currentTimeMillis() - timestamp) > CACHE_MAX_AGE_MS
+    }
+
+    private fun isBackgroundRefreshNeeded(): Boolean {
+        val timestamp = prefs.getLong(KEY_CACHE_TIMESTAMP, 0L)
+        if (timestamp == 0L) return true
+        return (System.currentTimeMillis() - timestamp) > BACKGROUND_REFRESH_TTL_MS
     }
 
     private fun clearCache() {
@@ -190,7 +198,8 @@ class QuickPicksViewModel @Inject constructor(
     private fun loadQuickPicks(category: String, forceRefresh: Boolean = false) {
         viewModelScope.launch {
             val cacheExpired = isCacheExpired()
-            val shouldRefresh = forceRefresh || cacheExpired
+            val backgroundRefreshNeeded = isBackgroundRefreshNeeded()
+            val shouldRefresh = forceRefresh || cacheExpired || backgroundRefreshNeeded
             if (category == "All" && !shouldRefresh && _quickPicks.value.isNotEmpty()) {
                 _isLoading.value = false
                 return@launch

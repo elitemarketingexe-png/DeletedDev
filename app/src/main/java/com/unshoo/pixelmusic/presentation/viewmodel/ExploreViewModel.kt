@@ -66,6 +66,17 @@ class ExploreViewModel @Inject constructor(
     private var stage2Job: kotlinx.coroutines.Job? = null
     private var stage3Job: kotlinx.coroutines.Job? = null
 
+    companion object {
+        /**
+         * How long cached/previously-loaded Explore content is considered fresh enough to show
+         * without a background refetch. The homepage feed is a curated/recommendation surface
+         * that changes over the course of a day, not minute to minute, so this favors instant
+         * perceived load (always show what we have immediately) over strict freshness - but
+         * without it being frozen indefinitely between manual pull-to-refreshes.
+         */
+        private const val STALE_CONTENT_MS = 2 * 60 * 60 * 1000L // 2 hours
+    }
+
     private val explorePrefs by lazy { context.getSharedPreferences("explore_guest_cache", Context.MODE_PRIVATE) }
 
     init {
@@ -90,6 +101,9 @@ class ExploreViewModel @Inject constructor(
     }
 
     private var isDataLoaded = false
+
+    /** Wall-clock time the content currently in [_uiState] was fetched (0 = unknown/never). */
+    private var lastContentTimestamp: Long = 0L
 
     private val gson by lazy {
         com.google.gson.GsonBuilder()
@@ -117,6 +131,7 @@ class ExploreViewModel @Inject constructor(
                         )
                     }
                     isDataLoaded = true
+                    lastContentTimestamp = cache.timestamp
                     return true
                 }
             }
@@ -159,8 +174,21 @@ class ExploreViewModel @Inject constructor(
                     _uiState.value.newReleaseAlbums.isNotEmpty() ||
                     _uiState.value.chartsPage != null
             if (isDataLoaded || hasCachedData) {
+                // Unblock the UI immediately - we already have something to show, cached or live.
                 _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = null) }
-                return
+
+                val isStale = lastContentTimestamp > 0L &&
+                        (System.currentTimeMillis() - lastContentTimestamp) >= STALE_CONTENT_MS
+                if (!isStale) {
+                    return
+                }
+                // BUGFIX (Explore cache never refreshing): previously ANY cached/already-loaded
+                // data short-circuited here unconditionally, permanently, for the lifetime of
+                // this ViewModel instance - once restored from the on-disk cache once, Explore
+                // would keep showing that same YouTube Music homepage snapshot (possibly hours
+                // or days old) until the user manually pulled to refresh. Fall through to a
+                // silent background refetch (no isRefreshing spinner - the user didn't ask for
+                // one) instead of returning, so the feed self-heals on normal navigation.
             }
         } else {
             _uiState.update { it.copy(isRefreshing = true, error = null) }
@@ -265,6 +293,7 @@ class ExploreViewModel @Inject constructor(
                 return
             }
             isDataLoaded = true
+            lastContentTimestamp = System.currentTimeMillis()
             persistToCache(_uiState.value)
 
             // --- STAGE 2: Fetch and display Library & Recommendations in background ---
@@ -278,16 +307,30 @@ class ExploreViewModel @Inject constructor(
                             ).getOrNull()
                         }
 
-                        // Liked and Cached local songs
-                        val allLocalSongs = try {
-                            musicDao.getAllSongsList()
+                        // Liked and Cached local songs - PERF: targeted, indexed queries
+                        // (see MusicDao.getFavoriteSongsList / getSongsWithLocalFileList)
+                        // instead of loading every column of every song in the library just to
+                        // .filter{}.take(15) it down in Kotlin. `getAllSongIds()` below is a
+                        // single-column id-only query, used only to build an exclusion set for
+                        // "You Might Like" further down - much cheaper than mapping full rows.
+                        val likedSongs = try {
+                            musicDao.getFavoriteSongsListSimple(limit = 15)
                         } catch (e: Exception) {
                             emptyList()
                         }
-
-                        val likedSongs = allLocalSongs.filter { it.isFavorite }
-                        val cachedSongs = allLocalSongs.filter { entity ->
-                            entity.filePath.isNotBlank() && java.io.File(entity.filePath).exists()
+                        val cachedSongs = try {
+                            // Overfetch past 15: some rows with a file_path may still fail the
+                            // on-disk exists() check below (moved/deleted file, unmounted SD
+                            // card), which can't be expressed in the SQL query itself.
+                            musicDao.getSongsWithLocalFileList(limit = 60)
+                                .filter { entity -> java.io.File(entity.filePath).exists() }
+                        } catch (e: Exception) {
+                            emptyList()
+                        }
+                        val allLocalSongIds = try {
+                            musicDao.getAllSongIds()
+                        } catch (e: Exception) {
+                            emptyList()
                         }
 
                         val likedSongItems = likedSongs.take(15).map { entity ->
@@ -327,7 +370,8 @@ class ExploreViewModel @Inject constructor(
                             .take(6)
                             .map { it.key }
 
-                        val playedSongIds = (history.mapNotNull { it.songId } + allLocalSongs.map { it.id.toString() }).toSet()
+                        val playedSongIds = (history.mapNotNull { it.songId } + allLocalSongIds.map { it.toString() }).toSet()
+
 
                         val searchJobs = topArtists.map { artistName ->
                             async {
@@ -367,8 +411,28 @@ class ExploreViewModel @Inject constructor(
                         val youMightLikeItems = interleavedItems.take(15)
 
                         // Recently Played and Most Played local history auto-shelves
-                        val localSongsMap = allLocalSongs.associateBy { it.id.toString() }
                         val historyMap = history.associateBy { it.songId }
+                        val mostPlayedSongs = playbackStatsRepository.loadSongPlayCounts(limit = 15)
+
+                        // PERF: localSongsMap is only ever looked up for the (at most ~45) song
+                        // ids referenced by `history` and `mostPlayedSongs` below - it doesn't
+                        // need the whole library. Query just those ids instead of hashing every
+                        // row in getAllSongsList(). Non-numeric ids (e.g. YouTube-sourced
+                        // "youtube_xxx" history entries that were never in the local `songs`
+                        // table) are dropped here exactly as they were implicitly dropped
+                        // before by a map lookup miss.
+                        val neededLocalSongIds = (history.map { it.songId } + mostPlayedSongs.map { it.songId })
+                            .mapNotNull { it.toLongOrNull() }
+                            .distinct()
+                        val localSongsMap = try {
+                            if (neededLocalSongIds.isNotEmpty()) {
+                                musicDao.getSongsByIdsListSimple(neededLocalSongIds).associateBy { it.id.toString() }
+                            } else {
+                                emptyMap()
+                            }
+                        } catch (e: Exception) {
+                            emptyMap()
+                        }
 
                         val recentSongItems = history.take(15).map { entry ->
                             val local = localSongsMap[entry.songId]
@@ -388,7 +452,6 @@ class ExploreViewModel @Inject constructor(
                             )
                         }
 
-                        val mostPlayedSongs = playbackStatsRepository.loadSongPlayCounts(limit = 15)
                         val mostPlayedSongItems = mostPlayedSongs.mapNotNull { entry ->
                             val local = localSongsMap[entry.songId]
                             val hist = historyMap[entry.songId]
@@ -477,13 +540,27 @@ class ExploreViewModel @Inject constructor(
                             }
 
                             val finalNewReleases = if (YouTube.hasLoginCookie()) {
+                                // PERF: was allLocalSongs.map { it.artistName... } - loading every
+                                // column of every song just to read one field. getAllDistinctArtistNames()
+                                // is a single-column DISTINCT query instead.
+                                val localSongArtistNames = try {
+                                    musicDao.getAllDistinctArtistNames()
+                                } catch (e: Exception) {
+                                    emptyList()
+                                }
                                 val localArtistNames = (
-                                    allLocalSongs.map { it.artistName.lowercase().trim() } +
+                                    localSongArtistNames.map { it.lowercase().trim() } +
                                     dbArtists.map { it.name.lowercase().trim() } +
                                     history.mapNotNull { it.artist?.lowercase()?.trim() }
                                 ).filter { it.isNotBlank() }.toSet()
                                 
-                                val globalReleases = YouTube.newReleaseAlbums().getOrNull().orEmpty()
+                                // OPT: Stage 1 (above) already fetched newReleaseAlbums() into
+                                // `newReleasesResult` a few hundred ms ago when logged in - reuse
+                                // it instead of issuing a second identical network request on
+                                // every single Explore load. Only refetch if Stage 1's call
+                                // failed/returned null (e.g. transient network error).
+                                val globalReleases = newReleasesResult
+                                    ?: YouTube.newReleaseAlbums().getOrNull().orEmpty()
                                 val globalFiltered = globalReleases.filter { album ->
                                     album.artists?.any { it.name.lowercase().trim() in localArtistNames } == true
                                 }

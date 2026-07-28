@@ -122,6 +122,36 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         }
     }
 
+    /**
+     * Suspends until the main thread's [android.os.MessageQueue] reports idle (no pending
+     * frame/input/message work queued), or [timeoutMs] elapses - whichever comes first.
+     *
+     * Used to schedule main-thread-affecting warm-up work (WebView creation) into a genuine
+     * scheduling gap instead of racing it against active scrolling or animation. Falls back to
+     * proceeding anyway after the timeout so a busy main thread (e.g. a long benchmark run)
+     * never permanently blocks warm-up.
+     */
+    private suspend fun awaitMainThreadIdle(timeoutMs: Long = 4_000L) {
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+                kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+                    val idleHandler = android.os.MessageQueue.IdleHandler {
+                        if (cont.isActive) {
+                            cont.resumeWith(Result.success(Unit))
+                        }
+                        false // one-shot: remove after firing
+                    }
+                    android.os.Looper.getMainLooper().queue.addIdleHandler(idleHandler)
+                    cont.invokeOnCancellation {
+                        android.os.Looper.getMainLooper().queue.removeIdleHandler(idleHandler)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Non-fatal - proceed with pre-warm regardless.
+        }
+    }
+
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(AppLocaleManager.wrapContext(base))
     }
@@ -143,12 +173,20 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
             }
         }
 
-        // Initialize AdMob and increment app open count
-        try {
-            com.unshoo.pixelmusic.data.ads.AdManager.initialize(this)
-            com.unshoo.pixelmusic.data.ads.AdManager.incrementAppOpenCount(this)
-        } catch (e: Throwable) {
-            Timber.e(e, "AdMob initialization failed")
+        // BUGFIX (startup jank): AdMob's MobileAds.initialize() + the immediate rewarded-ad
+        // load used to run synchronously, inline, on the main thread during onCreate() - the
+        // one startup task in this file that wasn't already deferred. MobileAds.initialize()
+        // is documented as safe to call from a background thread, so move it (and the app-open
+        // counter, a trivial SharedPreferences write) onto the same startupScope everything
+        // else here already uses, instead of spending main-thread time on it before the first
+        // frame is even posted.
+        startupScope.launch {
+            try {
+                com.unshoo.pixelmusic.data.ads.AdManager.initialize(this@PixelMusicApplication)
+                com.unshoo.pixelmusic.data.ads.AdManager.incrementAppOpenCount(this@PixelMusicApplication)
+            } catch (e: Throwable) {
+                Timber.e(e, "AdMob initialization failed")
+            }
         }
 
         // Initialize Last.fm client
@@ -242,11 +280,28 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         // that original intent isn't silently dropped for the devices it mattered most for.
         botGuardWarmUpJob = warmUpScope.launch {
             try {
-                // Defer WebView initialization until after initial UI frames finish rendering (2.5s delay)
+                // Floor delay: never attempt before the very first frames have had a chance
+                // to be posted, even if the main thread happens to report idle immediately
+                // (it can, in the brief window right after process start before Compose has
+                // enqueued its first frame work).
                 kotlinx.coroutines.delay(2500L)
                 val isLowRam = (getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)
                     ?.isLowRamDevice == true
                 if (!isLowRam) {
+                    // BUGFIX (cold-start jank, ~15s): this used to fire unconditionally right
+                    // after the fixed delay above, regardless of whether the user was actively
+                    // scrolling or the UI thread was mid-frame. WebView instantiation is
+                    // synchronous on whatever thread calls it, and the FIRST WebView created in
+                    // a process can itself take 500ms-2s+ on mid/low-end devices (cold Chromium
+                    // provider load) - and BotGuardEngine.create() dispatches that, plus all the
+                    // JS-bridge marshaling for the challenge/minter bootstrap, via
+                    // `withContext(Dispatchers.Main)`, i.e. onto the real Android UI thread, not
+                    // just a coroutine context. Racing that against the home screen's first
+                    // frames/scroll for up to COLD_START_TIMEOUT_MS (15s) is exactly what
+                    // produced the "smoother after ~15 seconds" symptom. Waiting for a genuine
+                    // main-thread idle window before pulling this work onto Dispatchers.Main
+                    // means it lands between frames instead of during one.
+                    awaitMainThreadIdle()
                     // Pre-warm the WebView bootstrap after initial launch completes.
                     // If the first playback uses a different sessionId, it will
                     // cheaply re-mint the session token on the same warm engine.

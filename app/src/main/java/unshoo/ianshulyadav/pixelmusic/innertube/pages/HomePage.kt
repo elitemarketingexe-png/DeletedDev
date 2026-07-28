@@ -11,6 +11,7 @@
 
 package unshoo.ianshulyadav.pixelmusic.innertube.pages
 
+import androidx.compose.runtime.Immutable
 import unshoo.ianshulyadav.pixelmusic.innertube.models.Album
 import unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumItem
 import unshoo.ianshulyadav.pixelmusic.innertube.models.Artist
@@ -27,11 +28,16 @@ import unshoo.ianshulyadav.pixelmusic.innertube.models.filterExplicit
 import unshoo.ianshulyadav.pixelmusic.innertube.models.MusicCardShelfRenderer
 import unshoo.ianshulyadav.pixelmusic.innertube.models.MusicShelfRenderer
 
+// PERF: see YTItem.kt for the full explanation - these types back every Explore-screen
+// composable, and being unannotated (plain List-holding data classes) made those composables
+// non-skippable, which is why the Explore screen never settled down the way other screens do.
+@Immutable
 data class HomePage(
     val chips: List<Chip>?,
     val sections: List<Section>,
     val continuation: String? = null,
 ) {
+    @Immutable
     data class Chip(
         val title: String,
         val endpoint: BrowseEndpoint?,
@@ -48,6 +54,7 @@ data class HomePage(
         }
     }
 
+    @Immutable
     data class Section(
         val title: String,
         val label: String?,

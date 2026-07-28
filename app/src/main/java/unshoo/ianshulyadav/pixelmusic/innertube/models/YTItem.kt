@@ -11,10 +11,22 @@
 
 package unshoo.ianshulyadav.pixelmusic.innertube.models
 
+import androidx.compose.runtime.Immutable
 import unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_OMV
 import unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_UGC
 import java.util.Locale
 
+// PERF: @Immutable on this hierarchy (and on HomePage/ChartsPage/ExplorePage) tells the Compose
+// compiler these types are safe to treat as stable, even though they hold plain `List<...>`
+// (an interface Compose otherwise can't prove is immutable). Every property below is a `val` of
+// a primitive, String, or another immutable data class here, so the annotation is accurate.
+// Without it, every composable on the Explore screen that takes a YTItem/SongItem/AlbumItem/
+// PlaylistItem/ArtistItem parameter (YTItemCarousel, AlbumCarouselItem, PlaylistCardItem,
+// ArtistCardItem, ...) is non-skippable and fully recomposes on every recomposition of its
+// parent - which, given Explore's multi-stage background loading, happens often. That's why the
+// Explore screen kept feeling laggy no matter how long it had been open, unlike the Library
+// screens which use this project's own (already-@Immutable) domain models. See the app's
+// `Playlist` data class for the same pattern already applied correctly elsewhere.
 sealed class YTItem {
     abstract val id: String
     abstract val title: String
@@ -23,11 +35,13 @@ sealed class YTItem {
     abstract val shareLink: String
 }
 
+@Immutable
 data class Artist(
     val name: String,
     val id: String?,
 )
 
+@Immutable
 data class Album(
     val name: String,
     val id: String,
@@ -49,6 +63,7 @@ enum class AlbumReleaseType {
     }
 }
 
+@Immutable
 data class SongItem(
     override val id: String,
     override val title: String,
@@ -67,6 +82,7 @@ data class SongItem(
         get() = "https://music.youtube.com/watch?v=$id"
 }
 
+@Immutable
 data class AlbumItem(
     val browseId: String,
     val playlistId: String,
@@ -82,6 +98,7 @@ data class AlbumItem(
         get() = "https://music.youtube.com/playlist?list=$playlistId"
 }
 
+@Immutable
 data class PlaylistItem(
     override val id: String,
     override val title: String,
@@ -100,6 +117,7 @@ data class PlaylistItem(
         get() = "https://music.youtube.com/playlist?list=$id"
 }
 
+@Immutable
 data class ArtistItem(
     override val id: String,
     override val title: String,

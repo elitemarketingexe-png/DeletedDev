@@ -2108,6 +2108,30 @@ interface MusicDao {
     @Query("SELECT " + SONG_LIST_PROJECTION + " FROM songs")
     suspend fun getAllSongsList(): List<SongEntity>
 
+    // PERF: added for ExploreViewModel's "Liked Songs" / "Recently Cached" rails, which
+    // previously called getAllSongsList() above - loading and object-mapping every row in the
+    // whole library - only to Kotlin-side .filter{}.take(15) it down to 15 items. `is_favorite`
+    // and `file_path` are both indexed columns, so these push the filtering into SQLite instead
+    // of the JVM. Deliberately un-ordered (matches the prior behavior) so this is a pure perf
+    // fix, not a change in which songs get surfaced. Named "...Simple" (matching
+    // getSongsByIdsListSimple's convention below) to avoid colliding with the differently-scoped
+    // getFavoriteSongsList(allowedParentDirs, applyDirectoryFilter, filterMode) further down,
+    // which backs the actual Liked Songs library screen and has different filtering semantics.
+    @Query("SELECT " + SONG_LIST_PROJECTION + " FROM songs WHERE is_favorite = 1 LIMIT :limit")
+    suspend fun getFavoriteSongsListSimple(limit: Int): List<SongEntity>
+
+    // Overfetches a bit past `limit`: some rows with a non-blank file_path may still fail the
+    // caller's on-disk File.exists() check (moved/deleted file, unmounted SD card, etc.), and
+    // that check can't be expressed in SQL - so the caller still filters+takes the final count.
+    @Query("SELECT " + SONG_LIST_PROJECTION + " FROM songs WHERE file_path IS NOT NULL AND file_path != '' LIMIT :limit")
+    suspend fun getSongsWithLocalFileList(limit: Int): List<SongEntity>
+
+    // Reuses the existing getSongsByIdsListSimple() query (below) for a bounded id lookup -
+    // see its use in ExploreViewModel's "Recently Played"/"Most Played" auto-shelves.
+
+    @Query("SELECT DISTINCT artist_name FROM songs WHERE artist_name != ''")
+    suspend fun getAllDistinctArtistNames(): List<String>
+
     @Query("SELECT id, title, artist_name, album_name, duration FROM songs WHERE source_type = 0")
     suspend fun getAllLocalSongSummaries(): List<SongSummary>
 

@@ -11,12 +11,15 @@
 
 package unshoo.ianshulyadav.pixelmusic.innertube.pages
 
+import androidx.compose.runtime.Immutable
 import unshoo.ianshulyadav.pixelmusic.innertube.models.*
 
+@Immutable
 data class ChartsPage(
     val sections: List<ChartSection>,
     val continuation: String?
 ) {
+    @Immutable
     data class ChartSection(
         val title: String,
         val items: List<YTItem>,
