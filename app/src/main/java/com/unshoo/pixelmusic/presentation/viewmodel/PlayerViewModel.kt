@@ -2968,9 +2968,27 @@ class PlayerViewModel @Inject constructor(
             }
             
             if (songs.isNotEmpty()) {
-                val fullQueue = listOf(song) + songs
-                playSongs(fullQueue, song, "Mix: ${song.title}")
-                sendToast("Playing similar mix for '${song.title}'")
+                val isAlreadyPlaying = dualPlayerEngine.masterPlayer.currentMediaItem?.mediaId == song.id
+                if (isAlreadyPlaying) {
+                    val player = dualPlayerEngine.masterPlayer
+                    val totalCount = player.mediaItemCount
+                    if (totalCount > 1) {
+                        player.removeMediaItems(1, totalCount)
+                    }
+                    val mediaItems = songs.map { MediaItemBuilder.build(it) }
+                    player.addMediaItems(mediaItems)
+                    _playerUiState.update {
+                        it.copy(
+                            currentPlaybackQueue = (listOf(song) + songs).toPlaybackQueue(),
+                            currentQueueSourceName = "Mix: ${song.title}"
+                        )
+                    }
+                    sendToast("Tuned similar mix for '${song.title}'")
+                } else {
+                    val fullQueue = listOf(song) + songs
+                    playSongs(fullQueue, song, "Mix: ${song.title}")
+                    sendToast("Playing similar mix for '${song.title}'")
+                }
             } else {
                 if (lastfmFailed) {
                     sendToast("Last.fm mix failed ($lastfmFailReason). Starting YouTube Music mix...")
@@ -3573,12 +3591,16 @@ class PlayerViewModel @Inject constructor(
         Log.i("ArchiveTuneBuilder", "playWithArchiveTuneQueueBuilder: starting for song '${song.title}' (${song.id})")
         val requestToken = beginDirectPlaybackRequest()
         
-        // 1. Play the seed song immediately so there is zero delay!
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                saveYoutubeSongsToDb(listOf(song))
+        val isAlreadyPlaying = dualPlayerEngine.masterPlayer.currentMediaItem?.mediaId == song.id
+        
+        // 1. Play the seed song immediately if not already playing so there is zero delay!
+        if (!isAlreadyPlaying) {
+            viewModelScope.launch {
+                withContext(Dispatchers.IO) {
+                    saveYoutubeSongsToDb(listOf(song))
+                }
+                playSongs(listOf(song), song, queueName, playlistId)
             }
-            playSongs(listOf(song), song, queueName, playlistId)
         }
         
         // 2. Fetch related recommendations in the background and update the player's queue
