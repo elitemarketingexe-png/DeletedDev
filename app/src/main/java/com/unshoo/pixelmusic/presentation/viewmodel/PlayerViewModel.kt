@@ -4492,8 +4492,7 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
 
-                val retriever = MediaMetadataRetriever()
-                try {
+                com.unshoo.pixelmusic.utils.MediaMetadataRetrieverPool.withRetriever { retriever ->
                     if (sourceUri.scheme == "file") {
                         retriever.setDataSource(sourceUri.path)
                     } else {
@@ -4530,8 +4529,6 @@ class PlayerViewModel @Inject constructor(
                         bitrate = finalBitrate,
                         sampleRate = sampleRate
                     )
-                } finally {
-                    retriever.release()
                 }
             }.getOrNull() ?: return@launch
 

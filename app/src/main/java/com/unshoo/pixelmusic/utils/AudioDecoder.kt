@@ -34,11 +34,12 @@ object AudioDecoder {
             decoder.configure(format, null, null, 0)
             decoder.start()
 
-            val pcmData = mutableListOf<Float>()
+            var pcmData = FloatArray(requiredSamples)
+            var pcmSize = 0
             val bufferInfo = MediaCodec.BufferInfo()
             var isEndOfStream = false
 
-            while (!isEndOfStream && pcmData.size < requiredSamples) { // --- MODIFICADO: Condición de parada ---
+            while (!isEndOfStream && pcmSize < requiredSamples) {
                 val inputBufferIndex = decoder.dequeueInputBuffer(TIMEOUT_US)
                 if (inputBufferIndex >= 0) {
                     val inputBuffer = decoder.getInputBuffer(inputBufferIndex)
@@ -67,11 +68,19 @@ object AudioDecoder {
                         outputBufferIndex = decoder.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
                         continue
                     }
-                    pcmData.addAll(byteBufferToFloatArray(outputBuffer, format).asList())
+                    val chunk = byteBufferToFloatArray(outputBuffer, format)
                     decoder.releaseOutputBuffer(outputBufferIndex, false)
 
-                    // Si ya tenemos suficientes muestras, salimos del bucle interno
-                    if (pcmData.size >= requiredSamples) break
+                    val copyCount = Math.min(chunk.size, requiredSamples - pcmSize)
+                    if (copyCount > 0) {
+                        if (pcmSize + copyCount > pcmData.size) {
+                            pcmData = pcmData.copyOf(Math.max(pcmData.size * 2, pcmSize + copyCount))
+                        }
+                        System.arraycopy(chunk, 0, pcmData, pcmSize, copyCount)
+                        pcmSize += copyCount
+                    }
+
+                    if (pcmSize >= requiredSamples) break
 
                     outputBufferIndex = decoder.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
                 }
@@ -81,16 +90,14 @@ object AudioDecoder {
             decoder.release()
             extractor.release()
 
-            Timber.tag("AudioDecoder").d("Successfully decoded ${pcmData.size} samples.")
+            Timber.tag("AudioDecoder").d("Successfully decoded $pcmSize samples.")
 
-            // --- MODIFICADO: Rellenamos con silencio si la canción es más corta que lo requerido ---
-            if (pcmData.size < requiredSamples) {
-                val padding = FloatArray(requiredSamples - pcmData.size) { 0f }
-                pcmData.addAll(padding.asList())
+            // Return exact FloatArray slice of requiredSamples (silence padded if shorter)
+            val finalArray = FloatArray(requiredSamples)
+            if (pcmSize > 0) {
+                System.arraycopy(pcmData, 0, finalArray, 0, Math.min(pcmSize, requiredSamples))
             }
-
-            // Devolvemos el array con el tamaño exacto
-            pcmData.toFloatArray().copyOf(requiredSamples)
+            finalArray
         }
     }
 

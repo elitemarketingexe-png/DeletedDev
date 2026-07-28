@@ -22,8 +22,10 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import coil.size.Precision
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -47,11 +49,14 @@ object CardColorExtractor {
     /** Must be called once (e.g. from Application.onCreate) before Composables run. */
     fun init(context: Context) {
         if (diskPrefs == null) {
-            diskPrefs = context.applicationContext
-                .getSharedPreferences("card_color_disk_cache", Context.MODE_PRIVATE)
-            // Warm L1 from disk on first access so every cached card renders instantly
-            diskPrefs?.all?.forEach { (key, value) ->
-                if (value is Int) colorCache.put(key, value)
+            val appCtx = context.applicationContext
+            diskPrefs = appCtx.getSharedPreferences("card_color_disk_cache", Context.MODE_PRIVATE)
+            // Warm L1 from disk off the main thread so disk I/O never blocks UI frame posting
+            CoroutineScope(Dispatchers.IO).launch {
+                val allEntries = diskPrefs?.all ?: return@launch
+                allEntries.forEach { (key, value) ->
+                    if (value is Int) colorCache.put(key, value)
+                }
             }
         }
     }
@@ -68,7 +73,7 @@ object CardColorExtractor {
 
         // L2 hit (disk)
         val prefs = diskPrefs ?: run {
-            withContext(Dispatchers.IO) { init(context) }
+            init(context)
             diskPrefs
         }
         prefs?.getInt(imageUrl, Int.MIN_VALUE)?.takeIf { it != Int.MIN_VALUE }?.let { cached ->
@@ -76,47 +81,48 @@ object CardColorExtractor {
             return cached
         }
 
-        // Full extraction — 48×48 sub-sample + Palette
-        return withContext(Dispatchers.IO) {
-            try {
-                val loader = context.imageLoader
-                val request = ImageRequest.Builder(context)
-                    .data(imageUrl)
-                    .allowHardware(false)
-                    // 48×48 is sufficient for color extraction and 4× faster than 96×96
-                    .size(48)
-                    .precision(Precision.INEXACT)
-                    .memoryCachePolicy(CachePolicy.ENABLED)
-                    .diskCachePolicy(CachePolicy.ENABLED)
-                    .build()
+        // Full extraction — 48×48 sub-sample via Coil (IO) + Palette API (Default)
+        return try {
+            val loader = context.imageLoader
+            val request = ImageRequest.Builder(context)
+                .data(imageUrl)
+                .allowHardware(false)
+                // 48×48 is sufficient for color extraction and 4× faster than 96×96
+                .size(48)
+                .precision(Precision.INEXACT)
+                .memoryCachePolicy(CachePolicy.ENABLED)
+                .diskCachePolicy(CachePolicy.ENABLED)
+                .build()
 
-                val result = loader.execute(request)
-                if (result is SuccessResult) {
-                    val bmp = (result.drawable as? BitmapDrawable)?.bitmap
-                    if (bmp != null && !bmp.isRecycled) {
+            val result = withContext(Dispatchers.IO) { loader.execute(request) }
+            if (result is SuccessResult) {
+                val bmp = (result.drawable as? BitmapDrawable)?.bitmap
+                if (bmp != null && !bmp.isRecycled) {
+                    val rgb = withContext(Dispatchers.Default) {
                         val palette = Palette.from(bmp)
                             .maximumColorCount(8) // fewer swatches = faster scan
                             .generate()
-                        val swatch = palette.vibrantSwatch
+                        (palette.vibrantSwatch
                             ?: palette.lightVibrantSwatch
                             ?: palette.darkVibrantSwatch
                             ?: palette.dominantSwatch
                             ?: palette.mutedSwatch
                             ?: palette.lightMutedSwatch
-                            ?: palette.darkMutedSwatch
-                        if (swatch != null) {
-                            val rgb = swatch.rgb
-                            // Write-through to both tiers
-                            colorCache.put(imageUrl, rgb)
+                            ?: palette.darkMutedSwatch)?.rgb
+                    }
+                    if (rgb != null) {
+                        // Write-through to both tiers
+                        colorCache.put(imageUrl, rgb)
+                        withContext(Dispatchers.IO) {
                             prefs?.edit()?.putInt(imageUrl, rgb)?.apply()
-                            return@withContext rgb
                         }
+                        return rgb
                     }
                 }
-                null
-            } catch (_: Exception) {
-                null
             }
+            null
+        } catch (_: Exception) {
+            null
         }
     }
 }

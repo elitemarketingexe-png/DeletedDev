@@ -1087,6 +1087,7 @@ fun LibraryPlaylistCard(
     onClick: () -> Unit
 ) {
     val shape = remember { AbsoluteSmoothCornerShape(24.dp, 80) }
+    val coverShape = remember { AbsoluteSmoothCornerShape(14.dp, 80) }
     val previewSongIds = remember(playlist.songIds) {
         playlist.songIds.take(4)
     }
@@ -1139,7 +1140,7 @@ fun LibraryPlaylistCard(
                 Box(
                     modifier = Modifier
                         .size(96.dp)
-                        .clip(AbsoluteSmoothCornerShape(14.dp, 80))
+                        .clip(coverShape)
                 ) {
                     PlaylistCover(
                         playlist = playlist,
@@ -1240,6 +1241,7 @@ fun LibraryAlbumCard(
     onClick: () -> Unit
 ) {
     val shape = remember { AbsoluteSmoothCornerShape(24.dp, 80) }
+    val coverShape = remember { AbsoluteSmoothCornerShape(14.dp, 80) }
     val colors = MaterialTheme.colorScheme
     val isDarkTheme = isSystemInDarkTheme()
 
@@ -1285,7 +1287,7 @@ fun LibraryAlbumCard(
                     contentDescription = album.title,
                     modifier = Modifier
                         .size(96.dp)
-                        .clip(AbsoluteSmoothCornerShape(14.dp, 80)),
+                        .clip(coverShape),
                     contentScale = ContentScale.Crop
                 )
 
@@ -1952,6 +1954,7 @@ private fun LibraryCarouselCard(
         lightBlendFraction = 0.52f
     )
     val cardShape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
+    val badgeShape = remember { AbsoluteSmoothCornerShape(10.dp, 60) }
 
     Card(
         modifier = Modifier
@@ -1973,26 +1976,28 @@ private fun LibraryCarouselCard(
                     model = thumbnail,
                     contentDescription = title,
                     modifier = Modifier
+                        .align(Alignment.CenterEnd)
                         .fillMaxHeight()
-                        .width(190.dp)
-                        .align(Alignment.CenterEnd),
+                        .fillMaxWidth(0.55f),
                     contentScale = ContentScale.Crop
                 )
-                // Horizontal scrim so text is readable
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                colorStops = arrayOf(
-                                    0.0f to animatedBgColor,
-                                    0.43f to animatedBgColor,
-                                    0.85f to Color.Transparent
-                                )
+            }
+
+            // Left side gradient overlay to ensure text contrast
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                animatedBgColor,
+                                animatedBgColor,
+                                animatedBgColor.copy(alpha = 0.85f),
+                                Color.Transparent
                             )
                         )
-                )
-            }
+                    )
+            )
 
             // Text content — left side
             Column(
@@ -2005,7 +2010,7 @@ private fun LibraryCarouselCard(
             ) {
                 if (badgeLabel != null) {
                     Surface(
-                        shape = AbsoluteSmoothCornerShape(10.dp, 60),
+                        shape = badgeShape,
                         color = colorScheme.primaryContainer.copy(alpha = 0.88f)
                     ) {
                         Text(

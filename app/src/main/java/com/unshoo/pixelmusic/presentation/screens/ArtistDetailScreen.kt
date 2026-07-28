@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material3.*
@@ -1686,108 +1687,100 @@ private fun ArtistMixRadioButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "mix_radio_wave")
+    var isPressed by remember { mutableStateOf(false) }
+    val buttonScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.93f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "mix_radio_button_press_scale"
+    )
 
-    // Outer ring: slow expanding pulse — simulates radio broadcast rings
-    val ring1Alpha by infiniteTransition.animateFloat(
-        initialValue = 0.55f,
+    val infiniteTransition = rememberInfiniteTransition(label = "expressive_radio_pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 1.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "expressive_radio_pulse_scale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.45f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            animation = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "ring1_alpha"
-    )
-    val ring1Scale by infiniteTransition.animateFloat(
-        initialValue = 0.75f,
-        targetValue = 1.45f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring1_scale"
+        label = "expressive_radio_pulse_alpha"
     )
 
-    // Inner ring: offset by half cycle for staggered effect
-    val ring2Alpha by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 0.55f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring2_alpha"
-    )
-    val ring2Scale by infiniteTransition.animateFloat(
-        initialValue = 1.45f,
-        targetValue = 0.75f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ring2_scale"
-    )
+    val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val contentColor = MaterialTheme.colorScheme.primary
+    val shape = CircleShape
 
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val containerColor = MaterialTheme.colorScheme.secondaryContainer
-    val onContainerColor = MaterialTheme.colorScheme.onSecondaryContainer
-    val pillShape = AbsoluteSmoothCornerShape(50.dp, 100)
-
-    Box(contentAlignment = Alignment.Center, modifier = modifier) {
-        // Pulsing radio-wave rings behind the button
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+            .graphicsLayer {
+                scaleX = buttonScale
+                scaleY = buttonScale
+            }
+    ) {
+        // Pulsing radio broadcast ring (M3 Expressive motion)
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .graphicsLayer {
-                    scaleX = ring1Scale
-                    scaleY = ring1Scale
-                    alpha = ring1Alpha
+                    scaleX = pulseScale
+                    scaleY = pulseScale
+                    alpha = pulseAlpha
                 }
-                .clip(pillShape)
-                .background(primaryColor.copy(alpha = 0.18f))
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .graphicsLayer {
-                    scaleX = ring2Scale
-                    scaleY = ring2Scale
-                    alpha = ring2Alpha
-                }
-                .clip(pillShape)
-                .background(primaryColor.copy(alpha = 0.12f))
+                .clip(shape)
+                .background(contentColor.copy(alpha = 0.25f))
         )
 
-        // M3 Expressive pill button — matches the FilledTonalIconButton style used by Shuffle
+        // Material 3 Expressive Pill Button
         Surface(
-            shape = pillShape,
+            onClick = onClick,
+            shape = shape,
             color = containerColor,
-            contentColor = onContainerColor,
-            tonalElevation = 2.dp,
-            shadowElevation = 0.dp,
-            modifier = Modifier
-                .clip(pillShape)
-                .clickable(onClick = onClick)
+            contentColor = contentColor,
+            tonalElevation = 6.dp,
+            shadowElevation = 2.dp,
+            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }.also { interactionSource ->
+                LaunchedEffect(interactionSource) {
+                    interactionSource.interactions.collect { interaction ->
+                        when (interaction) {
+                            is androidx.compose.foundation.interaction.PressInteraction.Press -> isPressed = true
+                            is androidx.compose.foundation.interaction.PressInteraction.Release -> isPressed = false
+                            is androidx.compose.foundation.interaction.PressInteraction.Cancel -> isPressed = false
+                        }
+                    }
+                }
+            }
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // SurroundSound = radio wave / broadcast icon — semantically correct for a radio mix
                 Icon(
-                    imageVector = Icons.Rounded.SurroundSound,
+                    imageVector = Icons.Rounded.Radio,
                     contentDescription = "Mix Radio",
-                    modifier = Modifier.size(18.dp),
-                    tint = onContainerColor
+                    modifier = Modifier.size(20.dp),
+                    tint = contentColor
                 )
                 Text(
                     text = "Mix Radio",
                     style = MaterialTheme.typography.labelLarge.copy(
                         fontFamily = GoogleSansRounded,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.3.sp
                     ),
-                    color = onContainerColor
+                    color = contentColor
                 )
             }
         }
