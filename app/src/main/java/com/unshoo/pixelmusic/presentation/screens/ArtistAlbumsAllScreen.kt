@@ -39,10 +39,12 @@ fun ArtistAlbumsAllScreen(
     viewModel: ArtistDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var hasInitiatedLoad by remember { mutableStateOf(false) }
 
     LaunchedEffect(artistId, type, uiState.isLoading) {
         if (!uiState.isLoading) {
             viewModel.loadAllItems(type)
+            hasInitiatedLoad = true
         }
     }
 
@@ -105,7 +107,7 @@ fun ArtistAlbumsAllScreen(
         }
     ) { innerPadding ->
         when {
-            uiState.isAllItemsLoading && uiState.allItems.isEmpty() -> {
+            (!hasInitiatedLoad || uiState.isAllItemsLoading) && uiState.allItems.isEmpty() -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()

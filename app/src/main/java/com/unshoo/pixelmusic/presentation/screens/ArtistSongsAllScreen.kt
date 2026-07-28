@@ -53,10 +53,12 @@ fun ArtistSongsAllScreen(
     var playlistSheetSongs by remember { mutableStateOf<List<Song>>(emptyList()) }
     val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
+    var hasInitiatedLoad by remember { mutableStateOf(false) }
 
     LaunchedEffect(artistId, uiState.isLoading) {
         if (!uiState.isLoading) {
             viewModel.loadAllPopularSongs()
+            hasInitiatedLoad = true
         }
     }
 
@@ -101,7 +103,7 @@ fun ArtistSongsAllScreen(
         }
     ) { innerPadding ->
         when {
-            uiState.isPopularSongsAllLoading && uiState.popularSongsAll.isEmpty() -> {
+            (!hasInitiatedLoad || uiState.isPopularSongsAllLoading) && uiState.popularSongsAll.isEmpty() -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
