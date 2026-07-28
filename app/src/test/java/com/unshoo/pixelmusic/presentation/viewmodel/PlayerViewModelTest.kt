@@ -16,6 +16,7 @@ import com.unshoo.pixelmusic.data.preferences.ThemePreferencesRepository
 import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
 import com.unshoo.pixelmusic.data.preferences.AiPreferencesRepository
 import com.unshoo.pixelmusic.data.repository.MusicRepository
+import com.unshoo.pixelmusic.data.repository.ArtistImageRepository
 import io.mockk.*
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -64,6 +65,7 @@ class PlayerViewModelTest {
 
     private lateinit var playerViewModel: PlayerViewModel
     private val mockMusicRepository: MusicRepository = mockk()
+    private val mockArtistImageRepository: ArtistImageRepository = mockk(relaxed = true)
     private val mockUserPreferencesRepository: UserPreferencesRepository = mockk(relaxed = true)
     private val mockYoutubeDatastoreRepository: com.unshoo.pixelmusic.data.remote.youtube.DatastoreRepository = mockk(relaxed = true)
     private val mockAiPreferencesRepository: AiPreferencesRepository = mockk(relaxed = true)
@@ -259,6 +261,7 @@ class PlayerViewModelTest {
         playerViewModel = PlayerViewModel(
             mockContext,
             mockMusicRepository,
+            mockArtistImageRepository,
             mockUserPreferencesRepository,
             mockYoutubeDatastoreRepository,
             mockAiPreferencesRepository,

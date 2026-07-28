@@ -87,6 +87,7 @@ import com.unshoo.pixelmusic.data.preferences.AlbumArtQuality
 import com.unshoo.pixelmusic.data.preferences.ThemePreference
 import com.unshoo.pixelmusic.data.repository.LyricsSearchResult
 import com.unshoo.pixelmusic.data.repository.MusicRepository
+import com.unshoo.pixelmusic.data.repository.ArtistImageRepository
 import com.unshoo.pixelmusic.data.service.MusicNotificationProvider
 import com.unshoo.pixelmusic.data.service.MusicService
 import com.unshoo.pixelmusic.data.service.player.CastPlayer
@@ -130,6 +131,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -281,6 +283,7 @@ private data class ResolvedAlbumSelection(
 class PlayerViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val musicRepository: MusicRepository,
+    private val artistImageRepository: ArtistImageRepository,
     val userPreferencesRepository: UserPreferencesRepository,
     private val youtubeDatastoreRepository: com.unshoo.pixelmusic.data.remote.youtube.DatastoreRepository,
     private val aiPreferencesRepository: AiPreferencesRepository,
@@ -559,16 +562,28 @@ class PlayerViewModel @Inject constructor(
             } else {
                 val idLong = currentSong.id.toLongOrNull()
                 if (idLong == null) {
-                    flowOf(currentSong.artists.map { ref ->
-                        Artist(
-                            id = ref.id,
-                            name = ref.name,
-                            songCount = 0,
-                            imageUrl = null,
-                            customImageUri = null,
-                            channelId = ref.channelId
-                        )
-                    })
+                    val artistsFlows = currentSong.artists.map { ref ->
+                        flow {
+                            val initialArtist = Artist(
+                                id = ref.id,
+                                name = ref.name,
+                                songCount = 0,
+                                imageUrl = null,
+                                customImageUri = null,
+                                channelId = ref.channelId
+                            )
+                            emit(initialArtist)
+                            val resolvedUrl = artistImageRepository.getArtistImageUrl(ref.name, ref.id)
+                            if (!resolvedUrl.isNullOrBlank()) {
+                                emit(initialArtist.copy(imageUrl = resolvedUrl))
+                            }
+                        }
+                    }
+                    if (artistsFlows.isEmpty()) {
+                        flowOf(emptyList())
+                    } else {
+                        combine(artistsFlows) { it.toList() }
+                    }
                 } else {
                     musicRepository.getArtistsForSong(idLong)
                 }
@@ -841,9 +856,17 @@ class PlayerViewModel @Inject constructor(
     private var pendingYoutubeHistoryVideoId: String? = null
     private var youtubePlaybackHistoryJob: Job? = null
 
-    private val _albumNavigationRequests = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    private val _albumNavigationRequests = MutableSharedFlow<String>(
+        replay = 0,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val albumNavigationRequests = _albumNavigationRequests.asSharedFlow()
-    private val _artistNavigationRequests = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    private val _artistNavigationRequests = MutableSharedFlow<String>(
+        replay = 0,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val artistNavigationRequests = _artistNavigationRequests.asSharedFlow()
     private val _searchNavDoubleTapEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val searchNavDoubleTapEvents = _searchNavDoubleTapEvents.asSharedFlow()
