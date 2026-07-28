@@ -298,6 +298,10 @@ class ExploreViewModel @Inject constructor(
 
             // --- STAGE 2: Fetch and display Library & Recommendations in background ---
             stage2Job = viewModelScope.launch(Dispatchers.IO) {
+                // PERF: Give Stage 1 results 500ms to render on screen before we start
+                // firing background network requests. This prevents Stage 2 from
+                // stealing IO threads/bandwidth right as the first frame is being drawn.
+                kotlinx.coroutines.delay(500)
                 try {
                     coroutineScope {
                         val communityPlaylistsDeferred = async {
@@ -360,6 +364,9 @@ class ExploreViewModel @Inject constructor(
                         }
 
                         // You Might Like (Wide variety of similar songs & diverse artists based on top played history)
+                        // PERF: Cap at 3 artists (was 6) and dispatch searches sequentially
+                        // with an 80ms gap between requests instead of firing all 12 requests
+                        // at once. This reduces peak thread-pool pressure during page load.
                         val topArtists = history
                             .mapNotNull { it.artist }
                             .filter { it.isNotBlank() && !it.contains("unknown", ignoreCase = true) }
@@ -367,26 +374,23 @@ class ExploreViewModel @Inject constructor(
                             .eachCount()
                             .entries
                             .sortedByDescending { it.value }
-                            .take(6)
+                            .take(3) // was 6 — 3 artists × 1 search each = 3 requests vs 12
                             .map { it.key }
 
                         val playedSongIds = (history.mapNotNull { it.songId } + allLocalSongIds.map { it.toString() }).toSet()
 
-
-                        val searchJobs = topArtists.map { artistName ->
-                            async {
-                                // Search for radio/mix of top artist to get similar artists in the same style
-                                val mixResults = YouTube.search(query = "$artistName mix", filter = YouTube.SearchFilter.FILTER_SONG)
+                        val perArtistResults = mutableListOf<List<SongItem>>()
+                        for (artistName in topArtists) {
+                            // Single search per artist (mix query with good variety)
+                            val results = runCatching {
+                                YouTube.search(query = "$artistName mix", filter = YouTube.SearchFilter.FILTER_SONG)
                                     .getOrNull()?.items?.filterIsInstance<SongItem>() ?: emptyList()
-                                val songResults = if (mixResults.size < 5) {
-                                    YouTube.search(query = artistName, filter = YouTube.SearchFilter.FILTER_SONG)
-                                        .getOrNull()?.items?.filterIsInstance<SongItem>() ?: emptyList()
-                                } else emptyList()
-                                (mixResults + songResults).distinctBy { it.id }
-                            }
+                            }.getOrDefault(emptyList())
+                                .filter { it.id !in playedSongIds }
+                                .take(10)
+                            perArtistResults.add(results)
+                            kotlinx.coroutines.delay(80) // throttle: avoid back-to-back burst
                         }
-
-                        val perArtistResults = searchJobs.map { it.await().filter { item -> item.id !in playedSongIds } }
 
                         // Round-robin sampling across all top artists to guarantee wide artist diversity
                         val interleavedItems = mutableListOf<SongItem>()
@@ -397,7 +401,6 @@ class ExploreViewModel @Inject constructor(
                                 if (i < list.size) {
                                     val item = list[i]
                                     val primaryArtist = item.artists.firstOrNull()?.name?.lowercase()?.trim() ?: ""
-                                    // Limit max 2 songs per artist to enforce wide variety
                                     val artistCount = interleavedItems.count {
                                         it.artists.firstOrNull()?.name?.lowercase()?.trim() == primaryArtist
                                     }
@@ -578,13 +581,16 @@ class ExploreViewModel @Inject constructor(
                                     .take(3)
                                     .map { it.key }
                                     
-                                val searchJobs = topArtistNames.map { artistName ->
-                                    async {
+                                // PERF: sequential album searches with 80ms gap (was all parallel)
+                                val searchResults = mutableListOf<AlbumItem>()
+                                for (artistName in topArtistNames) {
+                                    val items = runCatching {
                                         YouTube.search(query = artistName, filter = YouTube.SearchFilter.FILTER_ALBUM)
                                             .getOrNull()?.items?.filterIsInstance<AlbumItem>() ?: emptyList()
-                                    }
+                                    }.getOrDefault(emptyList())
+                                    searchResults.addAll(items)
+                                    kotlinx.coroutines.delay(80)
                                 }
-                                val searchResults = searchJobs.flatMap { it.await() }
                                 
                                 (enrichedReleases + searchResults)
                                     .distinctBy { it.browseId }

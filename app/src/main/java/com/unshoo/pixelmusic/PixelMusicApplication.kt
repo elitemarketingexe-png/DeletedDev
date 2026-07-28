@@ -162,6 +162,12 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         MediaItemBuilder.initialize(this)
         BotGuardTokenGenerator.initialize(this)
 
+        // Pre-warm L1 card color cache from SharedPreferences disk cache.
+        // This ensures dominant colors for all previously-seen Explore cards are
+        // immediately available on the first rendered frame, with no extraction needed.
+        com.unshoo.pixelmusic.presentation.utils.CardColorExtractor.init(this)
+
+
         // BUGFIX (slow first playback): resolve ExoCache's lazy SimpleCache off the main thread
         // now, instead of letting MusicService.onCreate() do it synchronously on the main thread
         // later. See the field comment on `exoCache` above for the full explanation.
