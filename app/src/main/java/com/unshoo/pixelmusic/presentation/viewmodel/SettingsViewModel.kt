@@ -1882,4 +1882,21 @@ class SettingsViewModel @Inject constructor(
             userPreferencesRepository.setShowSmartMixPlaylists(show)
         }
     }
+
+    // ── Explore Feed Visibility Setters ──────────────────────────────────────
+    fun setExploreShowCharts(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowCharts(v) } }
+    fun setExploreShowQuickPicks(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowQuickPicks(v) } }
+    fun setExploreShowRecentMixes(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowRecentMixes(v) } }
+    fun setExploreShowYourLibrary(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowYourLibrary(v) } }
+    fun setExploreShowDailyDiscover(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowDailyDiscover(v) } }
+    fun setExploreShowNewReleases(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowNewReleases(v) } }
+    fun setExploreShowRecentlyPlayed(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowRecentlyPlayed(v) } }
+    fun setExploreShowMostPlayed(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowMostPlayed(v) } }
+    fun setExploreShowYouMightLike(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowYouMightLike(v) } }
+    fun setExploreShowLikedSongs(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowLikedSongs(v) } }
+    fun setExploreShowCachedDownloaded(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowCachedDownloaded(v) } }
+    fun setExploreShowTrending(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowTrending(v) } }
+    fun setExploreShowSmartMixCard(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowSmartMixCard(v) } }
+    fun setExploreShowYtCarousels(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowYtCarousels(v) } }
+    fun setExploreShowMoodChips(v: Boolean) { viewModelScope.launch { userPreferencesRepository.setExploreShowMoodChips(v) } }
 }

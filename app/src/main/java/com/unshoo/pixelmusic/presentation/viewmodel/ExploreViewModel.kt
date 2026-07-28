@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.coroutineScope
@@ -33,6 +36,24 @@ import com.unshoo.pixelmusic.data.preferences.PlaylistPreferencesRepository
 import com.unshoo.pixelmusic.data.model.Song
 import com.unshoo.pixelmusic.data.database.toSongs
 
+data class ExploreVisibilityPrefs(
+    val showCharts: Boolean = true,
+    val showQuickPicks: Boolean = true,
+    val showRecentMixes: Boolean = true,
+    val showYourLibrary: Boolean = true,
+    val showDailyDiscover: Boolean = true,
+    val showNewReleases: Boolean = true,
+    val showRecentlyPlayed: Boolean = true,
+    val showMostPlayed: Boolean = true,
+    val showYouMightLike: Boolean = true,
+    val showLikedSongs: Boolean = true,
+    val showCachedDownloaded: Boolean = true,
+    val showTrending: Boolean = true,
+    val showSmartMixCard: Boolean = true,
+    val showYtCarousels: Boolean = true,
+    val showMoodChips: Boolean = true
+)
+
 data class ExploreUiState(
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
@@ -48,7 +69,8 @@ data class ExploreUiState(
     val moodChips: List<unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Chip> = emptyList(),
     val explorePageSections: List<unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Section> = emptyList(),
     val activeMoodChip: unshoo.ianshulyadav.pixelmusic.innertube.pages.HomePage.Chip? = null,
-    val localSongs: Map<String, Song> = emptyMap()
+    val localSongs: Map<String, Song> = emptyMap(),
+    val visibilityPrefs: ExploreVisibilityPrefs = ExploreVisibilityPrefs()
 )
 
 @HiltViewModel
@@ -74,10 +96,28 @@ class ExploreViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                restoreFromCache()
-            }
+            // Read visibility prefs BEFORE first fetch so gating works on cold start
+            val prefs = readVisibilityPrefs()
+            _uiState.update { it.copy(visibilityPrefs = prefs) }
+            withContext(Dispatchers.IO) { restoreFromCache() }
             loadDataInternal(forceRefresh = false)
+        }
+        // React live to pref changes — reload without force-refresh
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                userPreferencesRepository.exploreShowChartsFlow,
+                userPreferencesRepository.exploreShowNewReleasesFlow,
+                userPreferencesRepository.exploreShowDailyDiscoverFlow,
+                userPreferencesRepository.exploreShowRecentlyPlayedFlow,
+                userPreferencesRepository.exploreShowMostPlayedFlow
+            ) { a, b, c, d, e -> listOf(a, b, c, d, e) }
+            .distinctUntilChanged()
+            .drop(1) // skip initial emission (already loaded above)
+            .collect {
+                val prefs = readVisibilityPrefs()
+                _uiState.update { s -> s.copy(visibilityPrefs = prefs) }
+                loadDataInternal(forceRefresh = false)
+            }
         }
         viewModelScope.launch {
             playlistPreferencesRepository.userPlaylistsFlow.collect { playlists ->
@@ -92,6 +132,24 @@ class ExploreViewModel @Inject constructor(
             }
         }
     }
+
+    private suspend fun readVisibilityPrefs(): ExploreVisibilityPrefs = ExploreVisibilityPrefs(
+        showCharts = userPreferencesRepository.exploreShowChartsFlow.first(),
+        showQuickPicks = userPreferencesRepository.exploreShowQuickPicksFlow.first(),
+        showRecentMixes = userPreferencesRepository.exploreShowRecentMixesFlow.first(),
+        showYourLibrary = userPreferencesRepository.exploreShowYourLibraryFlow.first(),
+        showDailyDiscover = userPreferencesRepository.exploreShowDailyDiscoverFlow.first(),
+        showNewReleases = userPreferencesRepository.exploreShowNewReleasesFlow.first(),
+        showRecentlyPlayed = userPreferencesRepository.exploreShowRecentlyPlayedFlow.first(),
+        showMostPlayed = userPreferencesRepository.exploreShowMostPlayedFlow.first(),
+        showYouMightLike = userPreferencesRepository.exploreShowYouMightLikeFlow.first(),
+        showLikedSongs = userPreferencesRepository.exploreShowLikedSongsFlow.first(),
+        showCachedDownloaded = userPreferencesRepository.exploreShowCachedDownloadedFlow.first(),
+        showTrending = userPreferencesRepository.exploreShowTrendingFlow.first(),
+        showSmartMixCard = userPreferencesRepository.exploreShowSmartMixCardFlow.first(),
+        showYtCarousels = userPreferencesRepository.exploreShowYtCarouselsFlow.first(),
+        showMoodChips = userPreferencesRepository.exploreShowMoodChipsFlow.first()
+    )
 
     /** Wall-clock time the content currently in [_uiState] was fetched (0 = unknown/never). */
     private var lastContentTimestamp: Long = 0L
@@ -206,25 +264,27 @@ class ExploreViewModel @Inject constructor(
             var newReleasesResult: List<AlbumItem>? = null
 
             coroutineScope {
+                val vis = _uiState.value.visibilityPrefs
                 val homeDeferred = async(Dispatchers.IO) { runCatching { YouTube.home().getOrNull() }.getOrNull() }
-                val chartsDeferred = async(Dispatchers.IO) { runCatching { YouTube.getChartsPage().getOrNull() }.getOrNull() }
-                val newReleasesDeferred = async(Dispatchers.IO) {
-                    if (YouTube.hasLoginCookie()) runCatching { YouTube.newReleaseAlbums().getOrNull() }.getOrNull() else null
-                }
+                val chartsDeferred = if (vis.showCharts) async(Dispatchers.IO) { runCatching { YouTube.getChartsPage().getOrNull() }.getOrNull() } else null
+                val newReleasesDeferred = if (vis.showNewReleases && YouTube.hasLoginCookie()) async(Dispatchers.IO) {
+                    runCatching { YouTube.newReleaseAlbums().getOrNull() }.getOrNull()
+                } else null
                 val exploreDeferred = async(Dispatchers.IO) { runCatching { YouTube.explore().getOrNull() }.getOrNull() }
 
                 home = homeDeferred.await()
-                charts = chartsDeferred.await()
-                newReleasesResult = newReleasesDeferred.await()
+                charts = chartsDeferred?.await()
+                newReleasesResult = newReleasesDeferred?.await()
                 explore = exploreDeferred.await()
 
                 _uiState.update { currentState ->
+                    val vis = currentState.visibilityPrefs
                     val filterSections = { sections: List<HomePage.Section> ->
                         sections.filter { section ->
                             val title = section.title.lowercase()
                             !title.contains("new music videos") &&
                                     !title.contains("new albums & singles") &&
-                                    !title.contains("trending")
+                                    (vis.showTrending || !title.contains("trending"))
                         }
                     }
                     val filteredHomeSections = filterSections(home?.sections.orEmpty())
@@ -266,21 +326,18 @@ class ExploreViewModel @Inject constructor(
                 // Let Stage1 render first frame
                 kotlinx.coroutines.delay(STAGE2_DELAY_MS)
                 try {
+                    val vis = _uiState.value.visibilityPrefs
                     // Early exit if cancelled
                     ensureActive()
 
                     // PERF: Use indexed query only, no File.exists() heavy checks
-                    val likedSongs = try {
+                    val likedSongs = if (vis.showLikedSongs) try {
                         musicDao.getFavoriteSongsListSimple(limit = 10)
-                    } catch (e: Exception) {
-                        emptyList()
-                    }
-                    // OPTIMIZATION: No File.exists() - trusting DB file_path. Playback handles missing file.
-                    val cachedSongs = try {
+                    } catch (e: Exception) { emptyList() } else emptyList()
+
+                    val cachedSongs = if (vis.showCachedDownloaded) try {
                         musicDao.getSongsWithLocalFileList(limit = 15)
-                    } catch (e: Exception) {
-                        emptyList()
-                    }
+                    } catch (e: Exception) { emptyList() } else emptyList()
 
                     val likedSongItems = likedSongs.take(10).map { entity ->
                         SongItem(
@@ -326,7 +383,7 @@ class ExploreViewModel @Inject constructor(
                     val playedSongIds = history.mapNotNull { it.songId }.toSet()
 
                     val perArtistResults = mutableListOf<List<SongItem>>()
-                    if (topArtists.isNotEmpty()) {
+                    if (vis.showYouMightLike && topArtists.isNotEmpty()) {
                         for (artistName in topArtists) {
                             ensureActive()
                             val results = runCatching {
@@ -424,7 +481,7 @@ class ExploreViewModel @Inject constructor(
                     _uiState.update { currentState ->
                         val updatedSections = currentState.homePageSections.toMutableList()
 
-                        if (likedSongItems.size >= 2) {
+                        if (vis.showLikedSongs && likedSongItems.size >= 2) {
                             updatedSections.add(HomePage.Section(
                                 title = "Your Liked Songs",
                                 label = "Favorites from your library",
@@ -434,7 +491,7 @@ class ExploreViewModel @Inject constructor(
                             ))
                         }
 
-                        if (cachedSongItems.size >= 2) {
+                        if (vis.showCachedDownloaded && cachedSongItems.size >= 2) {
                             updatedSections.add(HomePage.Section(
                                 title = "Cached & Downloaded",
                                 label = "Offline playback ready",
@@ -444,7 +501,7 @@ class ExploreViewModel @Inject constructor(
                             ))
                         }
 
-                        if (youMightLikeItems.isNotEmpty()) {
+                        if (vis.showYouMightLike && youMightLikeItems.isNotEmpty()) {
                             updatedSections.add(HomePage.Section(
                                 title = "You Might Like",
                                 label = "Recommended for you",
@@ -454,7 +511,7 @@ class ExploreViewModel @Inject constructor(
                             ))
                         }
 
-                        if (recentSongItems.size >= 3) {
+                        if (vis.showRecentlyPlayed && recentSongItems.size >= 3) {
                             updatedSections.add(HomePage.Section(
                                 title = "Your Recently Played",
                                 label = "Recent history",
@@ -464,7 +521,7 @@ class ExploreViewModel @Inject constructor(
                             ))
                         }
 
-                        if (mostPlayedSongItems.size >= 3) {
+                        if (vis.showMostPlayed && mostPlayedSongItems.size >= 3) {
                             updatedSections.add(HomePage.Section(
                                 title = "Your Most Played",
                                 label = "All-time top tracks",

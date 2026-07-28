@@ -237,6 +237,10 @@ fun ExploreScreen(
         exploreViewModel.uiState.map { it.isContinuationLoading }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
 
+    val visibilityPrefs by remember(exploreViewModel) {
+        exploreViewModel.uiState.map { it.visibilityPrefs }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = com.unshoo.pixelmusic.presentation.viewmodel.ExploreVisibilityPrefs())
+
     val localSongs by remember(exploreViewModel) {
         exploreViewModel.uiState.map { it.localSongs }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = emptyMap())
@@ -434,7 +438,7 @@ fun ExploreScreen(
                                     }
                                     
                                     // Mood chip dropdown arrow
-                                    if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && moodChips.isNotEmpty()) {
+                                    if (visibilityPrefs.showMoodChips && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && moodChips.isNotEmpty()) {
                                         androidx.compose.material3.IconButton(
                                             onClick = { showMoodRow = !showMoodRow },
                                             modifier = Modifier.size(36.dp)
@@ -449,7 +453,7 @@ fun ExploreScreen(
                                 }
 
                                 // Mood / Genre Chips (When All or For You is active and arrow clicked)
-                                if (showMoodRow && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && moodChips.isNotEmpty()) {
+                                if (visibilityPrefs.showMoodChips && showMoodRow && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && moodChips.isNotEmpty()) {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -491,7 +495,7 @@ fun ExploreScreen(
                         }
 
                         // 3. AI Smart Mix Studio Card (Hero CTA)
-                        val showSmartMixCard = when (filterSlice.selectedFilter) {
+                        val showSmartMixCard = visibilityPrefs.showSmartMixCard && when (filterSlice.selectedFilter) {
                             "Smart Mix" -> true
                             "All" -> AdManager.hasRecentlySupported(context)
                             else -> false
@@ -507,7 +511,7 @@ fun ExploreScreen(
                             }
                         }
 
-                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "Charts") &&
+                        if (visibilityPrefs.showCharts && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "Charts") &&
                             contentSlice.chartsPage != null && contentSlice.chartsPage!!.sections.isNotEmpty()) {
                             contentSlice.chartsPage!!.sections.forEachIndexed { index, chartSection ->
                                 item(key = "chart_${chartSection.title}_${index}_header") {
@@ -602,7 +606,7 @@ fun ExploreScreen(
 
 
 
-                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") &&
+                        if (visibilityPrefs.showQuickPicks && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") &&
                             quickPicks.isNotEmpty()
                         ) {
                             item(key = "quick_picks_section") {
@@ -621,7 +625,7 @@ fun ExploreScreen(
                             }
                         }
 
-                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "Smart Mix" || filterSlice.selectedFilter == "For You") &&
+                        if (visibilityPrefs.showRecentMixes && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "Smart Mix" || filterSlice.selectedFilter == "For You") &&
                             contentSlice.recentMixes.isNotEmpty()
                         ) {
                             item(key = "recent_mixes_header") {
@@ -646,7 +650,7 @@ fun ExploreScreen(
                         }
 
                         val hasLibraryContent = contentSlice.libraryPlaylists.isNotEmpty() || fromYourLibraryAlbums.isNotEmpty()
-                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && hasLibraryContent) {
+                        if (visibilityPrefs.showYourLibrary && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && hasLibraryContent) {
                             item(key = "your_library_header") {
                                 SectionHeader(
                                     title = "Your Library",
@@ -686,14 +690,14 @@ fun ExploreScreen(
                         // Daily Discover Cards — horizontal LazyRow inside one item.
                         // LazyRow only composes cards as user swipes to them (true lazy loading).
                         // No HorizontalPager: LazyRow gives same horizontal feel with better recycling.
-                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && cardShelfSections.isNotEmpty()) {
+                        if (visibilityPrefs.showDailyDiscover && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && cardShelfSections.isNotEmpty()) {
                             item(key = "daily_discover_header", contentType = "section_header") {
                                 SectionHeader(title = "Your Daily Discover")
                             }
                             item(key = "daily_discover_cards", contentType = "daily_discover_row") {
                                 val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
                                 val cardWidth = remember(screenWidth) {
-                                    (screenWidth * 0.85f).coerceIn(280.dp, 360.dp)
+                                    (screenWidth * 0.90f).coerceIn(280.dp, 400.dp)
                                 }
                                 LazyRow(
                                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
@@ -718,7 +722,7 @@ fun ExploreScreen(
 
 
                         // Move New Releases here - shown under New Releases filter as full 2-column grid or main All/For You filters as carousel
-                        if (filterSlice.selectedFilter == "New Releases" && contentSlice.newReleaseAlbums.isNotEmpty()) {
+                        if (visibilityPrefs.showNewReleases && filterSlice.selectedFilter == "New Releases" && contentSlice.newReleaseAlbums.isNotEmpty()) {
                             item(key = "new_releases_full_header") {
                                 SectionHeader(title = "All New Releases & Singles")
                             }
@@ -746,7 +750,7 @@ fun ExploreScreen(
                                     }
                                 }
                             }
-                        } else if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") &&
+                        } else if (visibilityPrefs.showNewReleases && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") &&
                             contentSlice.newReleaseAlbums.isNotEmpty()
                         ) {
                             item(key = "new_releases_header") {
@@ -797,7 +801,7 @@ fun ExploreScreen(
                             }
                         }
 
-                        if (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") {
+                        if (visibilityPrefs.showYtCarousels && (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You")) {
 
                             remainingSections.forEachIndexed { index, section ->
                                 val titleLower = section.title.lowercase()

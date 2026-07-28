@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -266,38 +267,45 @@ fun ExpressiveDailyDiscoverCard(
             }
 
             // ── Horizontal Song Thumbnail Strip ───────────────────────────────
-            // LazyRow naturally lazy-loads thumbnails as you scroll — only visible items composed.
-            // toNativeSong() deferred per-item (not pre-computed for all upfront).
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // BoxWithConstraints calculates thumbnail width so exactly 3 cards fit perfectly regardless of DPI
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
             ) {
-                // Limit to 8 for the strip — full list shown in the bottom sheet
-                itemsIndexed(songs.take(8)) { index, songItem ->
-                    // Convert on-demand per-item, NOT all upfront
-                    val nativeSong = remember(songItem.id, localSongs) {
-                        localSongs[songItem.id] ?: songItem.toNativeSong()
-                    }
+                // Available width minus 2 internal gaps (8.dp * 2) divided by 3
+                val itemWidth = (maxWidth - 16.dp) / 3
 
-                    // Shimmer loading state tracking
-                    var imageLoaded by remember(songItem.thumbnail) { mutableStateOf(false) }
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Limit to 8 for the strip — full list shown in the bottom sheet
+                    itemsIndexed(songs.take(8)) { index, songItem ->
+                        // Convert on-demand per-item, NOT all upfront
+                        val nativeSong = remember(songItem.id, localSongs) {
+                            localSongs[songItem.id] ?: songItem.toNativeSong()
+                        }
 
-                    Surface(
-                        modifier = Modifier
-                            .width(96.dp)
-                            .clip(innerSongCardShape)
-                            .clickable {
-                                playerViewModel.showAndPlaySong(
-                                    song = nativeSong,
-                                    contextSongs = nativeSongs,
-                                    queueName = section.title
-                                )
-                            },
-                        shape = innerSongCardShape,
-                        color = colors.surfaceContainerLowest,
-                        // No elevation on inner cards either
-                        tonalElevation = 0.dp
-                    ) {
+                        // Shimmer loading state tracking
+                        var imageLoaded by remember(songItem.thumbnail) { mutableStateOf(false) }
+
+                        Surface(
+                            modifier = Modifier
+                                .width(itemWidth)
+                                .clip(innerSongCardShape)
+                                .clickable {
+                                    playerViewModel.showAndPlaySong(
+                                        song = nativeSong,
+                                        contextSongs = nativeSongs,
+                                        queueName = section.title
+                                    )
+                                },
+                            shape = innerSongCardShape,
+                            color = colors.surfaceContainerLowest,
+                            // No elevation on inner cards either
+                            tonalElevation = 0.dp
+                        ) {
                         Column(
                             modifier = Modifier.padding(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -370,6 +378,7 @@ fun ExpressiveDailyDiscoverCard(
                                     color = colors.onSurfaceVariant,
                                     fontSize = 10.sp
                                 )
+                            }
                             }
                         }
                     }

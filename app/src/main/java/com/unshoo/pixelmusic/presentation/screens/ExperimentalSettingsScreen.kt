@@ -180,6 +180,146 @@ fun ExperimentalSettingsScreen(
             contentPadding = PaddingValues(top = currentTopBarHeightDp + 8.dp),
             modifier = Modifier.fillMaxSize()
         ) {
+            item(key = "explore_feed_visibility_section") {
+                val exploreViewModel: com.unshoo.pixelmusic.presentation.viewmodel.ExploreViewModel = hiltViewModel()
+                val exploreState by exploreViewModel.uiState.collectAsStateWithLifecycle()
+                val vis = exploreState.visibilityPrefs
+
+                SettingsSection(
+                    title = "Explore Feed Categories",
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Visibility,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.Transparent,
+                        modifier = Modifier.padding(horizontal = 0.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "Toggle off categories you don't use to keep Explore free from bloat and save CPU / data.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                            )
+
+                            SwitchSettingItem(
+                                title = "Your Daily Discover",
+                                subtitle = "Personalized daily cards shelf. Off = zero fetch/derive cost.",
+                                checked = vis.showDailyDiscover,
+                                onCheckedChange = settingsViewModel::setExploreShowDailyDiscover
+                            )
+
+                            SwitchSettingItem(
+                                title = "New Releases & Singles",
+                                subtitle = "New release albums grid and carousel. Off = stops API calls.",
+                                checked = vis.showNewReleases,
+                                onCheckedChange = settingsViewModel::setExploreShowNewReleases
+                            )
+
+                            SwitchSettingItem(
+                                title = "Top Charts & Trending",
+                                subtitle = "Charts page and top song lists. Off = stops charts fetch.",
+                                checked = vis.showCharts,
+                                onCheckedChange = settingsViewModel::setExploreShowCharts
+                            )
+
+                            SwitchSettingItem(
+                                title = "Quick Picks",
+                                subtitle = "Personalized quick pick song grid.",
+                                checked = vis.showQuickPicks,
+                                onCheckedChange = settingsViewModel::setExploreShowQuickPicks
+                            )
+
+                            SwitchSettingItem(
+                                title = "Recent Mixes",
+                                subtitle = "Smart mixes and generated playlists carousel.",
+                                checked = vis.showRecentMixes,
+                                onCheckedChange = settingsViewModel::setExploreShowRecentMixes
+                            )
+
+                            SwitchSettingItem(
+                                title = "Your Library Carousel",
+                                subtitle = "Library albums and playlists row.",
+                                checked = vis.showYourLibrary,
+                                onCheckedChange = settingsViewModel::setExploreShowYourLibrary
+                            )
+
+                            SwitchSettingItem(
+                                title = "Recently Played Shelf",
+                                subtitle = "History-based shelf cards. Off = skips history query.",
+                                checked = vis.showRecentlyPlayed,
+                                onCheckedChange = settingsViewModel::setExploreShowRecentlyPlayed
+                            )
+
+                            SwitchSettingItem(
+                                title = "Most Played Shelf",
+                                subtitle = "All-time top tracks shelf cards. Off = skips play count query.",
+                                checked = vis.showMostPlayed,
+                                onCheckedChange = settingsViewModel::setExploreShowMostPlayed
+                            )
+
+                            SwitchSettingItem(
+                                title = "You Might Like",
+                                subtitle = "Artist recommendation shelf. Off = skips YouTube artist search.",
+                                checked = vis.showYouMightLike,
+                                onCheckedChange = settingsViewModel::setExploreShowYouMightLike
+                            )
+
+                            SwitchSettingItem(
+                                title = "Your Liked Songs",
+                                subtitle = "Liked songs shelf card. Off = skips liked DB query.",
+                                checked = vis.showLikedSongs,
+                                onCheckedChange = settingsViewModel::setExploreShowLikedSongs
+                            )
+
+                            SwitchSettingItem(
+                                title = "Cached & Downloaded",
+                                subtitle = "Offline ready tracks shelf card. Off = skips cached DB query.",
+                                checked = vis.showCachedDownloaded,
+                                onCheckedChange = settingsViewModel::setExploreShowCachedDownloaded
+                            )
+
+                            SwitchSettingItem(
+                                title = "Trending & Shorts Content",
+                                subtitle = "Filters out trending/shorts sections from feed API.",
+                                checked = vis.showTrending,
+                                onCheckedChange = settingsViewModel::setExploreShowTrending
+                            )
+
+                            SwitchSettingItem(
+                                title = "Smart Mix Studio Hero Card",
+                                subtitle = "AI Smart Mix banner card at the top of Explore.",
+                                checked = vis.showSmartMixCard,
+                                onCheckedChange = settingsViewModel::setExploreShowSmartMixCard
+                            )
+
+                            SwitchSettingItem(
+                                title = "YouTube Feed Carousels",
+                                subtitle = "Generic carousels from YouTube home feed.",
+                                checked = vis.showYtCarousels,
+                                onCheckedChange = settingsViewModel::setExploreShowYtCarousels
+                            )
+
+                            SwitchSettingItem(
+                                title = "Genre & Mood Chips",
+                                subtitle = "Expandable mood filter chip row at the top.",
+                                checked = vis.showMoodChips,
+                                onCheckedChange = settingsViewModel::setExploreShowMoodChips
+                            )
+                        }
+                    }
+                }
+            }
+
             item(key = "player_ui_tweaks_section") {
                 SettingsSection(
                     title = stringResource(R.string.presentation_batch_f_exp_player_ui_tweaks_section),

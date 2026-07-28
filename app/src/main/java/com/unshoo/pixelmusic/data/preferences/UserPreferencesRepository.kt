@@ -342,6 +342,23 @@ constructor(
         val YOUTUBE_PLAYLIST_UPLOAD_SYNC_ENABLED = booleanPreferencesKey("youtube_playlist_upload_sync_enabled")
         val SHOW_SMART_MIX_PLAYLISTS = booleanPreferencesKey("show_smart_mix_playlists")
         val ARTIST_LIBRARY_FILTER = stringPreferencesKey("artist_library_filter")
+
+        // Explore Feed Visibility Settings
+        val EXPLORE_SHOW_CHARTS = booleanPreferencesKey("explore_show_charts")
+        val EXPLORE_SHOW_QUICK_PICKS = booleanPreferencesKey("explore_show_quick_picks")
+        val EXPLORE_SHOW_RECENT_MIXES = booleanPreferencesKey("explore_show_recent_mixes")
+        val EXPLORE_SHOW_YOUR_LIBRARY = booleanPreferencesKey("explore_show_your_library")
+        val EXPLORE_SHOW_DAILY_DISCOVER = booleanPreferencesKey("explore_show_daily_discover")
+        val EXPLORE_SHOW_NEW_RELEASES = booleanPreferencesKey("explore_show_new_releases")
+        val EXPLORE_SHOW_RECENTLY_PLAYED = booleanPreferencesKey("explore_show_recently_played")
+        val EXPLORE_SHOW_MOST_PLAYED = booleanPreferencesKey("explore_show_most_played")
+        val EXPLORE_SHOW_YOU_MIGHT_LIKE = booleanPreferencesKey("explore_show_you_might_like")
+        val EXPLORE_SHOW_LIKED_SONGS = booleanPreferencesKey("explore_show_liked_songs")
+        val EXPLORE_SHOW_CACHED_DOWNLOADED = booleanPreferencesKey("explore_show_cached_downloaded")
+        val EXPLORE_SHOW_TRENDING = booleanPreferencesKey("explore_show_trending")
+        val EXPLORE_SHOW_SMART_MIX_CARD = booleanPreferencesKey("explore_show_smart_mix_card")
+        val EXPLORE_SHOW_YT_CAROUSELS = booleanPreferencesKey("explore_show_yt_carousels")
+        val EXPLORE_SHOW_MOOD_CHIPS = booleanPreferencesKey("explore_show_mood_chips")
     }
 
     val preferTelegramAlternativeFlow: Flow<Boolean> =
@@ -354,6 +371,39 @@ constructor(
             preferences[PreferencesKeys.PREFER_TELEGRAM_ALTERNATIVE] = enabled
         }
     }
+
+    // ── Explore Feed Visibility ──────────────────────────────────────────────
+    val exploreShowChartsFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_CHARTS] ?: true }
+    val exploreShowQuickPicksFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_QUICK_PICKS] ?: true }
+    val exploreShowRecentMixesFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_RECENT_MIXES] ?: true }
+    val exploreShowYourLibraryFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_YOUR_LIBRARY] ?: true }
+    val exploreShowDailyDiscoverFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_DAILY_DISCOVER] ?: true }
+    val exploreShowNewReleasesFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_NEW_RELEASES] ?: true }
+    val exploreShowRecentlyPlayedFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_RECENTLY_PLAYED] ?: true }
+    val exploreShowMostPlayedFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_MOST_PLAYED] ?: true }
+    val exploreShowYouMightLikeFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_YOU_MIGHT_LIKE] ?: true }
+    val exploreShowLikedSongsFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_LIKED_SONGS] ?: true }
+    val exploreShowCachedDownloadedFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_CACHED_DOWNLOADED] ?: true }
+    val exploreShowTrendingFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_TRENDING] ?: true }
+    val exploreShowSmartMixCardFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_SMART_MIX_CARD] ?: true }
+    val exploreShowYtCarouselsFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_YT_CAROUSELS] ?: true }
+    val exploreShowMoodChipsFlow: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.EXPLORE_SHOW_MOOD_CHIPS] ?: true }
+
+    suspend fun setExploreShowCharts(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_CHARTS] = v } }
+    suspend fun setExploreShowQuickPicks(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_QUICK_PICKS] = v } }
+    suspend fun setExploreShowRecentMixes(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_RECENT_MIXES] = v } }
+    suspend fun setExploreShowYourLibrary(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_YOUR_LIBRARY] = v } }
+    suspend fun setExploreShowDailyDiscover(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_DAILY_DISCOVER] = v } }
+    suspend fun setExploreShowNewReleases(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_NEW_RELEASES] = v } }
+    suspend fun setExploreShowRecentlyPlayed(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_RECENTLY_PLAYED] = v } }
+    suspend fun setExploreShowMostPlayed(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_MOST_PLAYED] = v } }
+    suspend fun setExploreShowYouMightLike(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_YOU_MIGHT_LIKE] = v } }
+    suspend fun setExploreShowLikedSongs(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_LIKED_SONGS] = v } }
+    suspend fun setExploreShowCachedDownloaded(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_CACHED_DOWNLOADED] = v } }
+    suspend fun setExploreShowTrending(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_TRENDING] = v } }
+    suspend fun setExploreShowSmartMixCard(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_SMART_MIX_CARD] = v } }
+    suspend fun setExploreShowYtCarousels(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_YT_CAROUSELS] = v } }
+    suspend fun setExploreShowMoodChips(v: Boolean) { dataStore.edit { it[PreferencesKeys.EXPLORE_SHOW_MOOD_CHIPS] = v } }
 
     val telegramUseOnlineAlbumArtFlow: Flow<Boolean> =
         dataStore.data.map { preferences ->
