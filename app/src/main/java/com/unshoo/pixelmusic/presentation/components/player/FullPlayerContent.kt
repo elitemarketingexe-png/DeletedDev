@@ -292,6 +292,8 @@ fun FullPlayerContent(
     // distinctUntilChanged in the ViewModel ensures this only emits when something
     // actually changed, batching multiple rapid updates into one recomposition.
     val fullPlayerSlice by playerViewModel.fullPlayerSlice.collectAsStateWithLifecycle()
+    val playerStyleMode by playerViewModel.playerStyleMode.collectAsStateWithLifecycle()
+    val isGradientStyle = playerStyleMode == com.unshoo.pixelmusic.data.preferences.PlayerStyleMode.GRADIENT
     val currentSongArtists = fullPlayerSlice.currentSongArtists
     val lyricsSyncOffset = fullPlayerSlice.lyricsSyncOffset
     val albumArtQuality = fullPlayerSlice.albumArtQuality
@@ -550,6 +552,7 @@ fun FullPlayerContent(
             currentPlaybackQueue = currentPlaybackQueue,
             currentMediaItemIndex = currentQueueIndex ?: currentMediaItemIndex,
             carouselStyle = carouselStyle,
+            isGradientStyle = isGradientStyle,
             loadingTweaks = loadingTweaks,
             isSheetDragGestureActive = isSheetDragGestureActive,
             expansionFractionProvider = expansionFractionProvider,
@@ -1590,6 +1593,7 @@ private fun FullPlayerAlbumCoverSection(
     currentPlaybackQueue: ImmutableList<Song>,
     currentMediaItemIndex: Int,
     carouselStyle: String,
+    isGradientStyle: Boolean = false,
     loadingTweaks: FullPlayerLoadingTweaks,
     isSheetDragGestureActive: Boolean,
     expansionFractionProvider: () -> Float,
@@ -1606,11 +1610,6 @@ private fun FullPlayerAlbumCoverSection(
 ) {
     val shouldDelay = loadingTweaks.delayAll || loadingTweaks.delayAlbumCarousel
     val shouldApplyPausedScale = !isPlayingProvider() && !playWhenReadyProvider()
-    // Use a short deterministic tween instead of spring(StiffnessLow). The original
-    // spring took ~1s to settle, producing ~60 frames of graphicsLayer invalidations
-    // that overlapped with any subsequent sheet-collapse gesture. A 260 ms tween
-    // finishes well before the user can start the next gesture, keeping the album
-    // art's "pause squish" visible but removing the long tail of frame work.
     val albumArtScale by animateFloatAsState(
         targetValue = if (shouldApplyPausedScale) 0.95f else 1f,
         animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
@@ -1620,10 +1619,10 @@ private fun FullPlayerAlbumCoverSection(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = if (carouselStyle == CarouselStyle.NO_PEEK) 0.dp else 8.dp, bottom = 4.dp)
+            .padding(top = if (isGradientStyle && carouselStyle == CarouselStyle.NO_PEEK) 0.dp else 8.dp, bottom = 4.dp)
     ) {
         val carouselHeight = when (carouselStyle) {
-            CarouselStyle.NO_PEEK -> maxWidth * 1.15f
+            CarouselStyle.NO_PEEK -> if (isGradientStyle) maxWidth * 1.15f else maxWidth
             CarouselStyle.ONE_PEEK -> maxWidth * 0.8f
             CarouselStyle.TWO_PEEK -> maxWidth * 0.6f
             else -> maxWidth * 0.8f
@@ -1678,6 +1677,7 @@ private fun FullPlayerAlbumCoverSection(
                 },
                 onAlbumClick = onAlbumClick,
                 carouselStyle = carouselStyle,
+                isGradientStyle = isGradientStyle,
                 modifier = Modifier
                     .height(carouselHeight)
                     .graphicsLayer {

@@ -55,6 +55,7 @@ fun AlbumCarouselSection(
     onAlbumClick: (Song) -> Unit = {},
     modifier: Modifier = Modifier,
     carouselStyle: String = CarouselStyle.NO_PEEK,
+    isGradientStyle: Boolean = false,
     itemSpacing: Dp = 8.dp,
     albumArtQuality: AlbumArtQuality = AlbumArtQuality.MEDIUM
 ) {
@@ -171,7 +172,7 @@ fun AlbumCarouselSection(
             }
     }
 
-    val corner = if (carouselStyle == CarouselStyle.NO_PEEK) 0.dp else 24.dp
+    val corner = if (isGradientStyle && carouselStyle == CarouselStyle.NO_PEEK) 0.dp else 24.dp
 
     BoxWithConstraints(modifier = modifier) {
         val availableWidth = this.maxWidth
@@ -188,7 +189,7 @@ fun AlbumCarouselSection(
             content = { index ->
                 val song = queue[index]
                 val isFocusedItem = carouselState.pagerState.currentPage == index
-                val itemModifier = if (carouselStyle == CarouselStyle.NO_PEEK) {
+                val itemModifier = if (isGradientStyle && carouselStyle == CarouselStyle.NO_PEEK) {
                     Modifier
                         .fillMaxSize()
                         .aspectRatio(1f)
@@ -221,6 +222,7 @@ fun AlbumCarouselSection(
                         uri = song.albumArtUriString,
                         title = song.title,
                         modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
                         targetSize = targetSize,
                         placeholderModel = if (song.albumArtUriString?.startsWith("telegram_art") == true) {
                              "${song.albumArtUriString}?quality=thumb"
