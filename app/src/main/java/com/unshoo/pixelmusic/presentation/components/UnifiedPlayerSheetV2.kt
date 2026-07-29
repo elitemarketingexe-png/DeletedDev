@@ -732,8 +732,8 @@ fun UnifiedPlayerSheetV2(
                                     }
                             ) {
                                 val dominantColor = albumColorScheme.primary
-                                val accentColor = albumColorScheme.tertiary
-                                val darkDominantColor = albumColorScheme.surfaceContainerHighest
+                                val accentColor = albumColorScheme.secondary
+                                val darkDominantColor = if (isDarkTheme) albumColorScheme.surfaceContainerHighest else albumColorScheme.primaryContainer
 
                                 // Layer 1 & 2: Full Album Art Backdrop with Gaussian Blur
                                 OptimizedAlbumArt(

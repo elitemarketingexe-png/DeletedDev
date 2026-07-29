@@ -20,6 +20,12 @@ import com.unshoo.pixelmusic.presentation.components.scoped.PrefetchAlbumNeighbo
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.first
 
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import com.unshoo.pixelmusic.data.preferences.AlbumArtQuality
 import kotlin.math.abs
 
@@ -164,7 +170,7 @@ fun AlbumCarouselSection(
             }
     }
 
-    val corner = 24.dp
+    val corner = if (carouselStyle == CarouselStyle.NO_PEEK) 0.dp else 24.dp
 
     BoxWithConstraints(modifier = modifier) {
         val availableWidth = this.maxWidth
@@ -181,16 +187,34 @@ fun AlbumCarouselSection(
             content = { index ->
                 val song = queue[index]
                 val isFocusedItem = carouselState.pagerState.currentPage == index
-                Box(
+                val itemModifier = if (carouselStyle == CarouselStyle.NO_PEEK) {
                     Modifier
                         .fillMaxSize()
                         .aspectRatio(1f)
-                        .clickable(
-                            enabled = isFocusedItem && song.albumId != -1L,
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onAlbumClick(song) }
-                        )
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    0.50f to Color.Transparent,
+                                    1.00f to Color.Black
+                                ),
+                                blendMode = BlendMode.DstOut
+                            )
+                        }
+                } else {
+                    Modifier
+                        .fillMaxSize()
+                        .aspectRatio(1f)
+                }
+
+                Box(
+                    itemModifier.clickable(
+                        enabled = isFocusedItem && song.albumId != -1L,
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { onAlbumClick(song) }
+                    )
                 ) { // Enforce 1:1 aspect ratio for the item itself
                     OptimizedAlbumArt(
                         uri = song.albumArtUriString,
