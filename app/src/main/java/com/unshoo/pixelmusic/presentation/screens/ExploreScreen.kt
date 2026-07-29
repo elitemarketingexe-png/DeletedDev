@@ -58,8 +58,6 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
-import com.unshoo.pixelmusic.presentation.components.DailyDiscoverSection
-import com.unshoo.pixelmusic.presentation.components.ExpressiveDailyDiscoverCard
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.animation.core.spring
 import androidx.compose.material.icons.rounded.Favorite
@@ -681,13 +679,6 @@ fun ExploreScreen(
                                         )
                                     }
                                 }
-                            }
-                        }
-
-                        // Standalone Daily Discover Section (Material 3 Expressive)
-                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") && cardShelfSections.isNotEmpty()) {
-                            item(key = "daily_discover_section") {
-                                DailyDiscoverSection(cardShelfSections, playerViewModel, navController, localSongs)
                             }
                         }
 

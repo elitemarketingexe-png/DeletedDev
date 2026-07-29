@@ -37,6 +37,7 @@ data class ExploreUiState(
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
     val isContinuationLoading: Boolean = false,
+    val isChartsLoading: Boolean = false,
     val homePageSections: List<HomePage.Section> = emptyList(),
     val homePageContinuation: String? = null,
     val newReleaseAlbums: List<AlbumItem> = emptyList(),
@@ -178,82 +179,43 @@ class ExploreViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = !hasCachedData, error = null) }
         }
         try {
-            // Fast path: history + dbArtists in single IO block
+            // Fast path: history in single IO block
             val history = withContext(Dispatchers.IO) {
                 listeningStatsTracker.refreshMergedYoutubeHistory()
                 val merged = listeningStatsTracker.playbackHistory.value
                 if (merged.isNotEmpty()) merged.take(20) else playbackStatsRepository.loadPlaybackHistory(limit = 20)
             }
-            val dbArtists = withContext(Dispatchers.IO) {
-                try {
-                    musicDao.getAllArtistsListRaw()
-                } catch (e: Exception) {
-                    emptyList()
-                }
+
+            // --- STAGE 1: Core Above-the-Fold (Instant - YouTube Home only) ---
+            val home = withContext(Dispatchers.IO) {
+                runCatching { YouTube.home().getOrNull() }.getOrNull()
             }
 
-            val userActivityQuery = if (history.isNotEmpty()) {
-                val artistCounts = history.mapNotNull { it.artist }.groupingBy { it }.eachCount()
-                artistCounts.maxByOrNull { it.value }?.key ?: "Bollywood"
-            } else {
-                "Bollywood"
-            }
-
-            // --- STAGE 1: Core Above-the-Fold (Instant) ---
-            var home: HomePage? = null
-            var explore: ExplorePage? = null
-            var charts: ChartsPage? = null
-            var newReleasesResult: List<AlbumItem>? = null
-
-            coroutineScope {
-                val homeDeferred = async(Dispatchers.IO) { runCatching { YouTube.home().getOrNull() }.getOrNull() }
-                val chartsDeferred = async(Dispatchers.IO) { runCatching { YouTube.getChartsPage().getOrNull() }.getOrNull() }
-                val newReleasesDeferred = async(Dispatchers.IO) {
-                    if (YouTube.hasLoginCookie()) runCatching { YouTube.newReleaseAlbums().getOrNull() }.getOrNull() else null
-                }
-                val exploreDeferred = async(Dispatchers.IO) { runCatching { YouTube.explore().getOrNull() }.getOrNull() }
-
-                home = homeDeferred.await()
-                charts = chartsDeferred.await()
-                newReleasesResult = newReleasesDeferred.await()
-                explore = exploreDeferred.await()
-
-                _uiState.update { currentState ->
-                    val filterSections = { sections: List<HomePage.Section> ->
-                        sections.filter { section ->
-                            val title = section.title.lowercase()
-                            !title.contains("new music videos") &&
-                                    !title.contains("new albums & singles") &&
-                                    !title.contains("trending")
-                        }
+            _uiState.update { currentState ->
+                val filterSections = { sections: List<HomePage.Section> ->
+                    sections.filter { section ->
+                        val title = section.title.lowercase()
+                        !title.contains("new music videos") &&
+                                !title.contains("new albums & singles") &&
+                                !title.contains("trending")
                     }
-                    val filteredHomeSections = filterSections(home?.sections.orEmpty())
-                    val filteredExploreSections = filterSections(explore?.sections.orEmpty())
-
-                    val mergedSections = (filteredHomeSections + filteredExploreSections + currentState.homePageSections).distinctBy { it.title }
-                    val mergedChips = ((home?.chips.orEmpty()) + (explore?.chips.orEmpty()) + currentState.moodChips).distinctBy { it.title }
-                    currentState.copy(
-                        isLoading = false,
-                        isRefreshing = false,
-                        homePageSections = mergedSections,
-                        homePageContinuation = home?.continuation ?: currentState.homePageContinuation,
-                        explorePageSections = filteredExploreSections,
-                        chartsPage = charts ?: currentState.chartsPage,
-                        newReleaseAlbums = newReleasesResult ?: currentState.newReleaseAlbums,
-                        moodChips = mergedChips
-                    )
                 }
+                val filteredHomeSections = filterSections(home?.sections.orEmpty())
+
+                currentState.copy(
+                    isLoading = false,
+                    isRefreshing = false,
+                    homePageSections = (filteredHomeSections + currentState.homePageSections).distinctBy { it.title },
+                    moodChips = (home?.chips.orEmpty() + currentState.moodChips).distinctBy { it.title }
+                )
             }
 
-            if (home == null && explore == null && charts == null && newReleasesResult == null) {
-                val hasCachedData = _uiState.value.homePageSections.isNotEmpty() ||
-                        _uiState.value.newReleaseAlbums.isNotEmpty() ||
-                        _uiState.value.chartsPage != null
+            if (home == null && _uiState.value.homePageSections.isEmpty()) {
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         isRefreshing = false,
-                        error = if (!hasCachedData) "Failed to fetch explore data. Check connection." else null
+                        error = "Failed to fetch explore data. Check connection."
                     )
                 }
                 return
@@ -305,59 +267,6 @@ class ExploreViewModel @Inject constructor(
                             explicit = false,
                             endpoint = null
                         )
-                    }
-
-                    ensureActive()
-
-                    // You Might Like - capped to 2 artists, single search each, no allLocalSongIds loading
-                    val topArtists = withContext(Dispatchers.Default) {
-                        history
-                            .mapNotNull { it.artist }
-                            .filter { it.isNotBlank() && !it.contains("unknown", ignoreCase = true) }
-                            .groupingBy { it }
-                            .eachCount()
-                            .entries
-                            .sortedByDescending { it.value }
-                            .take(2)
-                            .map { it.key }
-                    }
-
-                    // Only exclude played history, not entire library (getAllSongIds was heavy)
-                    val playedSongIds = history.mapNotNull { it.songId }.toSet()
-
-                    val perArtistResults = mutableListOf<List<SongItem>>()
-                    if (topArtists.isNotEmpty()) {
-                        for (artistName in topArtists) {
-                            ensureActive()
-                            val results = runCatching {
-                                YouTube.search(query = "$artistName mix", filter = YouTube.SearchFilter.FILTER_SONG)
-                                    .getOrNull()?.items?.filterIsInstance<SongItem>() ?: emptyList()
-                            }.getOrDefault(emptyList())
-                                .filter { it.id !in playedSongIds }
-                                .take(8)
-                            perArtistResults.add(results)
-                            kotlinx.coroutines.delay(250) // increased throttle to reduce thread contention
-                        }
-                    }
-
-                    val youMightLikeItems = withContext(Dispatchers.Default) {
-                        val interleaved = mutableListOf<SongItem>()
-                        val maxItems = if (perArtistResults.isNotEmpty()) perArtistResults.maxOf { it.size } else 0
-                        for (i in 0 until maxItems) {
-                            for (list in perArtistResults) {
-                                if (i < list.size) {
-                                    val item = list[i]
-                                    val primaryArtist = item.artists.firstOrNull()?.name?.lowercase()?.trim() ?: ""
-                                    val artistCount = interleaved.count {
-                                        it.artists.firstOrNull()?.name?.lowercase()?.trim() == primaryArtist
-                                    }
-                                    if (artistCount < 2 && interleaved.none { it.id == item.id }) {
-                                        interleaved.add(item)
-                                    }
-                                }
-                            }
-                        }
-                        interleaved.take(10)
                     }
 
                     ensureActive()
@@ -424,77 +333,9 @@ class ExploreViewModel @Inject constructor(
                     _uiState.update { currentState ->
                         val updatedSections = currentState.homePageSections.toMutableList()
 
-                        if (likedSongItems.size >= 2) {
-                            updatedSections.add(HomePage.Section(
-                                title = "Your Liked Songs",
-                                label = "Favorites from your library",
-                                thumbnail = likedSongItems.firstOrNull()?.thumbnail,
-                                endpoint = null,
-                                items = likedSongItems
-                            ))
-                        }
 
-                        if (cachedSongItems.size >= 2) {
-                            updatedSections.add(HomePage.Section(
-                                title = "Cached & Downloaded",
-                                label = "Offline playback ready",
-                                thumbnail = cachedSongItems.firstOrNull()?.thumbnail,
-                                endpoint = null,
-                                items = cachedSongItems
-                            ))
-                        }
 
-                        if (youMightLikeItems.isNotEmpty()) {
-                            updatedSections.add(HomePage.Section(
-                                title = "You Might Like",
-                                label = "Recommended for you",
-                                thumbnail = youMightLikeItems.firstOrNull()?.thumbnail,
-                                endpoint = null,
-                                items = youMightLikeItems
-                            ))
-                        }
-
-                        if (recentSongItems.size >= 3) {
-                            updatedSections.add(HomePage.Section(
-                                title = "Your Recently Played",
-                                label = "Recent history",
-                                thumbnail = recentSongItems.firstOrNull()?.thumbnail,
-                                endpoint = null,
-                                items = recentSongItems
-                            ))
-                        }
-
-                        if (mostPlayedSongItems.size >= 3) {
-                            updatedSections.add(HomePage.Section(
-                                title = "Your Most Played",
-                                label = "All-time top tracks",
-                                thumbnail = mostPlayedSongItems.firstOrNull()?.thumbnail,
-                                endpoint = null,
-                                items = mostPlayedSongItems
-                            ))
-                        }
-
-                        // OPTIMIZED New Releases: No extra album searches per artist (was 2 extra network calls)
-                        // Just filter global releases by library artist names (in-memory set, no DB query)
-                        val finalNewReleases = if (YouTube.hasLoginCookie()) {
-                            val localArtistNames = (
-                                    dbArtists.map { it.name.lowercase().trim() } +
-                                            history.mapNotNull { it.artist?.lowercase()?.trim() }
-                                    ).filter { it.isNotBlank() }.toSet()
-
-                            val globalReleases = newReleasesResult
-                                ?: YouTube.newReleaseAlbums().getOrNull().orEmpty()
-                            // If we have library artists, filter, else take top 30 global
-                            if (localArtistNames.isNotEmpty()) {
-                                globalReleases.filter { album ->
-                                    album.artists?.any { it.name.lowercase().trim() in localArtistNames } == true
-                                }.take(30).ifEmpty { globalReleases.take(30) }
-                            } else {
-                                globalReleases.take(30)
-                            }
-                        } else {
-                            emptyList()
-                        }
+                        val finalNewReleases = emptyList<AlbumItem>()
 
                         val renderedLocalEntities = (
                                 likedSongs.take(10) +
@@ -540,90 +381,17 @@ class ExploreViewModel @Inject constructor(
         }
     }
 
+    fun loadChartsIfNeeded() {
+        if (_uiState.value.chartsPage != null || _uiState.value.isChartsLoading) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isChartsLoading = true) }
+            val charts = runCatching { YouTube.getChartsPage().getOrNull() }.getOrNull()
+            _uiState.update { it.copy(isChartsLoading = false, chartsPage = charts) }
+        }
+    }
+
     fun loadMore() {
-        val currentState = _uiState.value
-        val continuation = currentState.homePageContinuation
-        if (currentState.isContinuationLoading) return
-
-        if (continuation == null) {
-            val hasLocalSections = currentState.homePageSections.any { it.title == "Recently Played (Local)" }
-            if (hasLocalSections) return
-
-            viewModelScope.launch {
-                _uiState.update { it.copy(isContinuationLoading = true) }
-                try {
-                    val recentSongs = withContext(Dispatchers.IO) {
-                        val merged = listeningStatsTracker.playbackHistory.value
-                        if (merged.isNotEmpty()) merged.take(15)
-                        else playbackStatsRepository.loadPlaybackHistory(limit = 15)
-                    }
-
-                    val localSections = mutableListOf<HomePage.Section>()
-
-                    if (recentSongs.isNotEmpty()) {
-                        val songItems = recentSongs.map { entry ->
-                            SongItem(
-                                id = entry.songId,
-                                title = entry.title ?: "",
-                                artists = listOf(unshoo.ianshulyadav.pixelmusic.innertube.models.Artist(entry.artist ?: "Unknown Artist", null)),
-                                album = null,
-                                duration = null,
-                                thumbnail = entry.thumbnail ?: "",
-                                explicit = false,
-                                endpoint = null
-                            )
-                        }
-                        localSections.add(HomePage.Section(
-                            title = "Recently Played (Local)",
-                            label = "From your history",
-                            thumbnail = null,
-                            endpoint = null,
-                            items = songItems
-                        ))
-                    }
-
-                    _uiState.update { state ->
-                        state.copy(
-                            isContinuationLoading = false,
-                            homePageSections = state.homePageSections + localSections
-                        )
-                    }
-                } catch (e: Exception) {
-                    Timber.e(e, "Error loading local sections for Explore")
-                    _uiState.update { it.copy(isContinuationLoading = false) }
-                }
-            }
-            return
-        }
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isContinuationLoading = true) }
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    YouTube.home(continuation = continuation).getOrNull()
-                }
-                if (result != null) {
-                    _uiState.update {
-                        val filteredNewSections = result.sections.filter { section ->
-                            val title = section.title.lowercase()
-                            !title.contains("new music videos") && !title.contains("new albums & singles")
-                        }
-                        val newState = it.copy(
-                            isContinuationLoading = false,
-                            homePageSections = it.homePageSections + filteredNewSections,
-                            homePageContinuation = result.continuation
-                        )
-                        persistToCache(newState)
-                        newState
-                    }
-                } else {
-                    _uiState.update { it.copy(isContinuationLoading = false) }
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Error loading more Explore screen sections")
-                _uiState.update { it.copy(isContinuationLoading = false) }
-            }
-        }
+        // Continuation loading removed for performance
     }
 
     fun setSelectedFilter(filter: String) {

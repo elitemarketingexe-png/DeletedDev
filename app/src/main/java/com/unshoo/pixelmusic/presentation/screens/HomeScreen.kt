@@ -116,7 +116,6 @@ import com.unshoo.pixelmusic.presentation.components.subcomps.PlayingEqIcon
 import com.unshoo.pixelmusic.presentation.navigation.Screen
 import com.unshoo.pixelmusic.presentation.components.StreamingProviderSheet
 import com.unshoo.pixelmusic.presentation.telegram.auth.TelegramLoginActivity
-import com.unshoo.pixelmusic.presentation.components.DailyDiscoverSection
 import com.unshoo.pixelmusic.presentation.viewmodel.ExploreViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.SettingsViewModel
@@ -159,23 +158,9 @@ fun HomeScreen(
     }
     val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val accountsUiState by accountsViewModel.uiState.collectAsStateWithLifecycle()
-    val exploreUiState by exploreViewModel.uiState.collectAsStateWithLifecycle()
-    val discoverYoutubeSongs = remember(exploreUiState.homePageSections) {
-        exploreUiState.homePageSections
-            .filter { section ->
-                val title = section.title
-                title.contains("daily discover", ignoreCase = true) ||
-                (title.contains("discover", ignoreCase = true) && title.contains("daily", ignoreCase = true))
-            }
-            .flatMap { section ->
-                section.items.filterIsInstance<unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem>()
-                    .map { songItem -> songItem.toNativeSong() }
-            }
-            .distinctBy { it.id }
-    }
     val dailyMixSongsRaw by playerViewModel.dailyMixSongs.collectAsStateWithLifecycle()
-    val mergedDailyMixSongs = remember(dailyMixSongsRaw, discoverYoutubeSongs) {
-        (dailyMixSongsRaw + discoverYoutubeSongs).distinctBy { it.id }.toImmutableList()
+    val mergedDailyMixSongs = remember(dailyMixSongsRaw) {
+        dailyMixSongsRaw.toImmutableList()
     }
     val userName = remember(accountsUiState) {
         val rawName = accountsUiState.userName
@@ -533,7 +518,7 @@ fun HomeScreen(
                     }
                 }
 
-                // Daily Mix (with YouTube Daily Discover songs merged)
+                // Daily Mix
                 if (mergedDailyMixSongs.isNotEmpty()) {
                     item(
                         key = "daily_mix_section",
