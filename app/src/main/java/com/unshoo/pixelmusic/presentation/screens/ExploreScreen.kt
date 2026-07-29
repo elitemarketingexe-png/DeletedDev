@@ -1362,9 +1362,10 @@ fun ExploreTopBar(
             Text(
                 text = "Explore",
                 fontFamily = GoogleSansRounded,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp),
-                color = MaterialTheme.colorScheme.onSurface
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 40.sp,
+                letterSpacing = 1.sp
             )
 
             Row(
