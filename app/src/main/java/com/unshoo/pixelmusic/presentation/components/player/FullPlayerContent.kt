@@ -1620,10 +1620,10 @@ private fun FullPlayerAlbumCoverSection(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = if (carouselStyle == CarouselStyle.NO_PEEK) 16.dp else 8.dp, bottom = 4.dp)
+            .padding(top = if (carouselStyle == CarouselStyle.NO_PEEK) 0.dp else 8.dp, bottom = 4.dp)
     ) {
         val carouselHeight = when (carouselStyle) {
-            CarouselStyle.NO_PEEK -> maxWidth
+            CarouselStyle.NO_PEEK -> maxWidth * 1.15f
             CarouselStyle.ONE_PEEK -> maxWidth * 0.8f
             CarouselStyle.TWO_PEEK -> maxWidth * 0.6f
             else -> maxWidth * 0.8f
