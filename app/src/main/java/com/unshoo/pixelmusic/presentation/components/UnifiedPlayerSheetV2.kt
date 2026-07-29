@@ -535,20 +535,15 @@ fun UnifiedPlayerSheetV2(
             val primaryContainer = albumColorScheme.primaryContainer
             val tertiaryContainer = albumColorScheme.tertiaryContainer
 
-            val angleRad = miniPlayerGradientAnimOffset * 2f * Math.PI.toFloat()
-            val color1 = lerp(primary, tertiary, (sin(angleRad) + 1f) / 2f)
-            val color2 = lerp(secondary, primaryContainer, (cos(angleRad) + 1f) / 2f)
-            val color3 = lerp(tertiaryContainer, primary, (sin(angleRad + 1.5f) + 1f) / 2f)
+            // Smooth, calm horizontal linear gradient matching reference screenshot
+            val startColor = lerp(primary, primaryContainer, 0.35f + 0.15f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+            val midColor = lerp(secondary, tertiary, 0.40f + 0.20f * cos(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+            val endColor = lerp(tertiaryContainer, primary, 0.30f + 0.20f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
 
-            val centerOffset = Offset(
-                x = 400f + sin(angleRad) * 300f,
-                y = 100f + cos(angleRad) * 80f
-            )
-
-            Brush.radialGradient(
-                colors = listOf(color1, color2, color3),
-                center = centerOffset,
-                radius = 800f
+            Brush.horizontalGradient(
+                0.00f to startColor,
+                0.50f to midColor,
+                1.00f to endColor
             )
         }
     }
