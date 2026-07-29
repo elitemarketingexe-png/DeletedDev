@@ -13,8 +13,11 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.MutatorMutex
 import androidx.compose.foundation.background
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.lerp
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -532,14 +535,20 @@ fun UnifiedPlayerSheetV2(
             val primaryContainer = albumColorScheme.primaryContainer
             val tertiaryContainer = albumColorScheme.tertiaryContainer
 
-            val startColor = lerp(primary, primaryContainer, 0.25f + miniPlayerGradientAnimOffset * 0.20f)
-            val midColor = lerp(secondary, tertiary, miniPlayerGradientAnimOffset * 0.40f)
-            val endColor = lerp(tertiaryContainer, primary, miniPlayerGradientAnimOffset * 0.35f)
+            val angleRad = miniPlayerGradientAnimOffset * 2f * Math.PI.toFloat()
+            val color1 = lerp(primary, tertiary, (sin(angleRad) + 1f) / 2f)
+            val color2 = lerp(secondary, primaryContainer, (cos(angleRad) + 1f) / 2f)
+            val color3 = lerp(tertiaryContainer, primary, (sin(angleRad + 1.5f) + 1f) / 2f)
 
-            Brush.horizontalGradient(
-                0.00f to startColor,
-                0.50f to midColor,
-                1.00f to endColor
+            val centerOffset = Offset(
+                x = 400f + sin(angleRad) * 300f,
+                y = 100f + cos(angleRad) * 80f
+            )
+
+            Brush.radialGradient(
+                colors = listOf(color1, color2, color3),
+                center = centerOffset,
+                radius = 800f
             )
         }
     }
