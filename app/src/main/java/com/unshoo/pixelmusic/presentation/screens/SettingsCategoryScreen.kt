@@ -800,6 +800,17 @@ fun SettingsCategoryScreen(
                                     onSelectionChanged = { settingsViewModel.setPlayerThemePreference(it) },
                                     leadingIcon = { Icon(Icons.Outlined.PlayCircle, null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
+                                ThemeSelectorItem(
+                                    label = "Player Style",
+                                    description = "Choose between Default surface background and Dynamic Animated Gradient player style",
+                                    options = mapOf(
+                                        com.unshoo.pixelmusic.data.preferences.PlayerStyleMode.DEFAULT to "Default",
+                                        com.unshoo.pixelmusic.data.preferences.PlayerStyleMode.GRADIENT to "Gradient"
+                                    ),
+                                    selectedKey = uiState.playerStyleMode,
+                                    onSelectionChanged = { settingsViewModel.setPlayerStyleMode(it) },
+                                    leadingIcon = { Icon(Icons.Outlined.Palette, null, tint = MaterialTheme.colorScheme.secondary) }
+                                )
                                 SwitchSettingItem(
                                     title = stringResource(R.string.setcat_show_player_file_info_title),
                                     subtitle = stringResource(R.string.setcat_show_player_file_info_subtitle),

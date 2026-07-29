@@ -17,6 +17,7 @@ class ThemePreferencesRepository @Inject constructor(
 ) {
     private object Keys {
         val PLAYER_THEME_PREFERENCE = stringPreferencesKey("player_theme_preference_v2")
+        val PLAYER_STYLE_MODE = stringPreferencesKey("player_style_mode_v1")
         val ALBUM_ART_PALETTE_STYLE = stringPreferencesKey("album_art_palette_style_v1")
         val ALBUM_ART_COLOR_ACCURACY = intPreferencesKey("album_art_color_accuracy_v1")
         val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
@@ -41,6 +42,10 @@ class ThemePreferencesRepository @Inject constructor(
         preferences[Keys.PLAYER_THEME_PREFERENCE] ?: ThemePreference.ALBUM_ART
     }
 
+    val playerStyleModeFlow: Flow<String> = dataStore.data.map { preferences ->
+        preferences[Keys.PLAYER_STYLE_MODE] ?: PlayerStyleMode.GRADIENT
+    }
+
     val colorPalettePreferenceFlow: Flow<String> = dataStore.data.map { preferences ->
         preferences[Keys.COLOR_PALETTE_PREFERENCE] ?: "SAGE"
     }
@@ -63,6 +68,11 @@ class ThemePreferencesRepository @Inject constructor(
     suspend fun setPlayerThemePreference(themeMode: String) =
         dataStore.edit { preferences ->
             preferences[Keys.PLAYER_THEME_PREFERENCE] = themeMode
+        }
+
+    suspend fun setPlayerStyleMode(styleMode: String) =
+        dataStore.edit { preferences ->
+            preferences[Keys.PLAYER_STYLE_MODE] = styleMode
         }
 
     suspend fun setAppThemeMode(themeMode: String) =

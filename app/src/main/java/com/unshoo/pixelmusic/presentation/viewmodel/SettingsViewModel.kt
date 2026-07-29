@@ -18,6 +18,7 @@ import com.unshoo.pixelmusic.data.preferences.AppFontMode
 import com.unshoo.pixelmusic.data.preferences.CarouselStyle
 import com.unshoo.pixelmusic.data.preferences.LibraryNavigationMode
 import com.unshoo.pixelmusic.data.preferences.ThemePreference
+import com.unshoo.pixelmusic.data.preferences.PlayerStyleMode
 import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
 import com.unshoo.pixelmusic.data.preferences.PlayerStreamClient
 import com.unshoo.pixelmusic.data.preferences.PlaylistSuggestionSource
@@ -69,6 +70,7 @@ data class SettingsUiState(
     val pitchBlackEnabled: Boolean = false,
     val appFontMode: String = AppFontMode.APP_DEFAULT,
     val playerThemePreference: String = ThemePreference.ALBUM_ART,
+    val playerStyleMode: String = PlayerStyleMode.GRADIENT,
     val colorPalette: String = "SAGE",
     val albumArtPaletteStyle: AlbumArtPaletteStyle = AlbumArtPaletteStyle.default,
     val albumArtColorAccuracy: Int = AlbumArtColorAccuracy.DEFAULT,
@@ -538,6 +540,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.collageAutoRotateFlow.collect { autoRotate ->
                 _uiState.update { it.copy(collageAutoRotate = autoRotate) }
+            }
+        }
+
+        viewModelScope.launch {
+            themePreferencesRepository.playerStyleModeFlow.collect { mode ->
+                _uiState.update { it.copy(playerStyleMode = mode) }
             }
         }
     }
@@ -1107,6 +1115,12 @@ class SettingsViewModel @Inject constructor(
     fun setPlayerThemePreference(preference: String) {
         viewModelScope.launch {
             themePreferencesRepository.setPlayerThemePreference(preference)
+        }
+    }
+
+    fun setPlayerStyleMode(styleMode: String) {
+        viewModelScope.launch {
+            themePreferencesRepository.setPlayerStyleMode(styleMode)
         }
     }
 

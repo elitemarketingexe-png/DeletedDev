@@ -5,9 +5,16 @@ import com.unshoo.pixelmusic.presentation.components.ExpressiveOfflineDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.MutatorMutex
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -490,6 +497,56 @@ fun UnifiedPlayerSheetV2(
     val miniReadyAlpha = sheetThemeState.miniReadyAlpha
     val miniAppearScale = sheetThemeState.miniAppearScale
     val playerAreaBackground = sheetThemeState.playerAreaBackground
+
+    val playerStyleMode = playerConfig.playerStyleMode
+    val infiniteTransition = rememberInfiniteTransition(label = "DynamicPlayerGradient")
+    val gradientAnimOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(14000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "GradientAnimOffset"
+    )
+
+    val isGradientStyle = playerStyleMode == com.unshoo.pixelmusic.data.preferences.PlayerStyleMode.GRADIENT
+    val dynamicGradientBrush = remember(albumColorScheme, gradientAnimOffset, isGradientStyle) {
+        if (!isGradientStyle) null
+        else {
+            val primary = albumColorScheme.primary
+            val primaryContainer = albumColorScheme.primaryContainer
+            val secondary = albumColorScheme.secondary
+            val secondaryContainer = albumColorScheme.secondaryContainer
+            val tertiary = albumColorScheme.tertiary
+            val tertiaryContainer = albumColorScheme.tertiaryContainer
+            val surfaceContainer = albumColorScheme.surfaceContainerHighest
+            val surface = albumColorScheme.surface
+
+            // 1. Top (Behind status bar & top action bar): Soft glowing primaryContainer
+            val topGlow = lerp(primaryContainer, secondaryContainer, gradientAnimOffset * 0.35f)
+            
+            // 2. Artwork lower edge (Seamless fade): Rich vibrant primary
+            val artEdgeColor = lerp(primary, tertiaryContainer, gradientAnimOffset * 0.40f)
+            
+            // 3. Track Title & Meta section: Deep secondary / primaryContainer
+            val titleAreaColor = lerp(secondary, primaryContainer, gradientAnimOffset * 0.30f)
+
+            // 4. Progress Scrubber & Meta badge: Warm tertiary / secondaryContainer
+            val progressAreaColor = lerp(tertiaryContainer, secondaryContainer, gradientAnimOffset * 0.45f)
+            
+            // 5. Bottom Transport Dock (Play/Pause & action bar): Dark surfaceContainer
+            val bottomDockColor = lerp(surfaceContainer, surface, gradientAnimOffset * 0.25f)
+
+            Brush.verticalGradient(
+                0.00f to topGlow.copy(alpha = 0.98f),
+                0.22f to artEdgeColor.copy(alpha = 0.94f),
+                0.48f to titleAreaColor.copy(alpha = 0.92f),
+                0.75f to progressAreaColor.copy(alpha = 0.95f),
+                1.00f to bottomDockColor.copy(alpha = 0.99f)
+            )
+        }
+    }
     // Elevation is only visible in the mini/collapsed state (expansion < 0.18).
     // miniReadyAlpha fades the shadow in during the initial song-appear animation.
     val visualCardShadowElevation by remember(showQueueSheet, miniReadyAlpha) {

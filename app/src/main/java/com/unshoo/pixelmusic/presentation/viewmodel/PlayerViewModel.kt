@@ -643,6 +643,19 @@ class PlayerViewModel @Inject constructor(
             initialValue = ThemePreference.ALBUM_ART
         )
 
+    val playerStyleMode: StateFlow<String> = themePreferencesRepository.playerStyleModeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = com.unshoo.pixelmusic.data.preferences.PlayerStyleMode.GRADIENT
+        )
+
+    fun setPlayerStyleMode(styleMode: String) {
+        viewModelScope.launch {
+            themePreferencesRepository.setPlayerStyleMode(styleMode)
+        }
+    }
+
     val colorPalette: StateFlow<String> = themePreferencesRepository.colorPalettePreferenceFlow
         .stateIn(
             scope = viewModelScope,
@@ -1648,7 +1661,8 @@ class PlayerViewModel @Inject constructor(
         val fullPlayerLoadingTweaks: FullPlayerLoadingTweaks = FullPlayerLoadingTweaks(),
         val tapBackgroundClosesPlayer: Boolean = false,
         val useSmoothCorners: Boolean = true,
-        val playerThemePreference: String = ThemePreference.ALBUM_ART
+        val playerThemePreference: String = ThemePreference.ALBUM_ART,
+        val playerStyleMode: String = com.unshoo.pixelmusic.data.preferences.PlayerStyleMode.GRADIENT
     )
 
     private val playerConfigSlicePart1 = combine(
@@ -1672,8 +1686,9 @@ class PlayerViewModel @Inject constructor(
     val playerConfigSlice: StateFlow<PlayerConfigSlice> = combine(
         playerConfigSlicePart1,
         useSmoothCorners,
-        playerThemePreference
-    ) { p1, smoothCorners, themePref ->
+        playerThemePreference,
+        playerStyleMode
+    ) { p1, smoothCorners, themePref, styleMode ->
         PlayerConfigSlice(
             navBarCornerRadius = p1.navBarCornerRadius,
             navBarStyle = p1.navBarStyle,
@@ -1681,7 +1696,8 @@ class PlayerViewModel @Inject constructor(
             fullPlayerLoadingTweaks = p1.fullPlayerLoadingTweaks,
             tapBackgroundClosesPlayer = p1.tapBackgroundClosesPlayer,
             useSmoothCorners = smoothCorners,
-            playerThemePreference = themePref
+            playerThemePreference = themePref,
+            playerStyleMode = styleMode
         )
     }
         .distinctUntilChanged()
