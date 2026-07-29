@@ -62,8 +62,10 @@ class QuickPicksViewModel @Inject constructor(
     private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
     init {
-        // Immediately populate from cache so the UI shows something on relaunch
-        loadFromCache()
+        // Immediately populate from cache async on Dispatchers.IO so SharedPreferences JSON parsing never blocks the main thread
+        viewModelScope.launch(Dispatchers.IO) {
+            loadFromCache()
+        }
         viewModelScope.launch {
             userPreferencesRepository.discoverFlow.collect { _ ->
                 if (_selectedCategory.value == "All") {
@@ -420,19 +422,21 @@ class QuickPicksViewModel @Inject constructor(
             }
         }
 
-        // Await all async requests
-        val songMixSongs = songMixesDeferred.flatMap { it.await() }
-        val artistRadioSongs = artistRadiosDeferred.flatMap { it.await() }
-        val artistNameRadioSongs = artistNameRadiosDeferred.flatMap { it.await() }
-        val homeRecSongs = ytHomeRecommendationsDeferred.await()
-        val onlineHistorySongs = ytHistoryDeferred.await()
-        val localPopularSongs = localPopularDeferred.await()
+        // 1.2s deadline for remote recommendation buckets — return available recommendations without blocking UI
+        val remoteCandidates = kotlinx.coroutines.withTimeoutOrNull(1200L) {
+            val songMixSongs = songMixesDeferred.flatMap { try { it.await() } catch (_: Exception) { emptyList() } }
+            val artistRadioSongs = artistRadiosDeferred.flatMap { try { it.await() } catch (_: Exception) { emptyList() } }
+            val artistNameRadioSongs = artistNameRadiosDeferred.flatMap { try { it.await() } catch (_: Exception) { emptyList() } }
+            val homeRecSongs = try { ytHomeRecommendationsDeferred.await() } catch (_: Exception) { emptyList() }
+            val onlineHistorySongs = try { ytHistoryDeferred.await() } catch (_: Exception) { emptyList() }
+            (songMixSongs + artistRadioSongs + artistNameRadioSongs + homeRecSongs + onlineHistorySongs).map { it.toNativeSong() }
+        } ?: emptyList()
+
+        val localPopularSongs = try { localPopularDeferred.await() } catch (_: Exception) { emptyList() }
 
         // 3. Blend, map, and de-duplicate
         val combinedCandidates = mutableListOf<Song>()
-        (songMixSongs + artistRadioSongs + artistNameRadioSongs + homeRecSongs + onlineHistorySongs)
-            .map { it.toNativeSong() }
-            .let { combinedCandidates.addAll(it) }
+        combinedCandidates.addAll(remoteCandidates)
         combinedCandidates.addAll(localPopularSongs)
 
         var deduplicated = combinedCandidates.distinctBy { song ->

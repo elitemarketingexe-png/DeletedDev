@@ -388,12 +388,12 @@ fun HomeScreen(
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
                 onRefresh = {
-                    isRefreshing = true
-                    homePlaceholderRefreshGeneration++
-                    quickPicksViewModel.refresh()
-                    playerViewModel.forceUpdateDailyMix()
                     scope.launch {
-                        delay(2000)
+                        isRefreshing = true
+                        homePlaceholderRefreshGeneration++
+                        quickPicksViewModel.refresh()
+                        playerViewModel.forceUpdateDailyMix()
+                        delay(1200)
                         isRefreshing = false
                     }
                 },

@@ -167,21 +167,16 @@ fun QuickPicksSection(
                             .height(cardSize)
                             .graphicsLayer {
                                 val layoutInfo = lazyListState.layoutInfo
-                                val visibleItems = layoutInfo.visibleItemsInfo
-                                val itemInfo = visibleItems.firstOrNull { it.key == song.id }
+                                val itemInfo = layoutInfo.visibleItemsInfo.find { it.key == song.id }
                                 if (itemInfo != null) {
                                     val focalPoint = layoutInfo.viewportStartOffset + 16.dp.toPx()
                                     val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
                                     val maxDistance = (cardSize + 8.dp).toPx()
                                     val fraction = (distanceFromStart / maxDistance).coerceIn(0f, 1f)
-                                    val scale = 0.86f + (1f - 0.86f) * (1f - fraction)
+                                    val scale = 0.86f + 0.14f * (1f - fraction)
                                     scaleX = scale
                                     scaleY = scale
-                                    alpha = 0.7f + (1f - 0.7f) * (1f - fraction)
-                                } else {
-                                    scaleX = 0.86f
-                                    scaleY = 0.86f
-                                    alpha = 0.7f
+                                    alpha = 0.7f + 0.3f * (1f - fraction)
                                 }
                             }
                     )
@@ -224,28 +219,17 @@ fun QuickPicksSection(
                             modifier = Modifier
                                 .size(cardSize)
                                 .graphicsLayer {
-                                    if (isReducedMotion) {
-                                        scaleX = 1f
-                                        scaleY = 1f
-                                        alpha = 1f
-                                    } else {
-                                        val layoutInfo = lazyListState.layoutInfo
-                                        val visibleItems = layoutInfo.visibleItemsInfo
-                                        val itemInfo = visibleItems.firstOrNull { it.key == song.id }
-                                        if (itemInfo != null) {
-                                            val focalPoint = layoutInfo.viewportStartOffset + 16.dp.toPx()
-                                            val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
-                                            val maxDistance = (cardSize + 8.dp).toPx()
-                                            val fraction = (distanceFromStart / maxDistance).coerceIn(0f, 1f)
-                                            val scale = 0.9f + (1f - 0.9f) * (1f - fraction)
-                                            scaleX = scale
-                                            scaleY = scale
-                                            alpha = 0.8f + (1f - 0.8f) * (1f - fraction)
-                                        } else {
-                                            scaleX = 0.9f
-                                            scaleY = 0.9f
-                                            alpha = 0.8f
-                                        }
+                                    val layoutInfo = lazyListState.layoutInfo
+                                    val itemInfo = layoutInfo.visibleItemsInfo.find { it.key == song.id }
+                                    if (itemInfo != null) {
+                                        val focalPoint = layoutInfo.viewportStartOffset + 16.dp.toPx()
+                                        val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
+                                        val maxDistance = (cardSize + 8.dp).toPx()
+                                        val fraction = (distanceFromStart / maxDistance).coerceIn(0f, 1f)
+                                        val scale = 0.9f + 0.1f * (1f - fraction)
+                                        scaleX = scale
+                                        scaleY = scale
+                                        alpha = 0.8f + 0.2f * (1f - fraction)
                                     }
                                 },
                             shape = cardShape,
@@ -329,40 +313,18 @@ fun QuickPicksSection(
                                 .size(uncontainedCardSize)
                                 .graphicsLayer {
                                     val layoutInfo = lazyListState.layoutInfo
-                                    val visibleItems = layoutInfo.visibleItemsInfo
-                                    val itemInfo = visibleItems.firstOrNull { it.key == song.id }
+                                    val itemInfo = layoutInfo.visibleItemsInfo.find { it.key == song.id }
                                     if (itemInfo != null) {
-                                        val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+                                        val viewportWidth = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
                                         val itemCenter = itemInfo.offset + itemInfo.size / 2f
-                                        val fraction = (itemCenter / viewportWidth.toFloat()).coerceIn(0f, 1f)
-                                        
-                                        // dynamic Material 3 uncontained scale
-                                        val scale = if (fraction > 0.6f) {
-                                            1f - (fraction - 0.6f) * 0.3f
-                                        } else {
-                                            1f
-                                        }
+                                        val fraction = (itemCenter / viewportWidth).coerceIn(0f, 1f)
+                                        val scale = if (fraction > 0.6f) 1f - (fraction - 0.6f) * 0.25f else 1f
                                         scaleX = scale
                                         scaleY = scale
-                                        alpha = 0.7f + (1f - 0.7f) * scale
-                                        
-                                        // Dynamic Material 3 shape morphing: squircle corner sizes change on scroll position
-                                        val currentCorner = if (fraction > 0.5f) {
-                                            val morphProgress = (fraction - 0.5f) * 2f
-                                            24.dp + (56.dp - 24.dp) * morphProgress.coerceIn(0f, 1f)
-                                        } else {
-                                            24.dp
-                                        }
-                                        shape = AbsoluteSmoothCornerShape(currentCorner, 80)
-                                        clip = true
-                                    } else {
-                                        scaleX = 0.88f
-                                        scaleY = 0.88f
-                                        alpha = 0.7f
-                                        shape = AbsoluteSmoothCornerShape(56.dp, 80)
-                                        clip = true
+                                        alpha = 0.75f + 0.25f * scale
                                     }
                                 },
+                            shape = AbsoluteSmoothCornerShape(24.dp, 80),
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                         ) {
