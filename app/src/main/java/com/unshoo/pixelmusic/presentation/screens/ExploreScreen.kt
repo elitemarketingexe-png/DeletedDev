@@ -1447,7 +1447,7 @@ fun AlbumCarouselItem(
                 contentDescription = album.title,
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(ExpressiveMediumShape),
+                    .clip(AbsoluteSmoothCornerShape(22.dp, 80)),
                 contentScale = ContentScale.Crop
             )
             val isSingle = album.releaseType == unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumReleaseType.SINGLE
@@ -1978,27 +1978,35 @@ fun SmartMixStudioHeroCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val secondaryContainer = MaterialTheme.colorScheme.secondaryContainer
+    val surfaceContainerHigh = MaterialTheme.colorScheme.surfaceContainerHigh
+    val heroGradient = remember(primaryContainer, secondaryContainer, surfaceContainerHigh) {
+        Brush.horizontalGradient(
+            colors = listOf(
+                primaryContainer.copy(alpha = 0.75f),
+                secondaryContainer.copy(alpha = 0.85f),
+                surfaceContainerHigh
+            )
+        )
+    }
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = ExpressiveLargeShape,
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-        )
+            .clip(AbsoluteSmoothCornerShape(28.dp, 80))
+            .background(heroGradient)
+            .clickable(onClick = onClick)
+            .padding(20.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Surface(
-                    shape = ExpressiveSmallShape,
+                    shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ) {
@@ -2012,15 +2020,16 @@ fun SmartMixStudioHeroCard(
                 Text(
                     text = "Smart Mix Studio",
                     style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
                         fontFamily = GoogleSansRounded
-                    )
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Craft personalized mixes with AI & Last.fm",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
