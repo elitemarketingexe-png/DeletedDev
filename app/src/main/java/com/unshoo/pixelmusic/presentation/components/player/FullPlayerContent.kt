@@ -2774,14 +2774,18 @@ private fun PlayerSongInfo(
         derivedStateOf { artists.firstOrNull { it.id != 0L && it.id != -1L }?.id ?: artistId }
     }
     val titleStyle = MaterialTheme.typography.headlineSmall.copy(
+        fontSize = 32.sp,
         fontWeight = FontWeight.Bold,
         fontFamily = GoogleSansRounded,
-        color = textColor
+        color = Color.White.copy(alpha = 0.95f)
     )
 
     val artistStyle = MaterialTheme.typography.titleMedium.copy(
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Medium,
+        fontFamily = GoogleSansRounded,
         letterSpacing = 0.sp,
-        color = artistTextColor
+        color = Color.White.copy(alpha = 0.70f)
     )
 
     Column(

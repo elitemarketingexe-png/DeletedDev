@@ -545,40 +545,17 @@ fun UnifiedPlayerSheetV2(
     val dynamicGradientBrush = remember(albumColorScheme, gradientAnimOffset, isGradientStyle) {
         if (!isGradientStyle) null
         else {
-            val primary = albumColorScheme.primary
-            val primaryContainer = albumColorScheme.primaryContainer
-            val secondary = albumColorScheme.secondary
-            val secondaryContainer = albumColorScheme.secondaryContainer
-            val tertiary = albumColorScheme.tertiary
-            val tertiaryContainer = albumColorScheme.tertiaryContainer
-            val surfaceContainer = albumColorScheme.surfaceContainerHighest
-            val surface = albumColorScheme.surface
-
-            // 1. Top status bar & header backdrop (Matches artwork top aura - 100% solid)
-            val topAura = lerp(primaryContainer, secondaryContainer, gradientAnimOffset * 0.35f)
-
-            // 2. Upper artwork blend (Smooth transition into artwork midpoint)
-            val upperBlend = lerp(primaryContainer, primary, gradientAnimOffset * 0.40f)
-
-            // 3. Artwork lower edge (Rich vibrant transition under artwork)
-            val artEdgeColor = lerp(primary, tertiary, gradientAnimOffset * 0.30f)
-
-            // 4. Track Title & Artist metadata section (Deep rich tone matching track text)
-            val titleAreaColor = lerp(secondary, tertiaryContainer, gradientAnimOffset * 0.35f)
-
-            // 5. Scrubber & Quality badge zone (Warm harmonized container color)
-            val progressAreaColor = lerp(tertiaryContainer, secondaryContainer, gradientAnimOffset * 0.45f)
-
-            // 6. Bottom Control Dock (Dark contrast backdrop for control buttons)
-            val bottomDockColor = lerp(surfaceContainer, surface, gradientAnimOffset * 0.25f)
+            val dominantColor = lerp(albumColorScheme.primaryContainer, albumColorScheme.primary, gradientAnimOffset * 0.25f)
+            val darkDominantColor = lerp(albumColorScheme.surfaceContainerHighest, albumColorScheme.surface, gradientAnimOffset * 0.20f)
 
             Brush.verticalGradient(
-                0.00f to topAura,
-                0.20f to upperBlend,
-                0.38f to artEdgeColor,
-                0.55f to titleAreaColor,
-                0.78f to progressAreaColor,
-                1.00f to bottomDockColor
+                0.00f to Color.Transparent,
+                0.18f to dominantColor.copy(alpha = 0.04f),
+                0.35f to dominantColor.copy(alpha = 0.18f),
+                0.55f to dominantColor.copy(alpha = 0.42f),
+                0.72f to darkDominantColor.copy(alpha = 0.65f),
+                0.85f to darkDominantColor.copy(alpha = 0.88f),
+                1.00f to darkDominantColor
             )
         }
     }
