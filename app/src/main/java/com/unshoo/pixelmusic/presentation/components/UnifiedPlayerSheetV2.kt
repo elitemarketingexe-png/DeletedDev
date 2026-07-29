@@ -549,12 +549,12 @@ fun UnifiedPlayerSheetV2(
             val darkDominantColor = lerp(albumColorScheme.surfaceContainerHighest, albumColorScheme.surface, gradientAnimOffset * 0.20f)
 
             Brush.verticalGradient(
-                0.00f to Color.Transparent,
-                0.18f to dominantColor.copy(alpha = 0.04f),
-                0.35f to dominantColor.copy(alpha = 0.18f),
-                0.55f to dominantColor.copy(alpha = 0.42f),
-                0.72f to darkDominantColor.copy(alpha = 0.65f),
-                0.85f to darkDominantColor.copy(alpha = 0.88f),
+                0.00f to dominantColor,
+                0.18f to lerp(dominantColor, darkDominantColor, 0.15f),
+                0.35f to lerp(dominantColor, darkDominantColor, 0.35f),
+                0.55f to lerp(dominantColor, darkDominantColor, 0.60f),
+                0.72f to lerp(dominantColor, darkDominantColor, 0.80f),
+                0.85f to darkDominantColor,
                 1.00f to darkDominantColor
             )
         }
