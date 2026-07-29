@@ -2594,6 +2594,24 @@ fun DailyDiscoverCardItem(
     onClick: () -> Unit
 ) {
     val shape = remember { AbsoluteSmoothCornerShape(28.dp, 80) }
+    val topGradient = remember {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color.Black.copy(alpha = 0.75f),
+                Color.Black.copy(alpha = 0.4f),
+                Color.Transparent
+            )
+        )
+    }
+    val bottomGradient = remember {
+        Brush.verticalGradient(
+            colors = listOf(
+                Color.Transparent,
+                Color.Black.copy(alpha = 0.5f),
+                Color.Black.copy(alpha = 0.85f)
+            )
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -2624,15 +2642,7 @@ fun DailyDiscoverCardItem(
                 .fillMaxWidth()
                 .height(140.dp)
                 .align(Alignment.TopCenter)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.75f),
-                            Color.Black.copy(alpha = 0.4f),
-                            Color.Transparent
-                        )
-                    )
-                )
+                .background(topGradient)
         )
 
         // Bottom Gradient for Recommendation text readability
@@ -2641,15 +2651,7 @@ fun DailyDiscoverCardItem(
                 .fillMaxWidth()
                 .height(140.dp)
                 .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.5f),
-                            Color.Black.copy(alpha = 0.85f)
-                        )
-                    )
-                )
+                .background(bottomGradient)
         )
 
         // Top Text Overlay: Song Title & Artist / Meta
