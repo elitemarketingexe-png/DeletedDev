@@ -172,7 +172,7 @@ fun AlbumCarouselSection(
             }
     }
 
-    val corner = if (isGradientStyle && carouselStyle == CarouselStyle.NO_PEEK) 0.dp else 24.dp
+    val corner = 24.dp
 
     BoxWithConstraints(modifier = modifier) {
         val availableWidth = this.maxWidth
@@ -189,26 +189,9 @@ fun AlbumCarouselSection(
             content = { index ->
                 val song = queue[index]
                 val isFocusedItem = carouselState.pagerState.currentPage == index
-                val itemModifier = if (isGradientStyle && carouselStyle == CarouselStyle.NO_PEEK) {
-                    Modifier
-                        .fillMaxSize()
-                        .aspectRatio(1f)
-                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                        .drawWithContent {
-                            drawContent()
-                            drawRect(
-                                brush = Brush.verticalGradient(
-                                    0.50f to Color.Transparent,
-                                    1.00f to Color.Black
-                                ),
-                                blendMode = BlendMode.DstOut
-                            )
-                        }
-                } else {
-                    Modifier
-                        .fillMaxSize()
-                        .aspectRatio(1f)
-                }
+                val itemModifier = Modifier
+                    .fillMaxSize()
+                    .aspectRatio(1f)
 
                 Box(
                     itemModifier.clickable(
