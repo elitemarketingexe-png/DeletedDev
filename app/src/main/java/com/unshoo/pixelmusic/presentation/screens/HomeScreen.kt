@@ -433,7 +433,7 @@ fun HomeScreen(
                         contentType = "quick_picks_section"
                     ) {
                         QuickPicksSection(
-                            songs = quickPicks,
+                            songs = remember(quickPicks) { quickPicks.take(10) },
                             onSongClick = { song ->
                                 playerViewModel.showAndPlaySong(song, quickPicks, "Quick Picks")
                             },

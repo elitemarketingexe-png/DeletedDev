@@ -672,9 +672,18 @@ fun UnifiedPlayerSheetV2(
                                 shape = sheetInteractionState.playerShadowShape,
                                 clip = false
                             )
-                            .background(
-                                color = playerAreaBackground,
-                                shape = sheetInteractionState.playerShadowShape
+                            .then(
+                                if (isGradientStyle && dynamicGradientBrush != null && playerContentExpansionFraction.value > 0.05f) {
+                                    Modifier.background(
+                                        brush = dynamicGradientBrush,
+                                        shape = sheetInteractionState.playerShadowShape
+                                    )
+                                } else {
+                                    Modifier.background(
+                                        color = playerAreaBackground,
+                                        shape = sheetInteractionState.playerShadowShape
+                                    )
+                                }
                             )
                             .clipToBounds()
                             .semantics {

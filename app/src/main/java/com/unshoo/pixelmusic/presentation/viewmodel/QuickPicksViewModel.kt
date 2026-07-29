@@ -52,6 +52,9 @@ class QuickPicksViewModel @Inject constructor(
     private val _quickPicks = MutableStateFlow<List<Song>>(emptyList())
     val quickPicks: StateFlow<List<Song>> = _quickPicks.asStateFlow()
 
+    private val _dailyDiscover = MutableStateFlow<List<Song>>(emptyList())
+    val dailyDiscover: StateFlow<List<Song>> = _dailyDiscover.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -411,7 +414,20 @@ class QuickPicksViewModel @Inject constructor(
                 if (chipTitles.isNotEmpty()) {
                     _categories.value = listOf("All") + chipTitles
                 }
-                homePage.sections
+                // Sort home sections by personalized relevance so "Quick picks", "Mixed for you", "Listen again" are placed first
+                val sortedSections = homePage.sections.sortedByDescending { section ->
+                    val t = section.title.lowercase()
+                    when {
+                        t.contains("quick picks") -> 10
+                        t.contains("mixed for you") -> 9
+                        t.contains("listen again") -> 8
+                        t.contains("forgotten favorites") -> 7
+                        t.contains("similar to") -> 6
+                        t.contains("recommended") -> 5
+                        else -> 1
+                    }
+                }
+                sortedSections
                     .flatMap { section -> section.items.filterIsInstance<SongItem>() }
                     .filterVideo(pureYtMusicOnly)
             } catch (e: Exception) {
@@ -444,19 +460,19 @@ class QuickPicksViewModel @Inject constructor(
             }
         }
 
-        // 1.2s deadline for remote recommendation buckets — return available recommendations without blocking UI
-        val remoteCandidates = kotlinx.coroutines.withTimeoutOrNull(1200L) {
+        // 1.5s deadline for remote recommendation buckets — await available recommendations without blocking UI
+        val remoteCandidates = kotlinx.coroutines.withTimeoutOrNull(1500L) {
+            val homeRecSongs = try { ytHomeRecommendationsDeferred.await() } catch (_: Exception) { emptyList() }
+            val onlineHistorySongs = try { ytHistoryDeferred.await() } catch (_: Exception) { emptyList() }
             val songMixSongs = songMixesDeferred.flatMap { try { it.await() } catch (_: Exception) { emptyList() } }
             val artistRadioSongs = artistRadiosDeferred.flatMap { try { it.await() } catch (_: Exception) { emptyList() } }
             val artistNameRadioSongs = artistNameRadiosDeferred.flatMap { try { it.await() } catch (_: Exception) { emptyList() } }
-            val homeRecSongs = try { ytHomeRecommendationsDeferred.await() } catch (_: Exception) { emptyList() }
-            val onlineHistorySongs = try { ytHistoryDeferred.await() } catch (_: Exception) { emptyList() }
-            (songMixSongs + artistRadioSongs + artistNameRadioSongs + homeRecSongs + onlineHistorySongs).map { it.toNativeSong() }
+            (homeRecSongs + onlineHistorySongs + songMixSongs + artistRadioSongs + artistNameRadioSongs).map { it.toNativeSong() }
         } ?: emptyList()
 
         val localPopularSongs = try { localPopularDeferred.await() } catch (_: Exception) { emptyList() }
 
-        // 3. Blend, map, and de-duplicate
+        // 3. Blend, map, and de-duplicate (personalized online home & history first!)
         val combinedCandidates = mutableListOf<Song>()
         combinedCandidates.addAll(remoteCandidates)
         combinedCandidates.addAll(localPopularSongs)
@@ -465,8 +481,8 @@ class QuickPicksViewModel @Inject constructor(
             song.youtubeId?.takeIf { it.isNotBlank() } ?: "${song.title.lowercase()}|${song.artist.lowercase()}"
         }
 
-        // 4. Fallback: If not enough personalized items (e.g. fresh install/no history), fetch location-based trending charts/releases
-        if (deduplicated.size < 20) {
+        // 4. Fallback: ONLY if user has no personalized history/recommendations (e.g. fresh install/un-logged-in), fetch location-based trending charts
+        if (deduplicated.size < 15) {
             val countryCode = userPreferencesRepository.contentCountryFlow.first().uppercase()
             
             val chartsDeferred = async(Dispatchers.IO) {
@@ -520,8 +536,11 @@ class QuickPicksViewModel @Inject constructor(
                 }
         }
 
-        // Shuffle completely to make it dynamic on every view/refresh
-        deduplicated.shuffled().take(20)
+        val qpSongs = deduplicated.take(20)
+        val ddSongs = deduplicated.drop(6).take(15).ifEmpty { deduplicated.take(15) }
+        _dailyDiscover.value = ddSongs
+
+        qpSongs
     }
 
     // ─────────────────────────────────────────────────────────────────────────

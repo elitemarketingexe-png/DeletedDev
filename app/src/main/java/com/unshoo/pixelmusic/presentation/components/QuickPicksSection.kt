@@ -165,47 +165,12 @@ fun QuickPicksSection(
                         modifier = Modifier
                             .width(cardSize)
                             .height(cardSize)
-                            .graphicsLayer {
-                                val layoutInfo = lazyListState.layoutInfo
-                                val itemInfo = layoutInfo.visibleItemsInfo.find { it.key == song.id }
-                                if (itemInfo != null) {
-                                    val focalPoint = layoutInfo.viewportStartOffset + 16.dp.toPx()
-                                    val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
-                                    val maxDistance = (cardSize + 8.dp).toPx()
-                                    val fraction = (distanceFromStart / maxDistance).coerceIn(0f, 1f)
-                                    val scale = 0.86f + (1f - 0.86f) * (1f - fraction)
-                                    scaleX = scale
-                                    scaleY = scale
-                                    alpha = 0.7f + (1f - 0.7f) * (1f - fraction)
-                                } else {
-                                    scaleX = 0.86f
-                                    scaleY = 0.86f
-                                    alpha = 0.7f
-                                }
-                            }
                     )
                 }
             }
         } else if (displayMode == QuickPicksDisplayMode.CARD_CLASSIC) {
             val limitSongs = remember(songs) { songs.take(20) }
             val lazyListState = rememberLazyListState()
-            val context = LocalContext.current
-            
-            // Query system reduced motion (animation scale)
-            val isReducedMotion = remember(context) {
-                try {
-                    android.provider.Settings.Global.getFloat(
-                        context.contentResolver,
-                        android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
-                        1f
-                    ) == 0f
-                } catch (e: Exception) {
-                    false
-                }
-            }
-
-
-
             val cardShape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
             LazyRow(
                 state = lazyListState,
@@ -220,22 +185,7 @@ fun QuickPicksSection(
                             .clickable { onSongClick(song) }
                     ) {
                         Card(
-                            modifier = Modifier
-                                .size(cardSize)
-                                .graphicsLayer {
-                                    val layoutInfo = lazyListState.layoutInfo
-                                    val itemInfo = layoutInfo.visibleItemsInfo.find { it.key == song.id }
-                                    if (itemInfo != null) {
-                                        val focalPoint = layoutInfo.viewportStartOffset + 16.dp.toPx()
-                                        val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
-                                        val maxDistance = (cardSize + 8.dp).toPx()
-                                        val fraction = (distanceFromStart / maxDistance).coerceIn(0f, 1f)
-                                        val scale = 0.9f + 0.1f * (1f - fraction)
-                                        scaleX = scale
-                                        scaleY = scale
-                                        alpha = 0.8f + 0.2f * (1f - fraction)
-                                    }
-                                },
+                            modifier = Modifier.size(cardSize),
                             shape = cardShape,
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
@@ -298,6 +248,7 @@ fun QuickPicksSection(
         } else if (displayMode == QuickPicksDisplayMode.UNCONTAINED) {
             val limitSongs = remember(songs) { songs.take(20) }
             val lazyListState = rememberLazyListState()
+            val uncontainedShape = remember { AbsoluteSmoothCornerShape(24.dp, 80) }
             
             LazyRow(
                 state = lazyListState,
