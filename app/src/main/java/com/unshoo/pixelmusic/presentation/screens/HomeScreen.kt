@@ -391,7 +391,7 @@ fun HomeScreen(
                     scope.launch {
                         isRefreshing = true
                         homePlaceholderRefreshGeneration++
-                        quickPicksViewModel.refresh()
+                        quickPicksViewModel.refresh(force = true)
                         playerViewModel.forceUpdateDailyMix()
                         delay(1200)
                         isRefreshing = false

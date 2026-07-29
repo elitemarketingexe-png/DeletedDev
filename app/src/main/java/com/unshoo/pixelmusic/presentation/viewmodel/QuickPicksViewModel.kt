@@ -8,11 +8,13 @@ import com.unshoo.pixelmusic.data.remote.youtube.toNativeSong
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -61,28 +63,38 @@ class QuickPicksViewModel @Inject constructor(
 
     private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
+    private var fetchJob: Job? = null
+    private val CACHE_TTL_MS = 10 * 60 * 1000L // 10 minutes cache TTL
+
     init {
         // Immediately populate from cache async on Dispatchers.IO so SharedPreferences JSON parsing never blocks the main thread
         viewModelScope.launch(Dispatchers.IO) {
             loadFromCache()
         }
         viewModelScope.launch {
-            userPreferencesRepository.discoverFlow.collect { _ ->
-                if (_selectedCategory.value == "All") {
-                    loadQuickPicks("All")
+            userPreferencesRepository.discoverFlow
+                .distinctUntilChanged()
+                .collect { _ ->
+                    if (_selectedCategory.value == "All") {
+                        loadQuickPicks("All", forceRefresh = false)
+                    }
                 }
-            }
         }
     }
 
     fun setCategory(category: String) {
         if (_selectedCategory.value == category && !_isLoading.value) return
         _selectedCategory.value = category
-        loadQuickPicks(category)
+        loadQuickPicks(category, forceRefresh = true)
     }
 
-    fun refresh() {
-        loadQuickPicks(_selectedCategory.value)
+    fun refresh(force: Boolean = false) {
+        loadQuickPicks(_selectedCategory.value, forceRefresh = force)
+    }
+
+    private fun isCacheFresh(): Boolean {
+        val lastSaved = prefs.getLong(KEY_CACHE_TIMESTAMP, 0L)
+        return (System.currentTimeMillis() - lastSaved) < CACHE_TTL_MS
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -173,8 +185,18 @@ class QuickPicksViewModel @Inject constructor(
     // Main load entry point
     // ─────────────────────────────────────────────────────────────────────────
 
-    private fun loadQuickPicks(category: String) {
-        viewModelScope.launch {
+    private fun loadQuickPicks(category: String, forceRefresh: Boolean = false) {
+        if (!forceRefresh && _quickPicks.value.isNotEmpty() && isCacheFresh()) {
+            Timber.tag("QuickPicks").d("QuickPicks cache is fresh and populated, skipping redundant fetch")
+            return
+        }
+
+        if (fetchJob?.isActive == true) {
+            Timber.tag("QuickPicks").d("QuickPicks fetch job is already active, skipping duplicate request")
+            return
+        }
+
+        fetchJob = viewModelScope.launch {
             if (_quickPicks.value.isEmpty()) {
                 _isLoading.value = true
             }

@@ -298,7 +298,7 @@ fun ExploreScreen(
                 scope.launch {
                     isManualRefreshing = true
                     exploreViewModel.loadData(forceRefresh = true)
-                    quickPicksViewModel.refresh()
+                    quickPicksViewModel.refresh(force = true)
                     kotlinx.coroutines.delay(1000)
                     isManualRefreshing = false
                 }
