@@ -67,7 +67,7 @@ import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import java.util.Calendar
-import kotlin.math.absoluteValue
+import androidx.compose.runtime.snapshotFlow
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -154,6 +154,10 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import unshoo.ianshulyadav.pixelmusic.innertube.pages.ChartsPage
 import androidx.compose.runtime.snapshotFlow
+
+private val ExpressiveSmallShape = AbsoluteSmoothCornerShape(16.dp, 70)
+private val ExpressiveMediumShape = AbsoluteSmoothCornerShape(20.dp, 70)
+private val ExpressiveLargeShape = AbsoluteSmoothCornerShape(26.dp, 70)
 
 private fun isBentoSection(title: String, itemSize: Int): Boolean {
     val t = title.lowercase()
@@ -860,78 +864,6 @@ fun ExploreScreen(
                                     }
                                 }
                             }
-
-                            if (homePageContinuation != null && isContinuationLoading) {
-                                item(key = "load_more_indicator_inline") {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 16.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Surface(
-                                            shape = androidx.compose.foundation.shape.CircleShape,
-                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                            tonalElevation = 6.dp,
-                                            shadowElevation = 4.dp,
-                                            modifier = Modifier.size(40.dp)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                                CircularProgressIndicator(
-                                                    modifier = Modifier.size(20.dp),
-                                                    strokeWidth = 2.5.dp,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Infinite scroll: load more when user scrolls near the bottom
-                        if (filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") {
-                            if (homePageContinuation != null || !remainingSections.any { it.title == "Recently Played (Local)" }) {
-                                item(key = "load_more_trigger") {
-                                    LaunchedEffect(listState) {
-                                        snapshotFlow {
-                                            val layoutInfo = listState.layoutInfo
-                                            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                                            val totalItems = layoutInfo.totalItemsCount
-                                            lastVisibleIndex >= totalItems - 3
-                                        }
-                                            .distinctUntilChanged()
-                                            .filter { it }
-                                            .collect {
-                                                exploreViewModel.loadMore()
-                                            }
-                                    }
-                                    if (isContinuationLoading) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 16.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Surface(
-                                                shape = androidx.compose.foundation.shape.CircleShape,
-                                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                tonalElevation = 6.dp,
-                                                shadowElevation = 4.dp,
-                                                modifier = Modifier.size(40.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                                    CircularProgressIndicator(
-                                                        modifier = Modifier.size(20.dp),
-                                                        strokeWidth = 2.5.dp,
-                                                        color = MaterialTheme.colorScheme.primary
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -1000,24 +932,26 @@ fun SongCardItem(
     song: Song,
     onClick: () -> Unit
 ) {
-    val shape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
     Column(
         modifier = Modifier
-            .width(120.dp)
+            .width(124.dp)
             .clickable(onClick = onClick)
     ) {
         SmartImage(
             model = song.albumArtUriString,
             contentDescription = song.title,
             modifier = Modifier
-                .size(120.dp)
-                .clip(shape),
+                .size(124.dp)
+                .clip(ExpressiveMediumShape),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = song.title,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GoogleSansRounded
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1080,8 +1014,6 @@ fun LibraryPlaylistCard(
     playerViewModel: PlayerViewModel,
     onClick: () -> Unit
 ) {
-    val shape = remember { AbsoluteSmoothCornerShape(24.dp, 80) }
-    val coverShape = remember { AbsoluteSmoothCornerShape(14.dp, 80) }
     val previewSongIds = remember(playlist.songIds) {
         playlist.songIds.take(4)
     }
@@ -1106,10 +1038,10 @@ fun LibraryPlaylistCard(
         modifier = Modifier
             .width(260.dp)
             .height(120.dp)
-            .clip(shape)
+            .clip(ExpressiveMediumShape)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = blendedBgColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -1134,7 +1066,7 @@ fun LibraryPlaylistCard(
                 Box(
                     modifier = Modifier
                         .size(96.dp)
-                        .clip(coverShape)
+                        .clip(ExpressiveSmallShape)
                 ) {
                     PlaylistCover(
                         playlist = playlist,
@@ -1364,7 +1296,10 @@ fun RecentMixCardItem(
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = playlist.name,
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontFamily = GoogleSansRounded
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1372,7 +1307,7 @@ fun RecentMixCardItem(
         )
         Text(
             text = "Smart Mix",
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1387,25 +1322,11 @@ fun ExploreTopBar(
     onCreateClick: () -> Unit,
     isScrolled: Boolean = false,
 ) {
-    // OPTIMIZED: Removed animateColorAsState and animateDpAsState that ran on every scroll threshold change.
-    // Previously each scroll past threshold triggered 300ms animation recomposing top bar each frame.
-    // Now static switch without animation - instant, zero extra recomposition.
-    val baseContainerColor = MaterialTheme.colorScheme.primaryContainer
-    val surfaceColor = MaterialTheme.colorScheme.surface
-    val solidTintedColor = remember(baseContainerColor, surfaceColor) {
-        androidx.compose.ui.graphics.Color(
-            red = (baseContainerColor.red * 0.45f) + (surfaceColor.red * 0.55f),
-            green = (baseContainerColor.green * 0.45f) + (surfaceColor.green * 0.55f),
-            blue = (baseContainerColor.blue * 0.45f) + (surfaceColor.blue * 0.55f),
-            alpha = 1f
-        )
-    }
-    val containerColor = if (isScrolled) solidTintedColor else baseContainerColor.copy(alpha = 0.4f)
-    val cornerRadius = if (isScrolled) 28.dp else 24.dp
+    val containerColor = if (isScrolled) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(bottomStart = cornerRadius, bottomEnd = cornerRadius),
+        shape = RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp),
         color = containerColor,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
@@ -1495,36 +1416,43 @@ fun AlbumCarouselItem(
     album: AlbumItem,
     onClick: () -> Unit
 ) {
-    val shape = remember {
-        AbsoluteSmoothCornerShape(
-            cornerRadiusTL = 24.dp,
-            cornerRadiusTR = 24.dp,
-            cornerRadiusBR = 24.dp,
-            cornerRadiusBL = 24.dp,
-            smoothnessAsPercentTL = 60,
-            smoothnessAsPercentTR = 60,
-            smoothnessAsPercentBR = 60,
-            smoothnessAsPercentBL = 60
-        )
-    }
-
     Column(
         modifier = Modifier
-            .width(140.dp)
+            .width(136.dp)
             .clickable(onClick = onClick)
     ) {
-        SmartImage(
-            model = album.thumbnail,
-            contentDescription = album.title,
-            modifier = Modifier
-                .size(140.dp)
-                .clip(shape),
-            contentScale = ContentScale.Crop
-        )
+        Box(modifier = Modifier.size(136.dp)) {
+            SmartImage(
+                model = album.thumbnail,
+                contentDescription = album.title,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(ExpressiveMediumShape),
+                contentScale = ContentScale.Crop
+            )
+            val isSingle = album.releaseType == unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumReleaseType.SINGLE
+            Surface(
+                shape = ExpressiveSmallShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(6.dp)
+            ) {
+                Text(
+                    text = if (isSingle) "Single" else "Album",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = album.title,
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontFamily = GoogleSansRounded
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1549,17 +1477,22 @@ fun ArtistCardItem(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(100.dp)
+            .width(108.dp)
             .clickable(onClick = onClick)
     ) {
-        SmartImage(
-            model = artist.thumbnail,
-            contentDescription = artist.title,
+        Box(
             modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape),
-            contentScale = ContentScale.Crop
-        )
+                .size(88.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+        ) {
+            SmartImage(
+                model = artist.thumbnail,
+                contentDescription = artist.title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = artist.title,
@@ -1578,10 +1511,10 @@ fun ArtistCardItem(
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = "Artist",
-            style = MaterialTheme.typography.bodySmall.copy(
+            style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Medium
             ),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+            color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -1597,24 +1530,26 @@ fun PlaylistCardItem(
     playlist: PlaylistItem,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(16.dp)
     Column(
         modifier = Modifier
-            .width(120.dp)
+            .width(136.dp)
             .clickable(onClick = onClick)
     ) {
         SmartImage(
             model = playlist.thumbnail,
             contentDescription = playlist.title,
             modifier = Modifier
-                .size(120.dp)
-                .clip(shape),
+                .size(136.dp)
+                .clip(ExpressiveMediumShape),
             contentScale = ContentScale.Crop
         )
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = playlist.title,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontFamily = GoogleSansRounded
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1679,14 +1614,12 @@ fun SimilarArtistBentoCard(
         lightBlendFraction = 0.50f
     )
 
-    val cardShape = remember { AbsoluteSmoothCornerShape(24.dp, 60) }
-
     Card(
         modifier = Modifier
             .width(140.dp)
             .height(200.dp),
-        shape = cardShape,
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = ExpressiveLargeShape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(containerColor = animatedBgColor),
         onClick = onClick
     ) {
@@ -2013,6 +1946,75 @@ private fun LibraryCarouselCard(
                         color = colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+}
+    }
+}
+
+@Composable
+fun SmartMixStudioHeroCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = ExpressiveLargeShape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Surface(
+                    shape = ExpressiveSmallShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Text(
+                        text = "STUDIO",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Smart Mix Studio",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = GoogleSansRounded
+                    )
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Craft personalized mixes with AI & Last.fm",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Icon(
+                        imageVector = Icons.Rounded.AutoAwesome,
+                        contentDescription = "Create Mix",
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
@@ -2465,98 +2467,4 @@ fun MusicCardShelf(
     }
 }
 
-@Composable
-fun SmartMixStudioHeroCard(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val shape = remember { AbsoluteSmoothCornerShape(28.dp, 60) }
-    val colors = MaterialTheme.colorScheme
-    
-    val gradientBrush = remember(colors) {
-        Brush.horizontalGradient(
-            colors = listOf(
-                colors.tertiaryContainer,
-                colors.primaryContainer,
-                colors.secondaryContainer
-            )
-        )
-    }
 
-    Card(
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .border(1.5.dp, colors.tertiary.copy(alpha = 0.4f), shape),
-        shape = shape,
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(gradientBrush)
-                .padding(22.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(CircleShape)
-                        .background(colors.surface.copy(alpha = 0.9f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.AutoAwesome,
-                        contentDescription = null,
-                        tint = colors.tertiary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "SMART MIX STUDIO",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = colors.primary,
-                            letterSpacing = 1.sp
-                        )
-                        Surface(
-                            shape = CircleShape,
-                            color = colors.tertiary,
-                            modifier = Modifier.padding(start = 4.dp)
-                        ) {
-                            Text(
-                                text = "AI 2.0",
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                                fontWeight = FontWeight.Bold,
-                                color = colors.onTertiary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Generate Adaptive Playlists",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontFamily = GoogleSansRounded,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.onSurface
-                    )
-                    Text(
-                        text = "Blend your local library with YouTube Music online streams seamlessly.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurface.copy(alpha = 0.8f)
-                    )
-                }
-            }
-        }
-    }
-}

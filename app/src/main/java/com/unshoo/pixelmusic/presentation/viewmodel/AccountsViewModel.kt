@@ -136,10 +136,13 @@ class AccountsViewModel @Inject constructor(
         telegramUsernameFlow,
         datastoreRepository.syncEnabled
     ) { states, activeLogouts, ytName, tgName, ytSyncEnabled ->
-        val (telegramConnected, telegramChannelCount) = states[0] as Pair<Boolean, Int>
-        val (gDriveConnected, gDriveFolderCount) = states[1] as Pair<Boolean, Int>
-        val (youtubeConnected, youtubePlaylistCount) = states[2] as Pair<Boolean, Int>
-        val (lastfmConnected, lastfmUsername, lastfmScrobbleEnabled) = states[3] as Triple<Boolean, String, Boolean>
+        val (telegramConnected, telegramChannelCount) = (states.getOrNull(0) as? Pair<*, *>)?.let { (it.first as? Boolean ?: false) to (it.second as? Int ?: 0) } ?: (false to 0)
+        val (gDriveConnected, gDriveFolderCount) = (states.getOrNull(1) as? Pair<*, *>)?.let { (it.first as? Boolean ?: false) to (it.second as? Int ?: 0) } ?: (false to 0)
+        val (youtubeConnected, youtubePlaylistCount) = (states.getOrNull(2) as? Pair<*, *>)?.let { (it.first as? Boolean ?: false) to (it.second as? Int ?: 0) } ?: (false to 0)
+        val lastfmState = states.getOrNull(3) as? Triple<*, *, *>
+        val lastfmConnected = lastfmState?.first as? Boolean ?: false
+        val lastfmUsername = lastfmState?.second as? String ?: ""
+        val lastfmScrobbleEnabled = lastfmState?.third as? Boolean ?: false
 
         val calculatedUserName = when {
             gDriveConnected && !gDriveRepository.userDisplayName.isNullOrBlank() -> gDriveRepository.userDisplayName
