@@ -535,9 +535,9 @@ fun UnifiedPlayerSheetV2(
             val endColor = lerp(secondaryContainer, surfaceContainer, miniPlayerGradientAnimOffset * 0.30f)
 
             Brush.horizontalGradient(
-                0.00f to startColor.copy(alpha = 0.98f),
-                0.50f to midColor.copy(alpha = 0.95f),
-                1.00f to endColor.copy(alpha = 0.98f)
+                0.00f to startColor,
+                0.50f to midColor,
+                1.00f to endColor
             )
         }
     }
@@ -554,7 +554,7 @@ fun UnifiedPlayerSheetV2(
             val surfaceContainer = albumColorScheme.surfaceContainerHighest
             val surface = albumColorScheme.surface
 
-            // 1. Top status bar & header backdrop (Matches artwork top aura)
+            // 1. Top status bar & header backdrop (Matches artwork top aura - 100% solid)
             val topAura = lerp(primaryContainer, secondaryContainer, gradientAnimOffset * 0.35f)
 
             // 2. Upper artwork blend (Smooth transition into artwork midpoint)
@@ -573,12 +573,12 @@ fun UnifiedPlayerSheetV2(
             val bottomDockColor = lerp(surfaceContainer, surface, gradientAnimOffset * 0.25f)
 
             Brush.verticalGradient(
-                0.00f to topAura.copy(alpha = 0.99f),
-                0.20f to upperBlend.copy(alpha = 0.96f),
-                0.38f to artEdgeColor.copy(alpha = 0.94f),
-                0.55f to titleAreaColor.copy(alpha = 0.92f),
-                0.78f to progressAreaColor.copy(alpha = 0.95f),
-                1.00f to bottomDockColor.copy(alpha = 0.99f)
+                0.00f to topAura,
+                0.20f to upperBlend,
+                0.38f to artEdgeColor,
+                0.55f to titleAreaColor,
+                0.78f to progressAreaColor,
+                1.00f to bottomDockColor
             )
         }
     }
@@ -691,7 +691,7 @@ fun UnifiedPlayerSheetV2(
                                 translationX = offsetAnimatable.value
                                 // Immersive dismiss: tilt, fade, and scale-down as card is swiped
                                 rotationZ = dismissRotation.value
-                                alpha = miniReadyAlpha.value * dismissAlpha.value
+                                alpha = if (playerContentExpansionFraction.value > 0.05f) 1f else (miniReadyAlpha.value * dismissAlpha.value)
                                 scaleX = dismissScale.value * miniAppearScale.value
                                 scaleY = visualOvershootScaleY.value * dismissScale.value * miniAppearScale.value
                                 // Pivot at bottom-center: card tilts as if held at its base
