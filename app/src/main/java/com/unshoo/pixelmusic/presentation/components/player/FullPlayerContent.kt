@@ -2810,11 +2810,15 @@ private fun PlayerSongInfo(
     val resolvedArtistId by remember(artists, artistId) {
         derivedStateOf { artists.firstOrNull { it.id != 0L && it.id != -1L }?.id ?: artistId }
     }
+    val isDarkTheme = LocalPixelMusicDarkTheme.current
+    val resolvedTitleColor = if (isDarkTheme) Color.White.copy(alpha = 0.95f) else textColor
+    val resolvedArtistColor = if (isDarkTheme) Color.White.copy(alpha = 0.70f) else artistTextColor
+
     val titleStyle = MaterialTheme.typography.headlineSmall.copy(
         fontSize = 32.sp,
         fontWeight = FontWeight.Bold,
         fontFamily = GoogleSansRounded,
-        color = Color.White.copy(alpha = 0.95f)
+        color = resolvedTitleColor
     )
 
     val artistStyle = MaterialTheme.typography.titleMedium.copy(
@@ -2822,7 +2826,7 @@ private fun PlayerSongInfo(
         fontWeight = FontWeight.Medium,
         fontFamily = GoogleSansRounded,
         letterSpacing = 0.sp,
-        color = Color.White.copy(alpha = 0.70f)
+        color = resolvedArtistColor
     )
 
     Column(

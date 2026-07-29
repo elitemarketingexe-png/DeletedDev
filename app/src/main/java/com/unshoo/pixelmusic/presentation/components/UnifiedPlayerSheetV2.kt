@@ -526,7 +526,7 @@ fun UnifiedPlayerSheetV2(
         label = "MiniPlayerGradientAnimOffset"
     )
 
-    val miniPlayerGradientBrush = remember(albumColorScheme, miniPlayerGradientAnimOffset, isGradientStyle) {
+    val miniPlayerGradientBrush = remember(albumColorScheme, miniPlayerGradientAnimOffset, isGradientStyle, isDarkTheme) {
         if (!isGradientStyle) null
         else {
             val primary = albumColorScheme.primary
@@ -535,24 +535,43 @@ fun UnifiedPlayerSheetV2(
             val primaryContainer = albumColorScheme.primaryContainer
             val tertiaryContainer = albumColorScheme.tertiaryContainer
 
-            // Smooth, calm horizontal linear gradient matching reference screenshot
-            val startColor = lerp(primary, primaryContainer, 0.35f + 0.15f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
-            val midColor = lerp(secondary, tertiary, 0.40f + 0.20f * cos(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
-            val endColor = lerp(tertiaryContainer, primary, 0.30f + 0.20f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+            if (isDarkTheme) {
+                val startColor = lerp(primary, primaryContainer, 0.35f + 0.15f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+                val midColor = lerp(secondary, tertiary, 0.40f + 0.20f * cos(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+                val endColor = lerp(tertiaryContainer, primary, 0.30f + 0.20f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
 
-            Brush.horizontalGradient(
-                0.00f to startColor,
-                0.50f to midColor,
-                1.00f to endColor
-            )
+                Brush.horizontalGradient(
+                    0.00f to startColor,
+                    0.50f to midColor,
+                    1.00f to endColor
+                )
+            } else {
+                val startColor = lerp(albumColorScheme.surfaceContainerLow, primaryContainer, 0.40f + 0.15f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+                val midColor = lerp(primaryContainer, tertiaryContainer, 0.45f + 0.20f * cos(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+                val endColor = lerp(tertiaryContainer, albumColorScheme.surfaceContainerHigh, 0.35f + 0.20f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+
+                Brush.horizontalGradient(
+                    0.00f to startColor,
+                    0.50f to midColor,
+                    1.00f to endColor
+                )
+            }
         }
     }
 
-    val dynamicGradientBrush = remember(albumColorScheme, gradientAnimOffset, isGradientStyle) {
+    val dynamicGradientBrush = remember(albumColorScheme, gradientAnimOffset, isGradientStyle, isDarkTheme) {
         if (!isGradientStyle) null
         else {
-            val dominantColor = lerp(albumColorScheme.primaryContainer, albumColorScheme.primary, gradientAnimOffset * 0.25f)
-            val darkDominantColor = lerp(albumColorScheme.surfaceContainerHighest, albumColorScheme.surface, gradientAnimOffset * 0.20f)
+            val dominantColor = if (isDarkTheme) {
+                lerp(albumColorScheme.primaryContainer, albumColorScheme.primary, gradientAnimOffset * 0.25f)
+            } else {
+                lerp(albumColorScheme.primaryContainer, albumColorScheme.surfaceContainerLow, gradientAnimOffset * 0.25f)
+            }
+            val darkDominantColor = if (isDarkTheme) {
+                lerp(albumColorScheme.surfaceContainerHighest, albumColorScheme.surface, gradientAnimOffset * 0.20f)
+            } else {
+                lerp(albumColorScheme.primaryContainer, albumColorScheme.surfaceContainerLow, gradientAnimOffset * 0.20f)
+            }
 
             Brush.verticalGradient(
                 0.00f to dominantColor,
