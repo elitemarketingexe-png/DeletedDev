@@ -536,14 +536,14 @@ fun UnifiedPlayerSheetV2(
             val tertiaryContainer = albumColorScheme.tertiaryContainer
 
             if (isDarkTheme) {
-                val startColor = lerp(primary, primaryContainer, 0.35f + 0.15f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
-                val midColor = lerp(secondary, tertiary, 0.40f + 0.20f * cos(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
-                val endColor = lerp(tertiaryContainer, primary, 0.30f + 0.20f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+                val darkDominant = lerp(albumColorScheme.surfaceContainerHighest, albumColorScheme.surface, 0.40f)
+                val glowingMid = lerp(albumColorScheme.primary, albumColorScheme.tertiary, 0.40f + 0.15f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+                val shinyEnd = lerp(albumColorScheme.primaryContainer, albumColorScheme.tertiaryContainer, 0.30f + 0.20f * cos(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
 
                 Brush.horizontalGradient(
-                    0.00f to startColor,
-                    0.50f to midColor,
-                    1.00f to endColor
+                    0.00f to darkDominant,
+                    0.45f to glowingMid,
+                    1.00f to shinyEnd
                 )
             } else {
                 val startColor = lerp(albumColorScheme.surfaceContainerLow, primaryContainer, 0.40f + 0.15f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
