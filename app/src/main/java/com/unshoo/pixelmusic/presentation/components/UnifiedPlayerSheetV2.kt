@@ -719,6 +719,9 @@ fun UnifiedPlayerSheetV2(
                                 enabled = tapBackgroundClosesPlayer || currentSheetContentState == PlayerSheetState.COLLAPSED,
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
+                            ) {
+                                playerViewModel.togglePlayerSheetState()
+                            }
                     ) {
                         if (isGradientStyle && infrequentPlayerState.currentSong != null && playerContentExpansionFraction.value > 0.05f) {
                             Box(
