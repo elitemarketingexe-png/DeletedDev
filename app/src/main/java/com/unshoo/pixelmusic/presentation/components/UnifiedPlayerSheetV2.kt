@@ -731,9 +731,13 @@ fun UnifiedPlayerSheetV2(
                                         alpha = ((playerContentExpansionFraction.value - 0.05f) / 0.95f).coerceIn(0f, 1f)
                                     }
                             ) {
-                                val dominantColor = albumColorScheme.primary
-                                val accentColor = albumColorScheme.secondary
-                                val darkDominantColor = if (isDarkTheme) albumColorScheme.surfaceContainerHighest else albumColorScheme.primaryContainer
+                                val dominantColor = lerp(albumColorScheme.primary, albumColorScheme.secondaryContainer, 0.2f)
+                                val accentColor = albumColorScheme.tertiary
+                                val darkDominantColor = if (isDarkTheme) {
+                                    lerp(albumColorScheme.surfaceContainerHighest, albumColorScheme.primary, 0.35f)
+                                } else {
+                                    lerp(albumColorScheme.primaryContainer, albumColorScheme.tertiaryContainer, 0.45f)
+                                }
 
                                 // Layer 1 & 2: Full Album Art Backdrop with Gaussian Blur
                                 OptimizedAlbumArt(
@@ -745,14 +749,14 @@ fun UnifiedPlayerSheetV2(
                                     targetSize = SafeOriginalAlbumArtSize
                                 )
 
-                                // Layer 3: Radial Accent Glow (Center Bloom)
+                                // Layer 3: Vibrant Radial Accent Glow (Center Bloom)
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .background(
                                             Brush.radialGradient(
                                                 colors = listOf(
-                                                    accentColor.copy(alpha = 0.25f),
+                                                    accentColor.copy(alpha = 0.40f),
                                                     Color.Transparent
                                                 ),
                                                 radius = 1200f
