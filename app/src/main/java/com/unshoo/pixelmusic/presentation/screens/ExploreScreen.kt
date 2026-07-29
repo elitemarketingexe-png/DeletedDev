@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -43,6 +44,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Explore
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -632,6 +634,21 @@ fun ExploreScreen(
                                     currentSongId = currentSongId,
                                     displayMode = quickPicksDisplayMode,
                                     cardSize = 140.dp
+                                )
+                            }
+                            item(key = "your_daily_discover_section") {
+                                YourDailyDiscoverCarouselSection(
+                                    title = "Your daily discover",
+                                    songs = quickPicks.take(10),
+                                    onSongClick = { song ->
+                                        playerViewModel.showAndPlaySong(song, quickPicks, "Your Daily Discover")
+                                    },
+                                    onPlayAllClick = {
+                                        if (quickPicks.isNotEmpty()) {
+                                            playerViewModel.showAndPlaySong(quickPicks.first(), quickPicks, "Your Daily Discover")
+                                        }
+                                    },
+                                    currentSongId = currentSongId
                                 )
                             }
                         }
@@ -2493,6 +2510,204 @@ fun MusicCardShelf(
                     }
                 }
             }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Material 3 Expressive Carousel for "Your daily discover"
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun YourDailyDiscoverCarouselSection(
+    title: String = "Your daily discover",
+    songs: List<Song>,
+    onSongClick: (Song) -> Unit,
+    onPlayAllClick: () -> Unit,
+    currentSongId: String? = null
+) {
+    if (songs.isEmpty()) return
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        // Section Header with Title & "Play all" Pill Button
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            FilledTonalButton(
+                onClick = onPlayAllClick,
+                shape = CircleShape,
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                modifier = Modifier.height(34.dp)
+            ) {
+                Text(
+                    text = "Play all",
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Official Material 3 Expressive Uncontained Carousel
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            itemsIndexed(items = songs, key = { index, song -> "daily_discover_${song.id}_$index" }) { _, song ->
+                DailyDiscoverCardItem(
+                    song = song,
+                    isPlaying = currentSongId == song.id,
+                    onClick = { onSongClick(song) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DailyDiscoverCardItem(
+    song: Song,
+    isPlaying: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = remember { AbsoluteSmoothCornerShape(28.dp, 80) }
+
+    Box(
+        modifier = Modifier
+            .width(280.dp)
+            .height(320.dp)
+            .clip(shape)
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                ),
+                shape
+            )
+            .clickable(onClick = onClick)
+    ) {
+        // Full bleed cover image
+        SmartImage(
+            model = song.albumArtUriString,
+            contentDescription = song.title,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+
+        // Dual vertical protective gradient overlays
+        // Top Gradient for Song Title & Artist text readability
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .align(Alignment.TopCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.75f),
+                            Color.Black.copy(alpha = 0.4f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
+        // Bottom Gradient for Recommendation text readability
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.5f),
+                            Color.Black.copy(alpha = 0.85f)
+                        )
+                    )
+                )
+        )
+
+        // Top Text Overlay: Song Title & Artist / Meta
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopStart)
+                .padding(16.dp)
+        ) {
+            Text(
+                text = song.title,
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.ExtraBold,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            val metaText = remember(song.artist, song.album) {
+                val artistName = song.artist.ifEmpty { "Various Artists" }
+                val extra = if (song.album.isNotEmpty()) " • ${song.album}" else ""
+                "$artistName$extra"
+            }
+            Text(
+                text = metaText,
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                color = Color.White.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        // Bottom Text Overlay: Recommendation Reason (e.g. "Because you liked ...")
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomStart)
+                .padding(16.dp)
+        ) {
+            val reasonText = remember(song.artist) {
+                if (song.artist.isNotEmpty()) {
+                    "Because you liked ${song.artist}"
+                } else {
+                    "Sounds like your recent favorites"
+                }
+            }
+            Text(
+                text = reasonText,
+                fontFamily = GoogleSansRounded,
+                fontStyle = FontStyle.Italic,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                color = Color.White.copy(alpha = 0.9f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
