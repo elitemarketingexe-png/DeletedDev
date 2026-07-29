@@ -527,14 +527,14 @@ fun UnifiedPlayerSheetV2(
         if (!isGradientStyle) null
         else {
             val primary = albumColorScheme.primary
+            val secondary = albumColorScheme.secondary
+            val tertiary = albumColorScheme.tertiary
             val primaryContainer = albumColorScheme.primaryContainer
-            val secondaryContainer = albumColorScheme.secondaryContainer
             val tertiaryContainer = albumColorScheme.tertiaryContainer
-            val surfaceContainer = albumColorScheme.surfaceContainerHighest
 
-            val startColor = lerp(primaryContainer, primary, miniPlayerGradientAnimOffset * 0.35f)
-            val midColor = lerp(primary, tertiaryContainer, miniPlayerGradientAnimOffset * 0.40f)
-            val endColor = lerp(secondaryContainer, surfaceContainer, miniPlayerGradientAnimOffset * 0.30f)
+            val startColor = lerp(primary, primaryContainer, 0.25f + miniPlayerGradientAnimOffset * 0.20f)
+            val midColor = lerp(secondary, tertiary, miniPlayerGradientAnimOffset * 0.40f)
+            val endColor = lerp(tertiaryContainer, primary, miniPlayerGradientAnimOffset * 0.35f)
 
             Brush.horizontalGradient(
                 0.00f to startColor,
