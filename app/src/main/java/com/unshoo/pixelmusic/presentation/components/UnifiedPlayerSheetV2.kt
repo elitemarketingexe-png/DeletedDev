@@ -737,8 +737,8 @@ fun UnifiedPlayerSheetV2(
 
                                 // Layer 1 & 2: Full Album Art Backdrop with Gaussian Blur
                                 OptimizedAlbumArt(
-                                    uri = infrequentPlayerState.currentSong?.albumArtUriString,
-                                    title = infrequentPlayerState.currentSong?.title.orEmpty(),
+                                    uri = infrequentPlayerState.currentSong.albumArtUriString,
+                                    title = infrequentPlayerState.currentSong.title,
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .blur(45.dp),
