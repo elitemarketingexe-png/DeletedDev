@@ -173,10 +173,14 @@ fun QuickPicksSection(
                                     val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
                                     val maxDistance = (cardSize + 8.dp).toPx()
                                     val fraction = (distanceFromStart / maxDistance).coerceIn(0f, 1f)
-                                    val scale = 0.86f + 0.14f * (1f - fraction)
+                                    val scale = 0.86f + (1f - 0.86f) * (1f - fraction)
                                     scaleX = scale
                                     scaleY = scale
-                                    alpha = 0.7f + 0.3f * (1f - fraction)
+                                    alpha = 0.7f + (1f - 0.7f) * (1f - fraction)
+                                } else {
+                                    scaleX = 0.86f
+                                    scaleY = 0.86f
+                                    alpha = 0.7f
                                 }
                             }
                     )
@@ -318,13 +322,26 @@ fun QuickPicksSection(
                                         val viewportWidth = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
                                         val itemCenter = itemInfo.offset + itemInfo.size / 2f
                                         val fraction = (itemCenter / viewportWidth).coerceIn(0f, 1f)
-                                        val scale = if (fraction > 0.6f) 1f - (fraction - 0.6f) * 0.25f else 1f
+                                        val scale = if (fraction > 0.6f) 1f - (fraction - 0.6f) * 0.3f else 1f
                                         scaleX = scale
                                         scaleY = scale
-                                        alpha = 0.75f + 0.25f * scale
+                                        alpha = 0.7f + 0.3f * scale
+                                        val currentCorner = if (fraction > 0.5f) {
+                                            val morphProgress = (fraction - 0.5f) * 2f
+                                            24.dp + (56.dp - 24.dp) * morphProgress.coerceIn(0f, 1f)
+                                        } else {
+                                            24.dp
+                                        }
+                                        shape = AbsoluteSmoothCornerShape(currentCorner, 80)
+                                        clip = true
+                                    } else {
+                                        scaleX = 0.88f
+                                        scaleY = 0.88f
+                                        alpha = 0.7f
+                                        shape = AbsoluteSmoothCornerShape(56.dp, 80)
+                                        clip = true
                                     }
                                 },
-                            shape = AbsoluteSmoothCornerShape(24.dp, 80),
                             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                         ) {
