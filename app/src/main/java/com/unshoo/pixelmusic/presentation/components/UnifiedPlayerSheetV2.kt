@@ -536,14 +536,24 @@ fun UnifiedPlayerSheetV2(
             val tertiaryContainer = albumColorScheme.tertiaryContainer
 
             if (isDarkTheme) {
-                val darkDominant = lerp(albumColorScheme.surfaceContainerHighest, albumColorScheme.surface, 0.40f)
-                val glowingMid = lerp(albumColorScheme.primary, albumColorScheme.tertiary, 0.40f + 0.15f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
-                val shinyEnd = lerp(albumColorScheme.primaryContainer, albumColorScheme.tertiaryContainer, 0.30f + 0.20f * cos(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+                // 5-stop granular tonal breakdown matching the reference screenshot ditto:
+                // 0.00f: Deepest navy/indigo tone behind left album art
+                // 0.20f: Deep teal transition under song title & artist text
+                // 0.50f: Luminous teal bloom in center
+                // 0.78f: Vibrant bright cyan under transport controls (prev & play)
+                // 1.00f: Saturated shiny cyan accent at right edge (next button)
+                val stop0 = lerp(albumColorScheme.surface, albumColorScheme.surfaceContainerHighest, 0.60f)
+                val stop20 = lerp(albumColorScheme.surfaceContainerHighest, albumColorScheme.tertiary, 0.45f)
+                val stop50 = lerp(albumColorScheme.tertiary, albumColorScheme.primary, 0.50f + 0.15f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+                val stop78 = lerp(albumColorScheme.primary, albumColorScheme.primaryContainer, 0.65f + 0.15f * cos(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
+                val stop100 = lerp(albumColorScheme.primaryContainer, albumColorScheme.tertiaryContainer, 0.70f)
 
                 Brush.horizontalGradient(
-                    0.00f to darkDominant,
-                    0.45f to glowingMid,
-                    1.00f to shinyEnd
+                    0.00f to stop0,
+                    0.20f to stop20,
+                    0.50f to stop50,
+                    0.78f to stop78,
+                    1.00f to stop100
                 )
             } else {
                 val startColor = lerp(albumColorScheme.surfaceContainerLow, primaryContainer, 0.40f + 0.15f * sin(miniPlayerGradientAnimOffset * Math.PI.toFloat()))
