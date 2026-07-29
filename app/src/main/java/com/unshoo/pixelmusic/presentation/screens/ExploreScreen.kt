@@ -224,9 +224,12 @@ fun ExploreScreen(
         exploreViewModel.uiState.map { it.isLoading }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = true)
 
-    val isRefreshing by remember(exploreViewModel) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var isManualRefreshing by remember { mutableStateOf(false) }
+    val isRefreshingViewModel by remember(exploreViewModel) {
         exploreViewModel.uiState.map { it.isRefreshing }.distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
+    val isRefreshing = isRefreshingViewModel || isManualRefreshing
 
     val error by remember(exploreViewModel) {
         exploreViewModel.uiState.map { it.error }.distinctUntilChanged()
@@ -292,8 +295,13 @@ fun ExploreScreen(
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = {
-                exploreViewModel.loadData(forceRefresh = true)
-                quickPicksViewModel.refresh()
+                scope.launch {
+                    isManualRefreshing = true
+                    exploreViewModel.loadData(forceRefresh = true)
+                    quickPicksViewModel.refresh()
+                    kotlinx.coroutines.delay(1000)
+                    isManualRefreshing = false
+                }
             },
             state = pullRefreshState,
             modifier = Modifier.fillMaxSize(),
@@ -301,7 +309,11 @@ fun ExploreScreen(
                 PullToRefreshDefaults.LoadingIndicator(
                     state = pullRefreshState,
                     isRefreshing = isRefreshing,
-                    modifier = Modifier.align(Alignment.TopCenter)
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = innerPadding.calculateTopPadding() + 8.dp),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         ) {
@@ -1322,12 +1334,21 @@ fun ExploreTopBar(
     onCreateClick: () -> Unit,
     isScrolled: Boolean = false,
 ) {
-    val containerColor = if (isScrolled) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surface
+    val baseContainerColor = MaterialTheme.colorScheme.primaryContainer
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val solidTintedColor = remember(baseContainerColor, surfaceColor) {
+        Color(
+            red = (baseContainerColor.red * 0.45f) + (surfaceColor.red * 0.55f),
+            green = (baseContainerColor.green * 0.45f) + (surfaceColor.green * 0.55f),
+            blue = (baseContainerColor.blue * 0.45f) + (surfaceColor.blue * 0.55f),
+            alpha = 1f
+        )
+    }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp),
-        color = containerColor,
+        shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+        color = solidTintedColor,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         Row(
@@ -1341,10 +1362,9 @@ fun ExploreTopBar(
             Text(
                 text = "Explore",
                 fontFamily = GoogleSansRounded,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary,
-                fontSize = 38.sp,
-                letterSpacing = 1.sp
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.headlineLarge.copy(fontSize = 30.sp),
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             Row(

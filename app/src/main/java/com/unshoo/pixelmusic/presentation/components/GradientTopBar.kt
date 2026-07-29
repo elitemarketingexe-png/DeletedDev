@@ -120,28 +120,10 @@ fun HomeGradientTopBar(
             alpha = 1f
         )
     }
-    val targetContainerColor = if (isScrolled) {
-        solidTintedColor
-    } else {
-        baseContainerColor.copy(alpha = 0.4f)
-    }
-    val animatedContainerColor by animateColorAsState(
-        targetValue = targetContainerColor,
-        animationSpec = tween(durationMillis = 300),
-        label = "home_topbar_color"
-    )
-
-    val targetCornerRadius = if (isScrolled) 28.dp else 24.dp
-    val animatedCornerRadius by animateDpAsState(
-        targetValue = targetCornerRadius,
-        animationSpec = tween(durationMillis = 300),
-        label = "home_topbar_corner"
-    )
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(bottomStart = animatedCornerRadius, bottomEnd = animatedCornerRadius),
-        color = animatedContainerColor,
+        shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+        color = solidTintedColor,
         contentColor = MaterialTheme.colorScheme.onSurface
     ) {
         TopAppBar(
