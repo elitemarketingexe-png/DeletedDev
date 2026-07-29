@@ -164,7 +164,7 @@ fun AlbumCarouselSection(
             }
     }
 
-    val corner = 18.dp//lerp(36.dp, 15.dp, expansionFraction.coerceIn(0f, 1f))
+    val corner = if (carouselStyle == CarouselStyle.NO_PEEK) 0.dp else 28.dp
 
     BoxWithConstraints(modifier = modifier) {
         val availableWidth = this.maxWidth

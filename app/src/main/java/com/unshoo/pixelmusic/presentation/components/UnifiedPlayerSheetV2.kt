@@ -511,6 +511,37 @@ fun UnifiedPlayerSheetV2(
     )
 
     val isGradientStyle = playerStyleMode == com.unshoo.pixelmusic.data.preferences.PlayerStyleMode.GRADIENT
+    val miniPlayerGradientAnimOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(24000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "MiniPlayerGradientAnimOffset"
+    )
+
+    val miniPlayerGradientBrush = remember(albumColorScheme, miniPlayerGradientAnimOffset, isGradientStyle) {
+        if (!isGradientStyle) null
+        else {
+            val primary = albumColorScheme.primary
+            val primaryContainer = albumColorScheme.primaryContainer
+            val secondaryContainer = albumColorScheme.secondaryContainer
+            val tertiaryContainer = albumColorScheme.tertiaryContainer
+            val surfaceContainer = albumColorScheme.surfaceContainerHighest
+
+            val startColor = lerp(primaryContainer, primary, miniPlayerGradientAnimOffset * 0.35f)
+            val midColor = lerp(primary, tertiaryContainer, miniPlayerGradientAnimOffset * 0.40f)
+            val endColor = lerp(secondaryContainer, surfaceContainer, miniPlayerGradientAnimOffset * 0.30f)
+
+            Brush.horizontalGradient(
+                0.00f to startColor.copy(alpha = 0.98f),
+                0.50f to midColor.copy(alpha = 0.95f),
+                1.00f to endColor.copy(alpha = 0.98f)
+            )
+        }
+    }
+
     val dynamicGradientBrush = remember(albumColorScheme, gradientAnimOffset, isGradientStyle) {
         if (!isGradientStyle) null
         else {
@@ -523,26 +554,30 @@ fun UnifiedPlayerSheetV2(
             val surfaceContainer = albumColorScheme.surfaceContainerHighest
             val surface = albumColorScheme.surface
 
-            // 1. Top (Behind status bar & top action bar): Soft glowing primaryContainer
-            val topGlow = lerp(primaryContainer, secondaryContainer, gradientAnimOffset * 0.35f)
-            
-            // 2. Artwork lower edge (Seamless fade): Rich vibrant primary
-            val artEdgeColor = lerp(primary, tertiaryContainer, gradientAnimOffset * 0.40f)
-            
-            // 3. Track Title & Meta section: Deep secondary / primaryContainer
-            val titleAreaColor = lerp(secondary, primaryContainer, gradientAnimOffset * 0.30f)
+            // 1. Top status bar & header backdrop (Matches artwork top aura)
+            val topAura = lerp(primaryContainer, secondaryContainer, gradientAnimOffset * 0.35f)
 
-            // 4. Progress Scrubber & Meta badge: Warm tertiary / secondaryContainer
+            // 2. Upper artwork blend (Smooth transition into artwork midpoint)
+            val upperBlend = lerp(primaryContainer, primary, gradientAnimOffset * 0.40f)
+
+            // 3. Artwork lower edge (Rich vibrant transition under artwork)
+            val artEdgeColor = lerp(primary, tertiary, gradientAnimOffset * 0.30f)
+
+            // 4. Track Title & Artist metadata section (Deep rich tone matching track text)
+            val titleAreaColor = lerp(secondary, tertiaryContainer, gradientAnimOffset * 0.35f)
+
+            // 5. Scrubber & Quality badge zone (Warm harmonized container color)
             val progressAreaColor = lerp(tertiaryContainer, secondaryContainer, gradientAnimOffset * 0.45f)
-            
-            // 5. Bottom Transport Dock (Play/Pause & action bar): Dark surfaceContainer
+
+            // 6. Bottom Control Dock (Dark contrast backdrop for control buttons)
             val bottomDockColor = lerp(surfaceContainer, surface, gradientAnimOffset * 0.25f)
 
             Brush.verticalGradient(
-                0.00f to topGlow.copy(alpha = 0.98f),
-                0.22f to artEdgeColor.copy(alpha = 0.94f),
-                0.48f to titleAreaColor.copy(alpha = 0.92f),
-                0.75f to progressAreaColor.copy(alpha = 0.95f),
+                0.00f to topAura.copy(alpha = 0.99f),
+                0.20f to upperBlend.copy(alpha = 0.96f),
+                0.38f to artEdgeColor.copy(alpha = 0.94f),
+                0.55f to titleAreaColor.copy(alpha = 0.92f),
+                0.78f to progressAreaColor.copy(alpha = 0.95f),
                 1.00f to bottomDockColor.copy(alpha = 0.99f)
             )
         }
@@ -673,11 +708,19 @@ fun UnifiedPlayerSheetV2(
                                 clip = false
                             )
                             .then(
-                                if (isGradientStyle && dynamicGradientBrush != null && playerContentExpansionFraction.value > 0.05f) {
-                                    Modifier.background(
-                                        brush = dynamicGradientBrush,
-                                        shape = sheetInteractionState.playerShadowShape
-                                    )
+                                if (isGradientStyle) {
+                                    val activeBrush = if (playerContentExpansionFraction.value > 0.15f) dynamicGradientBrush else miniPlayerGradientBrush
+                                    if (activeBrush != null) {
+                                        Modifier.background(
+                                            brush = activeBrush,
+                                            shape = sheetInteractionState.playerShadowShape
+                                        )
+                                    } else {
+                                        Modifier.background(
+                                            color = playerAreaBackground,
+                                            shape = sheetInteractionState.playerShadowShape
+                                        )
+                                    }
                                 } else {
                                     Modifier.background(
                                         color = playerAreaBackground,
