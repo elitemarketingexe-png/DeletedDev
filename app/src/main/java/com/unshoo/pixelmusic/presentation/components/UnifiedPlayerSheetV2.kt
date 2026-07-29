@@ -728,6 +728,11 @@ fun UnifiedPlayerSheetV2(
                                         alpha = ((playerContentExpansionFraction.value - 0.05f) / 0.95f).coerceIn(0f, 1f)
                                     }
                             ) {
+                                val dominantColor = albumColorScheme.primary
+                                val accentColor = albumColorScheme.tertiary
+                                val darkDominantColor = albumColorScheme.surfaceContainerHighest
+
+                                // Layer 1 & 2: Full Album Art Backdrop with Gaussian Blur
                                 OptimizedAlbumArt(
                                     uri = infrequentPlayerState.currentSong?.albumArtUriString,
                                     title = infrequentPlayerState.currentSong?.title.orEmpty(),
@@ -736,17 +741,50 @@ fun UnifiedPlayerSheetV2(
                                         .blur(45.dp),
                                     targetSize = SafeOriginalAlbumArtSize
                                 )
-                                // Radial Accent Glow
+
+                                // Layer 3: Radial Accent Glow (Center Bloom)
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .background(
                                             Brush.radialGradient(
                                                 colors = listOf(
-                                                    albumColorScheme.primary.copy(alpha = 0.35f),
+                                                    accentColor.copy(alpha = 0.25f),
                                                     Color.Transparent
                                                 ),
-                                                radius = 1000f
+                                                radius = 1200f
+                                            )
+                                        )
+                                )
+
+                                // Layer 4: Vertical Gradient Overlay
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                0.00f to Color.Transparent,
+                                                0.18f to dominantColor.copy(alpha = 0.04f),
+                                                0.35f to dominantColor.copy(alpha = 0.08f),
+                                                0.55f to dominantColor.copy(alpha = 0.20f),
+                                                0.72f to darkDominantColor.copy(alpha = 0.45f),
+                                                0.85f to darkDominantColor.copy(alpha = 0.75f),
+                                                1.00f to darkDominantColor.copy(alpha = 0.98f)
+                                            )
+                                        )
+                                )
+
+                                // Layer 5: Bottom Surface Gradient (Bottom 35%)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.verticalGradient(
+                                                0.00f to Color.Transparent,
+                                                0.65f to Color.Transparent,
+                                                0.75f to dominantColor.copy(alpha = 0.20f),
+                                                0.90f to darkDominantColor.copy(alpha = 0.80f),
+                                                1.00f to darkDominantColor
                                             )
                                         )
                                 )
