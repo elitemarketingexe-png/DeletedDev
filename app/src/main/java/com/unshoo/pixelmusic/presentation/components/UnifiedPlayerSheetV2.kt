@@ -38,11 +38,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalConfiguration
@@ -717,10 +719,40 @@ fun UnifiedPlayerSheetV2(
                                 enabled = tapBackgroundClosesPlayer || currentSheetContentState == PlayerSheetState.COLLAPSED,
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
-                            ) {
-                                playerViewModel.togglePlayerSheetState()
-                            }
                     ) {
+                        if (isGradientStyle && infrequentPlayerState.currentSong != null && playerContentExpansionFraction.value > 0.05f) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        alpha = ((playerContentExpansionFraction.value - 0.05f) / 0.95f).coerceIn(0f, 1f)
+                                    }
+                            ) {
+                                OptimizedAlbumArt(
+                                    uri = infrequentPlayerState.currentSong?.albumArtUriString,
+                                    title = infrequentPlayerState.currentSong?.title.orEmpty(),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .blur(45.dp),
+                                    targetSize = SafeOriginalAlbumArtSize
+                                )
+                                // Radial Accent Glow
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.radialGradient(
+                                                colors = listOf(
+                                                    albumColorScheme.primary.copy(alpha = 0.35f),
+                                                    Color.Transparent
+                                                ),
+                                                radius = 1000f
+                                            )
+                                        )
+                                )
+                            }
+                        }
+
                         UnifiedPlayerMiniAndFullLayers(
                             currentSong = infrequentPlayerState.currentSong,
                             miniPlayerScheme = miniPlayerScheme,
