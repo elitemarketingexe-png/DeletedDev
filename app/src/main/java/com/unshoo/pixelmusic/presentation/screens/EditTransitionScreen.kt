@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.remember
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesomeMotion
@@ -585,7 +586,30 @@ private fun CrossfadeVisualizer(durationMs: Int) {
 //                        RoundedCornerShape(8.dp)
 //                    )
             ) {
-                // Representación interna del cruce
+                val leftShape = remember {
+                    AbsoluteSmoothCornerShape(
+                        cornerRadiusTR = 0.dp,
+                        smoothnessAsPercentTL = 60,
+                        cornerRadiusTL = 50.dp,
+                        smoothnessAsPercentTR = 60,
+                        cornerRadiusBR = 0.dp,
+                        smoothnessAsPercentBL = 60,
+                        cornerRadiusBL = 50.dp,
+                        smoothnessAsPercentBR = 60
+                    )
+                }
+                val rightShape = remember {
+                    AbsoluteSmoothCornerShape(
+                        cornerRadiusTR = 50.dp,
+                        smoothnessAsPercentTL = 60,
+                        cornerRadiusTL = 0.dp,
+                        smoothnessAsPercentTR = 60,
+                        cornerRadiusBR = 50.dp,
+                        smoothnessAsPercentBL = 60,
+                        cornerRadiusBL = 0.dp,
+                        smoothnessAsPercentBR = 60
+                    )
+                }
                 Row(modifier = Modifier.fillMaxSize()) {
                     Box(
                         modifier = Modifier
@@ -593,16 +617,7 @@ private fun CrossfadeVisualizer(durationMs: Int) {
                             .fillMaxSize()
                             .background(
                                 color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f),
-                                shape = AbsoluteSmoothCornerShape(
-                                    cornerRadiusTR = 0.dp,
-                                    smoothnessAsPercentTL = 60,
-                                    cornerRadiusTL = 50.dp,
-                                    smoothnessAsPercentTR = 60,
-                                    cornerRadiusBR = 0.dp,
-                                    smoothnessAsPercentBL = 60,
-                                    cornerRadiusBL = 50.dp,
-                                    smoothnessAsPercentBR = 60
-                                )
+                                shape = leftShape
                             )
                     )
                     //Spacer(modifier = Modifier.width(1.dp))
@@ -612,16 +627,7 @@ private fun CrossfadeVisualizer(durationMs: Int) {
                             .fillMaxSize()
                             .background(
                                 color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f),
-                                shape = AbsoluteSmoothCornerShape(
-                                    cornerRadiusTR = 50.dp,
-                                    smoothnessAsPercentTL = 60,
-                                    cornerRadiusTL = 0.dp,
-                                    smoothnessAsPercentTR = 60,
-                                    cornerRadiusBR = 50.dp,
-                                    smoothnessAsPercentBL = 60,
-                                    cornerRadiusBL = 0.dp,
-                                    smoothnessAsPercentBR = 60
-                                )
+                                shape = rightShape
                             )
                     )
                 }
