@@ -57,33 +57,30 @@ fun SineWaveLine(
     )
     val currentPhase = if (animate == true) animatedPhase else phase
 
+    val cachedPath = remember { Path() }
+
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
         val centerY = h / 2f
 
-        // Convertimos dp a px dentro del scope de dibujo para eficiencia
-        val strokePx = with(density) { strokeWidth.toPx() }
-        val ampPx = with(density) { amplitude.toPx() }
+        val strokePx = strokeWidth.toPx()
+        val ampPx = amplitude.toPx()
 
         if (w <= 0f || samples < 2) return@Canvas
 
-        // Construimos el path senoidal usando la fase actual (animada o estática)
-        val path = Path().apply {
-            val step = w / (samples - 1)
-            // Usamos currentPhase para el punto inicial
-            moveTo(0f, centerY + (ampPx * sin(currentPhase)))
-            for (i in 1 until samples) {
-                val x = i * step
-                // theta recorre 0..(2π * waves)
-                val theta = (x / w) * (2f * PI.toFloat() * waves) + currentPhase
-                val y = centerY + ampPx * sin(theta)
-                lineTo(x, y)
-            }
+        cachedPath.reset()
+        val step = w / (samples - 1)
+        cachedPath.moveTo(0f, centerY + (ampPx * sin(currentPhase)))
+        for (i in 1 until samples) {
+            val x = i * step
+            val theta = (x / w) * (2f * PI.toFloat() * waves) + currentPhase
+            val y = centerY + ampPx * sin(theta)
+            cachedPath.lineTo(x, y)
         }
 
         drawPath(
-            path = path,
+            path = cachedPath,
             color = color,
             style = Stroke(
                 width = strokePx,
