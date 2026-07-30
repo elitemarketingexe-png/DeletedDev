@@ -208,8 +208,9 @@ object AutoQueueManager {
                 currentWatchEndpoint = endpoint
                 continuationToken = null
             }
-            // Trigger immediate refill
+            // Trigger deferred refill (allows 1.5s for initial audio buffer to stream cleanly)
             fetchJob = currentScope.launch(Dispatchers.IO) {
+                kotlinx.coroutines.delay(1500)
                 refillQueueLoop(currentId, forceRefresh = false)
             }
         }
