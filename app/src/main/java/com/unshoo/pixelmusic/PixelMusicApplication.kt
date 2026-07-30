@@ -282,41 +282,9 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         // first song after a fresh launch can genuinely stall for several seconds to that full
         // 15s on stream resolution alone, before audio starts. This was previously deliberately
         // avoided here (see prior comment) to protect memory/CPU on low-end devices; per request,
-        // prewarming is now enabled, but still skipped on ActivityManager.isLowRamDevice() so
-        // that original intent isn't silently dropped for the devices it mattered most for.
-        botGuardWarmUpJob = warmUpScope.launch {
-            try {
-                // Floor delay: never attempt before the very first frames have had a chance
-                // to be posted, even if the main thread happens to report idle immediately
-                // (it can, in the brief window right after process start before Compose has
-                // enqueued its first frame work).
-                kotlinx.coroutines.delay(2500L)
-                val isLowRam = (getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)
-                    ?.isLowRamDevice == true
-                if (!isLowRam) {
-                    // BUGFIX (cold-start jank, ~15s): this used to fire unconditionally right
-                    // after the fixed delay above, regardless of whether the user was actively
-                    // scrolling or the UI thread was mid-frame. WebView instantiation is
-                    // synchronous on whatever thread calls it, and the FIRST WebView created in
-                    // a process can itself take 500ms-2s+ on mid/low-end devices (cold Chromium
-                    // provider load) - and BotGuardEngine.create() dispatches that, plus all the
-                    // JS-bridge marshaling for the challenge/minter bootstrap, via
-                    // `withContext(Dispatchers.Main)`, i.e. onto the real Android UI thread, not
-                    // just a coroutine context. Racing that against the home screen's first
-                    // frames/scroll for up to COLD_START_TIMEOUT_MS (15s) is exactly what
-                    // produced the "smoother after ~15 seconds" symptom. Waiting for a genuine
-                    // main-thread idle window before pulling this work onto Dispatchers.Main
-                    // means it lands between frames instead of during one.
-                    awaitMainThreadIdle()
-                    // Pre-warm the WebView bootstrap after initial launch completes.
-                    // If the first playback uses a different sessionId, it will
-                    // cheaply re-mint the session token on the same warm engine.
-                    BotGuardTokenGenerator.preWarm("default")
-                }
-            } catch (e: Exception) {
-                Timber.w(e, "BotGuard pre-warm failed (non-fatal, will fall back to lazy cold-start)")
-            }
-        }
+        // TEST COMMIT 1: Completely disable BotGuard pre-warm on app startup.
+        // BotGuard will now initialize 100% on-demand when YouTube playback starts.
+        botGuardWarmUpJob = null
 
         startupScope.launch {
             AlbumArtUtils.migrateLegacyCacheLocation(this@PixelMusicApplication)

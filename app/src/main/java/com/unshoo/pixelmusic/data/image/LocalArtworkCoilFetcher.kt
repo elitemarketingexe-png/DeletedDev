@@ -16,14 +16,14 @@ class LocalArtworkCoilFetcher(
     private val options: Options
 ) : Fetcher {
 
-    override suspend fun fetch(): FetchResult? {
-        val songId = LocalArtworkUri.parseSongId(uri.toString()) ?: return null
+    override suspend fun fetch(): FetchResult? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val songId = LocalArtworkUri.parseSongId(uri.toString()) ?: return@withContext null
         val cachedFile = AlbumArtUtils.ensureAlbumArtCachedFile(
             appContext = options.context,
             songId = songId
-        ) ?: return null
+        ) ?: return@withContext null
 
-        return SourceResult(
+        SourceResult(
             source = coil.decode.ImageSource(
                 file = cachedFile.absolutePath.toPath(),
                 fileSystem = okio.FileSystem.SYSTEM
