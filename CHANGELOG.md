@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.08] - 2026-07-31
+
+### Fixed
+- **Search Tap-to-Play**: Tapping a song in search results now correctly starts playback, even when the mini player is already active. (Previously taps were silently dropped.)
+- **Mini Player Overlap in Search**: Search results now scroll cleanly above the mini player — no items are hidden or blocked behind it.
+- **Library Crash Fix**: Prevented a crash (`IndexOutOfBoundsException`) that could occur when selecting multiple songs in the library at the same time.
+- **Library Filter Crash**: Fixed a crash when tapping library filter options caused by an invalid media URI being passed to MediaStore.
+- **Search Mini Player Disappear Bug**: Fixed the mini player unexpectedly disappearing after tapping a song in search results.
+- **Song Removal Safety**: Song removal now runs on a background thread, preventing coroutine cancellations on the main thread.
+- **Last.fm / YouTube Mix Interruption**: Playing a Last.fm or YouTube mix no longer interrupts the currently active track.
+
+### Performance
+- **Library Loading Speed**: Database queries for the library are now offloaded to a background thread, making the library tab feel faster and more responsive.
+- **Startup Speed**: Avoided redundant theme color extractions on cold startup for a snappier launch.
+- **Playback Smoothness**: Auto-Queue refill requests are now delayed by 1.5 seconds after a track switch, eliminating audio stutters during track transitions.
+- **Quick Picks**: Removed redundant album lookups and fixed duplicate fetches — Quick Picks load faster and more reliably.
+- **UI Rendering**: Memoized heavy shape and canvas allocations across multiple screens (Playlists, Telegram, Home, Explore) for smoother scrolling.
+- **BotGuard**: Moved BotGuard initialization to on-demand, reducing unnecessary background work at startup.
+
+### Added / Improved
+- **Explore Page Overhaul**: New Material 3 Expressive hero banner, bento-style category cards, and mood filter chips for a richer Explore experience.
+- **Explore Header Style**: Updated Explore title typography to match Library tab (40sp ExtraBold, primary color).
+
+
+
 ## [1.5.06] - 2026-06-12
 
 ### Added
