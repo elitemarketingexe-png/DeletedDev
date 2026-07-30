@@ -2888,19 +2888,35 @@ class PlayerViewModel @Inject constructor(
             .trim()
     }
 
+    private var lastFmMixJob: Job? = null
+    private var lastFmMixToken: Long = 0L
+
     fun startMixFromSong(song: Song) {
+        lastFmMixJob?.cancel()
+        lastFmMixToken += 1L
+        val requestToken = lastFmMixToken
+
+        val activeSong = playbackStateHolder.stablePlayerState.value.currentSong
+        val currentMediaId = dualPlayerEngine.masterPlayer.currentMediaItem?.mediaId
+        val isAlreadyPlaying = (currentMediaId != null && (
+            currentMediaId == song.id ||
+            (song.youtubeId != null && currentMediaId == song.youtubeId) ||
+            currentMediaId.removePrefix("youtube_") == song.id.removePrefix("youtube_") ||
+            (activeSong != null && activeSong.title.equals(song.title, ignoreCase = true) && activeSong.artist.equals(song.artist, ignoreCase = true))
+        ))
+
         if (!LastFM.isInitialized()) {
             sendToast("Last.fm not configured. Starting YouTube Music mix...")
             playWithArchiveTuneQueueBuilder(song, "Mix: ${song.title}")
             return
         }
-        
-        viewModelScope.launch {
+
+        lastFmMixJob = viewModelScope.launch {
             sendToast("Generating Last.fm mix for '${song.title}'...")
-            
+
             var lastfmFailed = false
             var lastfmFailReason = ""
-            
+
             val songs = withContext(Dispatchers.IO) {
                 try {
                     val cleanTitle = cleanForLastFm(song.title)
@@ -2909,13 +2925,15 @@ class PlayerViewModel @Inject constructor(
                         "track.getsimilar",
                         mapOf("track" to cleanTitle, "artist" to cleanArtist, "limit" to "100")
                     ).getOrNull()
-                    
+
+                    if (requestToken != lastFmMixToken) return@withContext emptyList<Song>()
+
                     if (res.isNullOrBlank()) {
                         lastfmFailed = true
                         lastfmFailReason = "Empty response"
                         return@withContext emptyList<Song>()
                     }
-                    
+
                     // Check if response is actually a Last.fm error JSON
                     if (res.contains("\"error\"") && res.contains("\"message\"")) {
                         lastfmFailed = true
@@ -2929,44 +2947,43 @@ class PlayerViewModel @Inject constructor(
                         }
                         return@withContext emptyList<Song>()
                     }
-                    
+
                     val rawTracks = parseLastFmTracksForMix(res)
                     if (rawTracks.isEmpty()) {
                         lastfmFailed = true
                         lastfmFailReason = "No similar tracks found"
                         return@withContext emptyList<Song>()
                     }
-                    
+
                     val filteredTracks = mutableListOf<LastFmTrack>()
                     val artistCounts = mutableMapOf<String, Int>()
-                    
+
                     val seedArtistNorm = song.artist.trim().lowercase()
                     val seedTitleNorm = song.title.trim().lowercase()
-                    
+
                     artistCounts[seedArtistNorm] = 1
-                    
+
                     for (track in rawTracks) {
                         val tArtistNorm = track.artist.trim().lowercase()
                         val tTitleNorm = track.name.trim().lowercase()
-                        
+
                         if (tArtistNorm == seedArtistNorm && tTitleNorm == seedTitleNorm) continue
-                        
+
                         val count = artistCounts[tArtistNorm] ?: 0
                         if (count >= 3) continue
-                        
+
                         filteredTracks.add(track)
                         artistCounts[tArtistNorm] = count + 1
                     }
-                    
-                    // Shuffle and take at most 35 candidates to keep a max of 30-50 songs in queue
+
                     val candidates = filteredTracks.shuffled().take(35)
-                    
-                    // Resolve candidates to streamable YouTube tracks in parallel (max 3 concurrent)
+
                     val resolvedSongs = java.util.Collections.synchronizedList(mutableListOf<Song>())
                     val semaphore = Semaphore(3)
                     val deferreds = candidates.map { track ->
                         async {
                             semaphore.withPermit {
+                                if (requestToken != lastFmMixToken) return@withPermit
                                 val resolvedSong = resolveTrackToYoutubeSongForMix(track)
                                 if (resolvedSong != null) {
                                     resolvedSongs.add(resolvedSong)
@@ -2975,14 +2992,16 @@ class PlayerViewModel @Inject constructor(
                         }
                     }
                     deferreds.awaitAll()
-                    
+
+                    if (requestToken != lastFmMixToken) return@withContext emptyList<Song>()
+
                     if (resolvedSongs.isNotEmpty()) {
                         musicRepository.insertYoutubeSongs(resolvedSongs)
                     } else {
                         lastfmFailed = true
                         lastfmFailReason = "Could not resolve tracks on YouTube"
                     }
-                    
+
                     resolvedSongs.toList()
                 } catch (e: Exception) {
                     Timber.e(e, "Error generating similar mix")
@@ -2991,19 +3010,15 @@ class PlayerViewModel @Inject constructor(
                     emptyList<Song>()
                 }
             }
-            
+
+            if (requestToken != lastFmMixToken) return@launch
+
             if (songs.isNotEmpty()) {
                 val player = dualPlayerEngine.masterPlayer
-                // BUGFIX: Never interrupt the currently playing song when building a Last.fm mix.
-                // The old code called playSongs() when the mediaId didn't match (e.g. local song
-                // id vs youtube_ id), which stopped & restarted playback from scratch.
-                // Instead, always do the non-disruptive queue replacement: clear everything after
-                // the current item and append the resolved mix tracks behind it.
                 withContext(Dispatchers.Main.immediate) {
+                    if (requestToken != lastFmMixToken) return@withContext
                     val currentItem = player.currentMediaItem
                     val currentSongForQueue: Song = if (currentItem != null) {
-                        // Try to find the currently playing song in our queue state so the
-                        // displayed queue shows the real current track as position 0.
                         _playerUiState.value.currentPlaybackQueue
                             .firstOrNull { it.id == currentItem.mediaId } ?: song
                     } else {
@@ -3025,12 +3040,14 @@ class PlayerViewModel @Inject constructor(
                 }
                 sendToast("Last.fm mix ready — ${songs.size} tracks queued")
             } else {
-                if (lastfmFailed) {
-                    sendToast("Last.fm mix failed ($lastfmFailReason). Starting YouTube Music mix...")
-                } else {
-                    sendToast("Last.fm mix failed. Starting YouTube Music mix...")
+                if (requestToken == lastFmMixToken) {
+                    if (lastfmFailed) {
+                        sendToast("Last.fm mix failed ($lastfmFailReason). Starting YouTube Music mix...")
+                    } else {
+                        sendToast("Last.fm mix failed. Starting YouTube Music mix...")
+                    }
+                    playWithArchiveTuneQueueBuilder(song, "Mix: ${song.title}")
                 }
-                playWithArchiveTuneQueueBuilder(song, "Mix: ${song.title}")
             }
         }
     }
@@ -3640,7 +3657,14 @@ class PlayerViewModel @Inject constructor(
         Log.i("ArchiveTuneBuilder", "playWithArchiveTuneQueueBuilder: starting for song '${song.title}' (${song.id})")
         val requestToken = beginDirectPlaybackRequest()
 
-        val isAlreadyPlaying = dualPlayerEngine.masterPlayer.currentMediaItem?.mediaId == song.id
+        val activeSong = playbackStateHolder.stablePlayerState.value.currentSong
+        val currentMediaId = dualPlayerEngine.masterPlayer.currentMediaItem?.mediaId
+        val isAlreadyPlaying = (currentMediaId != null && (
+            currentMediaId == song.id ||
+            (song.youtubeId != null && currentMediaId == song.youtubeId) ||
+            currentMediaId.removePrefix("youtube_") == song.id.removePrefix("youtube_") ||
+            (activeSong != null && activeSong.title.equals(song.title, ignoreCase = true) && activeSong.artist.equals(song.artist, ignoreCase = true))
+        ))
 
         // 1. Play the seed song immediately if not already playing so there is zero delay!
         // BUGFIX: Assign this launch to directPlaybackJob so that if the user taps a different
@@ -3713,8 +3737,16 @@ class PlayerViewModel @Inject constructor(
                         withContext(Dispatchers.Main.immediate) {
                             if (isDirectPlaybackRequestStale(requestToken)) return@withContext
                             val player = dualPlayerEngine.masterPlayer
-                            val currentItem = player.currentMediaItem
-                            if (currentItem?.mediaId == song.id || player.mediaItemCount <= 1) {
+                            val cItem = player.currentMediaItem
+                            val cMediaId = cItem?.mediaId
+                            val nowActiveSong = playbackStateHolder.stablePlayerState.value.currentSong
+                            val matchesCurrent = cMediaId != null && (
+                                cMediaId == song.id ||
+                                (song.youtubeId != null && cMediaId == song.youtubeId) ||
+                                cMediaId.removePrefix("youtube_") == song.id.removePrefix("youtube_") ||
+                                (nowActiveSong != null && nowActiveSong.title.equals(song.title, ignoreCase = true) && nowActiveSong.artist.equals(song.artist, ignoreCase = true))
+                            )
+                            if (matchesCurrent || player.mediaItemCount <= 1) {
                                 val totalCount = player.mediaItemCount
                                 if (totalCount > 1) {
                                     player.removeMediaItems(1, totalCount)
