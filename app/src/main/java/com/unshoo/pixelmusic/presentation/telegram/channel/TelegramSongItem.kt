@@ -84,12 +84,14 @@ fun TelegramSongItem(
         )
     }
 
-    val cardShape = AbsoluteSmoothCornerShape(
-        cornerRadiusTR = 20.dp, cornerRadiusTL = 20.dp,
-        cornerRadiusBR = 20.dp, cornerRadiusBL = 20.dp,
-        smoothnessAsPercentTR = 60, smoothnessAsPercentTL = 60,
-        smoothnessAsPercentBR = 60, smoothnessAsPercentBL = 60
-    )
+    val cardShape = remember {
+        AbsoluteSmoothCornerShape(
+            cornerRadiusTR = 20.dp, cornerRadiusTL = 20.dp,
+            cornerRadiusBR = 20.dp, cornerRadiusBL = 20.dp,
+            smoothnessAsPercentTR = 60, smoothnessAsPercentTL = 60,
+            smoothnessAsPercentBR = 60, smoothnessAsPercentBL = 60
+        )
+    }
 
     Surface(
         modifier = modifier

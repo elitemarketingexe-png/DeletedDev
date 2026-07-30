@@ -735,9 +735,8 @@ private fun YourMixEmptyPlaceholder(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Surface(
-                modifier = Modifier.size(76.dp),
-                shape = AbsoluteSmoothCornerShape(
+            val surfaceShape = remember {
+                AbsoluteSmoothCornerShape(
                     cornerRadiusTL = 28.dp,
                     smoothnessAsPercentTR = 60,
                     cornerRadiusBR = 28.dp,
@@ -746,7 +745,24 @@ private fun YourMixEmptyPlaceholder(
                     smoothnessAsPercentBR = 60,
                     cornerRadiusTR = 28.dp,
                     smoothnessAsPercentBL = 60,
-                ),
+                )
+            }
+            val buttonShape = remember {
+                AbsoluteSmoothCornerShape(
+                    cornerRadiusTL = 22.dp,
+                    smoothnessAsPercentTR = 60,
+                    cornerRadiusBR = 22.dp,
+                    smoothnessAsPercentTL = 60,
+                    cornerRadiusBL = 22.dp,
+                    smoothnessAsPercentBR = 60,
+                    cornerRadiusTR = 22.dp,
+                    smoothnessAsPercentBL = 60,
+                )
+            }
+
+            Surface(
+                modifier = Modifier.size(76.dp),
+                shape = surfaceShape,
                 color = colors.secondaryContainer,
                 contentColor = colors.onSecondaryContainer
             ) {
@@ -780,16 +796,7 @@ private fun YourMixEmptyPlaceholder(
 
             FilledTonalButton(
                 onClick = onRefresh,
-                shape = AbsoluteSmoothCornerShape(
-                    cornerRadiusTL = 22.dp,
-                    smoothnessAsPercentTR = 60,
-                    cornerRadiusBR = 22.dp,
-                    smoothnessAsPercentTL = 60,
-                    cornerRadiusBL = 22.dp,
-                    smoothnessAsPercentBR = 60,
-                    cornerRadiusTR = 22.dp,
-                    smoothnessAsPercentBL = 60,
-                )
+                shape = buttonShape
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Refresh,
