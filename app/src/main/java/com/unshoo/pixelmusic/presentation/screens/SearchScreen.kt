@@ -833,7 +833,7 @@ fun SearchResultsList(
                 }
         }
     }
-    val searchQueueName = remember(searchQuery) {
+    val sectionOrder = remember(currentFilter) {
         if (currentFilter == SearchFilterType.VIDEOS) {
             listOf(SearchFilterType.VIDEOS)
         } else {
@@ -843,6 +843,13 @@ fun SearchResultsList(
                 SearchFilterType.ARTISTS,
                 SearchFilterType.PLAYLISTS
             )
+        }
+    }
+    val searchQueueName = remember(searchQuery) { "Search: $searchQuery" }
+    val onSongResultClick = remember(songResultsQueue, searchQueueName, playerViewModel, onItemSelected) {
+        { song: Song ->
+            playerViewModel.showAndPlaySong(song, songResultsQueue, searchQueueName)
+            onItemSelected()
         }
     }
 
@@ -1465,7 +1472,8 @@ fun SearchResultPlaylistItem(
         }
     }
 }
-@androidx.annotation.OptIn(UnstableApi::class)
+
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun SearchFilterChip(
     filterType: SearchFilterType,
