@@ -282,9 +282,21 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         // first song after a fresh launch can genuinely stall for several seconds to that full
         // 15s on stream resolution alone, before audio starts. This was previously deliberately
         // avoided here (see prior comment) to protect memory/CPU on low-end devices; per request,
-        // TEST COMMIT 1: Completely disable BotGuard pre-warm on app startup.
-        // BotGuard will now initialize 100% on-demand when YouTube playback starts.
-        botGuardWarmUpJob = null
+        // TEST COMMIT 2: Pre-warm BotGuard after a 5-second post-launch delay.
+        // UI renders 100% lag-free first, then BotGuard pre-warms in idle gap for instant first playback.
+        botGuardWarmUpJob = warmUpScope.launch {
+            try {
+                kotlinx.coroutines.delay(5000L)
+                val isLowRam = (getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)
+                    ?.isLowRamDevice == true
+                if (!isLowRam) {
+                    awaitMainThreadIdle()
+                    BotGuardTokenGenerator.preWarm("default")
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "BotGuard pre-warm failed (non-fatal)")
+            }
+        }
 
         startupScope.launch {
             AlbumArtUtils.migrateLegacyCacheLocation(this@PixelMusicApplication)
