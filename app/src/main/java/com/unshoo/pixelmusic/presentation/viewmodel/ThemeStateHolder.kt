@@ -106,6 +106,9 @@ class ThemeStateHolder @Inject constructor(
             }
 
             val uriString = albumArtUriAsUri.toString()
+            if (!isPreload && _currentAlbumArtUri.value == uriString && _currentAlbumArtColorSchemePair.value != null) {
+                return
+            }
             // Use the optimized ColorSchemeProcessor with LRU cache
             val schemePair = colorSchemeProcessor.getOrGenerateColorScheme(
                 albumArtUri = uriString,
