@@ -80,7 +80,11 @@ object FileDeletionUtils {
     @RequiresApi(Build.VERSION_CODES.R)
     fun getDeleteRequestIntentSender(context: Context, filePath: String): android.content.IntentSender? {
         val uri = MediaStorePermissionHelper.getMediaStoreUri(context, filePath) ?: return null
-        return MediaStore.createDeleteRequest(context.contentResolver, listOf(uri)).intentSender
+        return try {
+            MediaStore.createDeleteRequest(context.contentResolver, listOf(uri)).intentSender
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**

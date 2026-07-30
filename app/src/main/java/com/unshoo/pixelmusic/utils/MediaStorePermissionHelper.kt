@@ -59,14 +59,18 @@ object MediaStorePermissionHelper {
         uris: Collection<Uri>
     ): IntentSender? {
         if (uris.isEmpty()) return null
-        return MediaStore.createWriteRequest(context.contentResolver, uris).intentSender
+        return try {
+            MediaStore.createWriteRequest(context.contentResolver, uris).intentSender
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**
      * Creates an IntentSender that, when launched, asks the user to confirm
      * deletion of the given MediaStore URIs.
      *
-     * Returns null on Android < 11 or if [uris] is empty.
+     * Returns null on Android < 11 or if [uris] is empty or contains invalid URIs.
      */
     @RequiresApi(Build.VERSION_CODES.R)
     fun createDeleteRequestIntentSender(
@@ -74,7 +78,11 @@ object MediaStorePermissionHelper {
         uris: Collection<Uri>
     ): IntentSender? {
         if (uris.isEmpty()) return null
-        return MediaStore.createDeleteRequest(context.contentResolver, uris).intentSender
+        return try {
+            MediaStore.createDeleteRequest(context.contentResolver, uris).intentSender
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /**
