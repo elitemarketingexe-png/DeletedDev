@@ -961,11 +961,11 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    suspend fun getSongsForCurrentLibrarySelection(): List<Song> {
+    suspend fun getSongsForCurrentLibrarySelection(): List<Song> = withContext(Dispatchers.IO) {
         val sortOption = playerUiState.value.currentSongSortOption
         val storageFilter = playerUiState.value.currentStorageFilter
         val sortedIds = musicRepository.getSongIdsSorted(sortOption, storageFilter)
-        return resolvePlaybackQueueFromSortedIds(sortedIds)
+        resolvePlaybackQueueFromSortedIds(sortedIds)
     }
 
     private fun launchLatestFullQueuePlayback(

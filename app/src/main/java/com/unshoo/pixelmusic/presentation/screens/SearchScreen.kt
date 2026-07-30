@@ -834,22 +834,6 @@ fun SearchResultsList(
         }
     }
     val searchQueueName = remember(searchQuery) {
-        searchQuery.trim()
-            .takeIf { it.isNotEmpty() }
-            ?.let { "Search: $it" }
-            ?: "Search Results"
-    }
-    val onSongResultClick = remember(playerViewModel, onItemSelected, searchQueueName) {
-        { song: Song ->
-            // INSTANT PLAYBACK FIX: Always play the song immediately via showAndPlaySong.
-            // This gives instant response on tap without waiting for a network call.
-            playerViewModel.showAndPlaySong(song, listOf(song), searchQueueName)
-            onItemSelected()
-        }
-    }
-
-
-    val sectionOrder = remember(currentFilter) {
         if (currentFilter == SearchFilterType.VIDEOS) {
             listOf(SearchFilterType.VIDEOS)
         } else {
