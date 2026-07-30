@@ -3675,6 +3675,18 @@ class PlayerViewModel @Inject constructor(
             (activeSong != null && activeSong.title.equals(song.title, ignoreCase = true) && activeSong.artist.equals(song.artist, ignoreCase = true))
         ))
 
+        // FIX (search miniplayer vanish): Set preparingSongId IMMEDIATELY so the guard in
+        // onMediaItemTransition(null) / STATE_IDLE sees a non-null preparingSongId and does NOT
+        // clear currentSong while saveYoutubeSongsToDb() is running on IO. Without this, the
+        // dismiss-then-tap-search flow caused the miniplayer to flash and disappear because:
+        //   1. dismiss called stop() + clearMediaItems() → onMediaItemTransition(null) fires
+        //   2. preparingSongId was still null (set only later inside internalPlaySongs)
+        //   3. the null-transition handler cleared currentSong → miniplayer gone
+        // This mirrors the same guard already applied in playSongs() at the top of that function.
+        if (!isAlreadyPlaying) {
+            setPreparingSong(song.id)
+        }
+
         // 1. Play the seed song immediately if not already playing so there is zero delay!
         // BUGFIX: Assign this launch to directPlaybackJob so that if the user taps a different
         // song while this is still running (saving to DB + resolving start song), the
