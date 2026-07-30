@@ -3017,18 +3017,27 @@ class PlayerViewModel @Inject constructor(
                 val player = dualPlayerEngine.masterPlayer
                 withContext(Dispatchers.Main.immediate) {
                     if (requestToken != lastFmMixToken) return@withContext
-                    val currentItem = player.currentMediaItem
-                    val currentSongForQueue: Song = if (currentItem != null) {
+                    val activeIndex = player.currentMediaItemIndex
+                    val activeItem = player.currentMediaItem
+                    val currentSongForQueue: Song = if (activeItem != null) {
                         _playerUiState.value.currentPlaybackQueue
-                            .firstOrNull { it.id == currentItem.mediaId } ?: song
+                            .firstOrNull { it.id == activeItem.mediaId } ?: song
                     } else {
                         song
                     }
 
                     val totalCount = player.mediaItemCount
-                    if (totalCount > 1) {
+                    if (activeIndex >= 0 && activeIndex < totalCount) {
+                        if (totalCount > activeIndex + 1) {
+                            player.removeMediaItems(activeIndex + 1, totalCount)
+                        }
+                        if (activeIndex > 0) {
+                            player.removeMediaItems(0, activeIndex)
+                        }
+                    } else if (totalCount > 1) {
                         player.removeMediaItems(1, totalCount)
                     }
+
                     val mediaItems = songs.map { MediaItemBuilder.build(it) }
                     player.addMediaItems(mediaItems)
                     _playerUiState.update {
@@ -3747,8 +3756,16 @@ class PlayerViewModel @Inject constructor(
                                 (nowActiveSong != null && nowActiveSong.title.equals(song.title, ignoreCase = true) && nowActiveSong.artist.equals(song.artist, ignoreCase = true))
                             )
                             if (matchesCurrent || player.mediaItemCount <= 1) {
+                                val activeIndex = player.currentMediaItemIndex
                                 val totalCount = player.mediaItemCount
-                                if (totalCount > 1) {
+                                if (activeIndex >= 0 && activeIndex < totalCount) {
+                                    if (totalCount > activeIndex + 1) {
+                                        player.removeMediaItems(activeIndex + 1, totalCount)
+                                    }
+                                    if (activeIndex > 0) {
+                                        player.removeMediaItems(0, activeIndex)
+                                    }
+                                } else if (totalCount > 1) {
                                     player.removeMediaItems(1, totalCount)
                                 }
                                 player.addMediaItems(mediaItems)
