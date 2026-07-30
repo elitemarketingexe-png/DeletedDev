@@ -623,9 +623,8 @@ private fun RecentlyPlayedTimestampDivider(
                     )
                 )
         )
-        Surface(
-            color = chipContainer,
-            shape = AbsoluteSmoothCornerShape(
+        val chipShape = remember {
+            AbsoluteSmoothCornerShape(
                 cornerRadiusTL = 22.dp,
                 smoothnessAsPercentTR = 60,
                 cornerRadiusTR = 22.dp,
@@ -635,6 +634,10 @@ private fun RecentlyPlayedTimestampDivider(
                 cornerRadiusBR = 22.dp,
                 smoothnessAsPercentTL = 60
             )
+        }
+        Surface(
+            color = chipContainer,
+            shape = chipShape
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -677,9 +680,8 @@ private fun RecentlyPlayedEmptyState(
     range: StatsTimeRange,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = AbsoluteSmoothCornerShape(
+    val cardShape = remember {
+        AbsoluteSmoothCornerShape(
             cornerRadiusTL = 26.dp,
             smoothnessAsPercentTR = 60,
             cornerRadiusTR = 26.dp,
@@ -688,7 +690,11 @@ private fun RecentlyPlayedEmptyState(
             smoothnessAsPercentBL = 60,
             cornerRadiusBR = 26.dp,
             smoothnessAsPercentTL = 60
-        ),
+        )
+    }
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = cardShape,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
         )

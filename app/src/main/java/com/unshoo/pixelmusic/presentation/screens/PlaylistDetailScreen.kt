@@ -563,6 +563,31 @@ fun PlaylistDetailScreen(
                             .padding(bottom = playbackControlBottomPadding),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val playButtonShape = remember {
+                            AbsoluteSmoothCornerShape(
+                                cornerRadiusTL = 60.dp,
+                                smoothnessAsPercentTR = 60,
+                                cornerRadiusTR = 14.dp,
+                                smoothnessAsPercentTL = 60,
+                                cornerRadiusBL = 60.dp,
+                                smoothnessAsPercentBR = 60,
+                                cornerRadiusBR = 14.dp,
+                                smoothnessAsPercentBL = 60
+                            )
+                        }
+                        val shuffleButtonShape = remember {
+                            AbsoluteSmoothCornerShape(
+                                cornerRadiusTL = 14.dp,
+                                smoothnessAsPercentTR = 60,
+                                cornerRadiusTR = 60.dp,
+                                smoothnessAsPercentTL = 60,
+                                cornerRadiusBL = 14.dp,
+                                smoothnessAsPercentBR = 60,
+                                cornerRadiusBR = 60.dp,
+                                smoothnessAsPercentBL = 60
+                            )
+                        }
+
                         Button(
                             onClick = {
                                 if (localReorderableSongs.isNotEmpty()) {
@@ -584,16 +609,7 @@ fun PlaylistDetailScreen(
                                 .weight(1f)
                                 .height(76.dp),
                             enabled = currentPlaylist.source == "YOUTUBE" || localReorderableSongs.isNotEmpty(),
-                            shape = AbsoluteSmoothCornerShape(
-                                cornerRadiusTL = 60.dp,
-                                smoothnessAsPercentTR = 60,
-                                cornerRadiusTR = 14.dp,
-                                smoothnessAsPercentTL = 60,
-                                cornerRadiusBL = 60.dp,
-                                smoothnessAsPercentBR = 60,
-                                cornerRadiusBR = 14.dp,
-                                smoothnessAsPercentBL = 60
-                            )
+                            shape = playButtonShape
                         ) {
                             Icon(
                                 Icons.Rounded.PlayArrow,
@@ -618,16 +634,7 @@ fun PlaylistDetailScreen(
                                 .weight(1f)
                                 .height(76.dp),
                             enabled = localReorderableSongs.isNotEmpty(),
-                            shape = AbsoluteSmoothCornerShape(
-                                cornerRadiusTL = 14.dp,
-                                smoothnessAsPercentTR = 60,
-                                cornerRadiusTR = 60.dp,
-                                smoothnessAsPercentTL = 60,
-                                cornerRadiusBL = 14.dp,
-                                smoothnessAsPercentBR = 60,
-                                cornerRadiusBR = 60.dp,
-                                smoothnessAsPercentBL = 60
-                            )
+                            shape = shuffleButtonShape
                         ) {
                             Icon(
                                 Icons.Rounded.Shuffle,
