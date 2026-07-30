@@ -128,7 +128,7 @@ fun TelegramSongItem(
                     model = song.albumArtUriString ?: R.drawable.rounded_album_24,
                     contentDescription = song.title,
                     shape = albumShape,
-                    targetSize = Size(168, 168),
+                    targetSize = coil.size.Size(128, 128),
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop
                 )

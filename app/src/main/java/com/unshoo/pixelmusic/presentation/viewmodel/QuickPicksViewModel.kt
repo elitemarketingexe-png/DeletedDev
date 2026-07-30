@@ -8,13 +8,11 @@ import com.unshoo.pixelmusic.data.remote.youtube.toNativeSong
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,47 +61,51 @@ class QuickPicksViewModel @Inject constructor(
 
     private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
-    private var fetchJob: Job? = null
-    private val CACHE_TTL_MS = 10 * 60 * 1000L // 10 minutes cache TTL
-
     init {
-        // Immediately populate from cache async on Dispatchers.IO so SharedPreferences JSON parsing never blocks the main thread
-        viewModelScope.launch(Dispatchers.IO) {
-            loadFromCache()
-        }
+        // Immediately populate from cache so the UI shows something on relaunch
+        loadFromCache()
         viewModelScope.launch {
-            userPreferencesRepository.discoverFlow
-                .distinctUntilChanged()
-                .collect { _ ->
-                    if (_selectedCategory.value == "All") {
-                        loadQuickPicks("All", forceRefresh = false)
-                    }
+            loadQuickPicks(_selectedCategory.value, forceRefresh = isCacheExpired())
+            userPreferencesRepository.discoverFlow.collect { _ ->
+                if (_selectedCategory.value == "All") {
+                    loadQuickPicks("All", forceRefresh = isCacheExpired())
                 }
+            }
         }
     }
 
     fun setCategory(category: String) {
         if (_selectedCategory.value == category && !_isLoading.value) return
         _selectedCategory.value = category
-        loadQuickPicks(category, forceRefresh = true)
+        loadQuickPicks(category)
     }
 
     fun refresh(force: Boolean = false) {
-        loadQuickPicks(_selectedCategory.value, forceRefresh = force)
-    }
-
-    private fun isCacheFresh(): Boolean {
-        val lastSaved = prefs.getLong(KEY_CACHE_TIMESTAMP, 0L)
-        return (System.currentTimeMillis() - lastSaved) < CACHE_TTL_MS
+        clearCache()
+        loadQuickPicks(_selectedCategory.value, forceRefresh = true)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Cache helpers
     // ─────────────────────────────────────────────────────────────────────────
 
+    private fun isCacheExpired(): Boolean {
+        val timestamp = prefs.getLong(KEY_CACHE_TIMESTAMP, 0L)
+        if (timestamp == 0L) return true
+        return (System.currentTimeMillis() - timestamp) > CACHE_MAX_AGE_MS
+    }
+
+    private fun clearCache() {
+        prefs.edit().clear().apply()
+        _quickPicks.value = emptyList()
+    }
+
     private fun loadFromCache() {
         try {
-            prefs.getString(KEY_SONGS, null) ?: return
+            if (isCacheExpired()) {
+                clearCache()
+                return
+            }
             val songsJson = prefs.getString(KEY_SONGS, null) ?: return
             val categoriesJson = prefs.getString(KEY_CATEGORIES, null)
 
@@ -186,17 +188,16 @@ class QuickPicksViewModel @Inject constructor(
     // ─────────────────────────────────────────────────────────────────────────
 
     private fun loadQuickPicks(category: String, forceRefresh: Boolean = false) {
-        if (!forceRefresh && _quickPicks.value.isNotEmpty() && isCacheFresh()) {
-            Timber.tag("QuickPicks").d("QuickPicks cache is fresh and populated, skipping redundant fetch")
-            return
-        }
-
-        if (fetchJob?.isActive == true) {
-            Timber.tag("QuickPicks").d("QuickPicks fetch job is already active, skipping duplicate request")
-            return
-        }
-
-        fetchJob = viewModelScope.launch {
+        viewModelScope.launch {
+            val cacheExpired = isCacheExpired()
+            val shouldRefresh = forceRefresh || cacheExpired
+            if (category == "All" && !shouldRefresh && _quickPicks.value.isNotEmpty()) {
+                _isLoading.value = false
+                return@launch
+            }
+            if (cacheExpired) {
+                clearCache()
+            }
             if (_quickPicks.value.isEmpty()) {
                 _isLoading.value = true
             }
@@ -420,15 +421,6 @@ class QuickPicksViewModel @Inject constructor(
             }
         }
 
-        // Bucket D: User's online YT Music History
-        val ytHistoryDeferred = async(Dispatchers.IO) {
-            try {
-                YouTube.musicHistory().getOrNull()?.sections?.flatMap { it.songs }?.filterVideo(pureYtMusicOnly) ?: emptyList()
-            } catch (e: Exception) {
-                emptyList()
-            }
-        }
-
         // Bucket E: Local Top Played/Popular Songs
         val localPopularDeferred = async(Dispatchers.IO) {
             try {
@@ -444,21 +436,18 @@ class QuickPicksViewModel @Inject constructor(
             }
         }
 
-        // 1.2s deadline for remote recommendation buckets — return available recommendations without blocking UI
-        val remoteCandidates = kotlinx.coroutines.withTimeoutOrNull(1200L) {
-            val songMixSongs = songMixesDeferred.flatMap { try { it.await() } catch (_: Exception) { emptyList() } }
-            val artistRadioSongs = artistRadiosDeferred.flatMap { try { it.await() } catch (_: Exception) { emptyList() } }
-            val artistNameRadioSongs = artistNameRadiosDeferred.flatMap { try { it.await() } catch (_: Exception) { emptyList() } }
-            val homeRecSongs = try { ytHomeRecommendationsDeferred.await() } catch (_: Exception) { emptyList() }
-            val onlineHistorySongs = try { ytHistoryDeferred.await() } catch (_: Exception) { emptyList() }
-            (songMixSongs + artistRadioSongs + artistNameRadioSongs + homeRecSongs + onlineHistorySongs).map { it.toNativeSong() }
-        } ?: emptyList()
-
-        val localPopularSongs = try { localPopularDeferred.await() } catch (_: Exception) { emptyList() }
+        // Await all async requests
+        val songMixSongs = songMixesDeferred.flatMap { it.await() }
+        val artistRadioSongs = artistRadiosDeferred.flatMap { it.await() }
+        val artistNameRadioSongs = artistNameRadiosDeferred.flatMap { it.await() }
+        val homeRecSongs = ytHomeRecommendationsDeferred.await()
+        val localPopularSongs = localPopularDeferred.await()
 
         // 3. Blend, map, and de-duplicate
         val combinedCandidates = mutableListOf<Song>()
-        combinedCandidates.addAll(remoteCandidates)
+        (songMixSongs + artistRadioSongs + artistNameRadioSongs + homeRecSongs)
+            .map { it.toNativeSong() }
+            .let { combinedCandidates.addAll(it) }
         combinedCandidates.addAll(localPopularSongs)
 
         var deduplicated = combinedCandidates.distinctBy { song ->

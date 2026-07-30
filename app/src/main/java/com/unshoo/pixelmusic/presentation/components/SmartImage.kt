@@ -66,7 +66,7 @@ private object SmartImageRegex {
 
 val SmartImageCompactListTargetSize = Size(96, 96)
 val SmartImageListTargetSize = Size(128, 128)
-private val DefaultSmartImageSize = Size(300, 300)
+private val DefaultSmartImageSize = Size(128, 128)
 
 @Composable
 fun SmartImage(

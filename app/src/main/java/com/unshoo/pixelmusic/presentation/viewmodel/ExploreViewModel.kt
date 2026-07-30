@@ -242,8 +242,9 @@ class ExploreViewModel @Inject constructor(
 
     private fun prefetchThumbnails(sections: List<HomePage.Section>) {
         viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(500) // Defer prefetching until after initial UI layout render
             val loader = context.imageLoader
-            sections.flatMap { it.items }.take(30).forEach { item ->
+            sections.flatMap { it.items }.take(4).forEach { item ->
                 val url = when (item) {
                     is SongItem -> item.thumbnail
                     is AlbumItem -> item.thumbnail

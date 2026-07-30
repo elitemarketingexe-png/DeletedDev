@@ -85,59 +85,14 @@ class ListeningStatsTracker @Inject constructor(
     @Volatile private var mergeInFlight = false
 
     fun refreshMergedYoutubeHistory() {
-        val now = System.currentTimeMillis()
-        // Debounce: Explore refresh + login + init can all fire; avoid spamming FEmusic_history.
-        if (mergeInFlight) return
-        if (now - lastMergedHistoryAtMs < 30_000L && _playbackHistory.value.isNotEmpty()) return
         val activeScope = scope ?: persistenceScope
-        mergeInFlight = true
         activeScope.launch(Dispatchers.IO) {
             try {
-            runCatching {
-                val ytPage = unshoo.ianshulyadav.pixelmusic.innertube.YouTube.musicHistory().getOrNull()
-                    ?: return@runCatching
-                val now = System.currentTimeMillis()
-                val ytEntries = ytPage.sections
-                    .orEmpty()
-                    .asSequence()
-                    .flatMap { section -> section.songs.asSequence() }
-                    .mapIndexedNotNull { index, songItem ->
-                        val videoId = songItem.id.takeIf { it.isNotBlank() } ?: return@mapIndexedNotNull null
-                        val artistName = songItem.artists
-                            .map { it.name }
-                            .filter { it.isNotBlank() }
-                            .joinToString(", ")
-                            .ifBlank { "Unknown Artist" }
-                        PlaybackStatsRepository.PlaybackHistoryEntry(
-                            songId = "youtube_$videoId",
-                            // Decreasing timestamps preserve YT history order in our sorted list.
-                            timestamp = now - index,
-                            title = songItem.title,
-                            artist = artistName,
-                            thumbnail = songItem.thumbnail
-                        )
-                    }
-                    .distinctBy { it.songId }
-                    .toList()
-                if (ytEntries.isEmpty()) return@runCatching
-
-                _playbackHistory.update { local ->
-                    val localIds = local.map { it.songId }.toHashSet()
-                    // Prefer local first (more accurate timestamps), then append remote-only items.
-                    val remoteOnly = ytEntries.filter { it.songId !in localIds }
-                    (local + remoteOnly).take(MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS)
-                }
-                Timber.d(
-                    "Merged YT Music history: remote=%d total=%d",
-                    ytEntries.size,
-                    _playbackHistory.value.size
+                _playbackHistory.value = playbackStatsRepository.loadPlaybackHistory(
+                    limit = MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS
                 )
-                lastMergedHistoryAtMs = System.currentTimeMillis()
-            }.onFailure {
-                Timber.w(it, "Failed to merge YouTube Music listening history")
-            }
-            } finally {
-                mergeInFlight = false
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to load local playback history")
             }
         }
     }

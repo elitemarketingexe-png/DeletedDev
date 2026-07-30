@@ -219,7 +219,7 @@ private fun PlayerUiState.toQueueUndoBarProjection(): QueueUndoBarProjection =
 )
 @Composable
 fun QueueBottomSheet(
-    viewModel: PlayerViewModel,
+    viewModel: PlayerViewModel = hiltViewModel(),
     playlistViewModel: PlaylistViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     queue: List<Song>,
@@ -777,7 +777,7 @@ fun QueueBottomSheet(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(
                                 start = 0.dp,
-                                end = 16.dp,
+                                end = if (listState.canScrollForward || listState.canScrollBackward) 26.dp else 0.dp,
                                 bottom = MiniPlayerHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 32.dp
                             )
                         ) {
@@ -1978,32 +1978,10 @@ fun QueuePlaylistSongItem(
     isFromPlaylist: Boolean
 ) {
     val colors = MaterialTheme.colorScheme
-    val performanceModeEnabled = SmartImageCache.performanceModeEnabled
 
-    val cornerRadius: Dp
-    val albumCornerRadius: Dp
-    val elevation: Dp
-
-    if (performanceModeEnabled) {
-        cornerRadius = if (isCurrentSong) 60.dp else 22.dp
-        albumCornerRadius = if (isCurrentSong) 60.dp else 8.dp
-        elevation = if (isDragging) 4.dp else 1.dp
-    } else {
-        cornerRadius = animateDpAsState(
-            targetValue = if (isCurrentSong) 60.dp else 22.dp,
-            label = "cornerRadiusAnimation"
-        ).value
-
-        albumCornerRadius = animateDpAsState(
-            targetValue = if (isCurrentSong) 60.dp else 8.dp,
-            label = "cornerRadiusAnimation"
-        ).value
-
-        elevation = animateDpAsState(
-            targetValue = if (isDragging) 4.dp else 1.dp,
-            label = "elevationAnimation"
-        ).value
-    }
+    val cornerRadius = if (isCurrentSong) 60.dp else 22.dp
+    val albumCornerRadius = if (isCurrentSong) 60.dp else 8.dp
+    val elevation = if (isDragging) 4.dp else 1.dp
 
     val itemShape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
     val albumShape = remember(albumCornerRadius) { RoundedCornerShape(albumCornerRadius) }
@@ -2041,31 +2019,21 @@ fun QueuePlaylistSongItem(
         (revealWidthPx / (56.dp.value * density.density)).coerceIn(0f, 1f)
     } else 0f
 
-    val dismissBackgroundColor: Color
-    val dismissIconAlpha: Float
-    val dismissIconScale: Float
-
-    if (performanceModeEnabled || revealWidthPx < 0.001f) {
-        dismissBackgroundColor = colors.errorContainer
-        dismissIconAlpha = revealProgress
-        dismissIconScale = if (isSwipeTargeted) 1.08f else 0.95f
-    } else {
-        dismissBackgroundColor = animateColorAsState(
-            targetValue = if (isSwipeTargeted) colors.errorContainer else colors.errorContainer.copy(alpha = 0.82f),
-            animationSpec = tween(durationMillis = 150),
-            label = "dismissBackgroundColor"
-        ).value
-        dismissIconAlpha = animateFloatAsState(
-            targetValue = revealProgress * if (isSwipeTargeted) 1f else 0.88f,
-            animationSpec = tween(durationMillis = 120),
-            label = "dismissIconAlpha"
-        ).value
-        dismissIconScale = animateFloatAsState(
-            targetValue = if (isSwipeTargeted) 1.08f else 0.95f,
-            animationSpec = tween(durationMillis = 120),
-            label = "dismissIconScale"
-        ).value
-    }
+    val dismissBackgroundColor by animateColorAsState(
+        targetValue = if (isSwipeTargeted) colors.errorContainer else colors.errorContainer.copy(alpha = 0.82f),
+        animationSpec = tween(durationMillis = 150),
+        label = "dismissBackgroundColor"
+    )
+    val dismissIconAlpha by animateFloatAsState(
+        targetValue = revealProgress * if (isSwipeTargeted) 1f else 0.88f,
+        animationSpec = tween(durationMillis = 120),
+        label = "dismissIconAlpha"
+    )
+    val dismissIconScale by animateFloatAsState(
+        targetValue = if (isSwipeTargeted) 1.08f else 0.95f,
+        animationSpec = tween(durationMillis = 120),
+        label = "dismissIconScale"
+    )
 
     var surfaceHeightPx by remember { mutableStateOf(0f) }
 
@@ -2152,8 +2120,10 @@ fun QueuePlaylistSongItem(
                         .then(dismissGestureModifier),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val albumArtPadding = if (isDragHandleVisible) 6.dp else 12.dp
-
+                    val albumArtPadding by animateDpAsState(
+                        targetValue = if (isDragHandleVisible) 6.dp else 12.dp,
+                        label = "albumArtPadding"
+                    )
                     Spacer(Modifier.width(albumArtPadding))
 
                     SmartImage(

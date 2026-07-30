@@ -2226,7 +2226,7 @@ fun MixedForYouCard(
                         modifier = Modifier.weight(1f),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(section.items.take(4)) { item ->
+                        items(items = section.items.take(4), key = { item -> item.id }) { item ->
                             val itemThumb = when (item) {
                                 is AlbumItem -> item.thumbnail
                                 is PlaylistItem -> item.thumbnail

@@ -158,32 +158,52 @@ fun HomeScreen(
     }
     val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val accountsUiState by accountsViewModel.uiState.collectAsStateWithLifecycle()
-    val dailyMixSongsRaw by playerViewModel.dailyMixSongs.collectAsStateWithLifecycle()
-    val mergedDailyMixSongs = remember(dailyMixSongsRaw) {
-        dailyMixSongsRaw.toImmutableList()
-    }
-    val userName = remember(accountsUiState) {
-        val rawName = accountsUiState.userName
-        if (!rawName.isNullOrBlank()) {
-            val cleanName = if (rawName.startsWith("@")) rawName.substring(1) else rawName
-            val baseName = if (!cleanName.contains("@")) {
-                cleanName
-            } else {
-                cleanName.substringBefore("@")
-            }
-            val formattedName = baseName.split(".", "_", "-")
-                .filter { it.isNotBlank() }
-                .joinToString(" ") { word ->
-                    word.replaceFirstChar { it.uppercase() }
+    val exploreUiState by exploreViewModel.uiState.collectAsStateWithLifecycle()
+    val discoverYoutubeSongs by remember(exploreUiState.homePageSections) {
+        derivedStateOf {
+            exploreUiState.homePageSections
+                .filter { section ->
+                    val title = section.title
+                    title.contains("daily discover", ignoreCase = true) ||
+                    (title.contains("discover", ignoreCase = true) && title.contains("daily", ignoreCase = true))
                 }
-            val firstName = formattedName.split(" ").firstOrNull()?.trim().orEmpty()
-            if (firstName.length >= 3) {
-                formattedName.trim()
+                .flatMap { section ->
+                    section.items.filterIsInstance<unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem>()
+                        .map { songItem -> songItem.toNativeSong() }
+                }
+                .distinctBy { it.id }
+        }
+    }
+    val dailyMixSongsRaw by playerViewModel.dailyMixSongs.collectAsStateWithLifecycle()
+    val mergedDailyMixSongs by remember(dailyMixSongsRaw, discoverYoutubeSongs) {
+        derivedStateOf {
+            (dailyMixSongsRaw + discoverYoutubeSongs).distinctBy { it.id }.toImmutableList()
+        }
+    }
+    val userName by remember(accountsUiState.userName) {
+        derivedStateOf {
+            val rawName = accountsUiState.userName
+            if (!rawName.isNullOrBlank()) {
+                val cleanName = if (rawName.startsWith("@")) rawName.substring(1) else rawName
+                val baseName = if (!cleanName.contains("@")) {
+                    cleanName
+                } else {
+                    cleanName.substringBefore("@")
+                }
+                val formattedName = baseName.split(".", "_", "-")
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ") { word ->
+                        word.replaceFirstChar { it.uppercase() }
+                    }
+                val firstName = formattedName.split(" ").firstOrNull()?.trim().orEmpty()
+                if (firstName.length >= 3) {
+                    formattedName.trim()
+                } else {
+                    if (firstName.isNotEmpty()) firstName else formattedName.trim()
+                }
             } else {
-                if (firstName.isNotEmpty()) firstName else formattedName.trim()
+                null
             }
-        } else {
-            null
         }
     }
     val dailyMixSongs = dailyMixSongsRaw  // reuse the already-collected state from line 176
@@ -388,12 +408,12 @@ fun HomeScreen(
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
                 onRefresh = {
+                    isRefreshing = true
+                    homePlaceholderRefreshGeneration++
+                    quickPicksViewModel.refresh()
+                    playerViewModel.forceUpdateDailyMix()
                     scope.launch {
-                        isRefreshing = true
-                        homePlaceholderRefreshGeneration++
-                        quickPicksViewModel.refresh(force = true)
-                        playerViewModel.forceUpdateDailyMix()
-                        delay(1200)
+                        delay(2000)
                         isRefreshing = false
                     }
                 },
@@ -518,7 +538,7 @@ fun HomeScreen(
                     }
                 }
 
-                // Daily Mix
+                // Daily Mix (with YouTube Daily Discover songs merged)
                 if (mergedDailyMixSongs.isNotEmpty()) {
                     item(
                         key = "daily_mix_section",

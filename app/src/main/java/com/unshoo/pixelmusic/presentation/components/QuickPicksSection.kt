@@ -149,7 +149,23 @@ fun QuickPicksSection(
             val lazyListState = rememberLazyListState()
             val limitSongs = remember(songs) { songs.take(20) }
             
-
+            // Use snapshotFlow instead of LaunchedEffect(isScrollInProgress) so the
+            // coroutine doesn't restart on every user touch — it just waits inside.
+            LaunchedEffect(limitSongs) {
+                if (limitSongs.isEmpty()) return@LaunchedEffect
+                while (true) {
+                    // Wait until the user is not scrolling before auto-advancing
+                    snapshotFlow { lazyListState.isScrollInProgress }
+                        .filter { !it }
+                        .first()
+                    delay(2500)
+                    // Re-check after delay in case user started scrolling again
+                    if (!lazyListState.isScrollInProgress) {
+                        val nextIndex = (lazyListState.firstVisibleItemIndex + 1) % limitSongs.size
+                        lazyListState.animateScrollToItem(nextIndex)
+                    }
+                }
+            }
 
             LazyRow(
                 state = lazyListState,
@@ -167,7 +183,8 @@ fun QuickPicksSection(
                             .height(cardSize)
                             .graphicsLayer {
                                 val layoutInfo = lazyListState.layoutInfo
-                                val itemInfo = layoutInfo.visibleItemsInfo.find { it.key == song.id }
+                                val visibleItems = layoutInfo.visibleItemsInfo
+                                val itemInfo = visibleItems.firstOrNull { it.key == song.id }
                                 if (itemInfo != null) {
                                     val focalPoint = layoutInfo.viewportStartOffset + 16.dp.toPx()
                                     val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
@@ -204,7 +221,24 @@ fun QuickPicksSection(
                 }
             }
 
-
+            // Same snapshotFlow-based fix as CARD mode above
+            LaunchedEffect(limitSongs) {
+                if (limitSongs.isEmpty()) return@LaunchedEffect
+                while (true) {
+                    snapshotFlow { lazyListState.isScrollInProgress }
+                        .filter { !it }
+                        .first()
+                    delay(2500)
+                    if (!lazyListState.isScrollInProgress) {
+                        val nextIndex = (lazyListState.firstVisibleItemIndex + 1) % limitSongs.size
+                        if (isReducedMotion) {
+                            lazyListState.scrollToItem(nextIndex)
+                        } else {
+                            lazyListState.animateScrollToItem(nextIndex)
+                        }
+                    }
+                }
+            }
 
             val cardShape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
             LazyRow(
@@ -223,17 +257,28 @@ fun QuickPicksSection(
                             modifier = Modifier
                                 .size(cardSize)
                                 .graphicsLayer {
-                                    val layoutInfo = lazyListState.layoutInfo
-                                    val itemInfo = layoutInfo.visibleItemsInfo.find { it.key == song.id }
-                                    if (itemInfo != null) {
-                                        val focalPoint = layoutInfo.viewportStartOffset + 16.dp.toPx()
-                                        val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
-                                        val maxDistance = (cardSize + 8.dp).toPx()
-                                        val fraction = (distanceFromStart / maxDistance).coerceIn(0f, 1f)
-                                        val scale = 0.9f + 0.1f * (1f - fraction)
-                                        scaleX = scale
-                                        scaleY = scale
-                                        alpha = 0.8f + 0.2f * (1f - fraction)
+                                    if (isReducedMotion) {
+                                        scaleX = 1f
+                                        scaleY = 1f
+                                        alpha = 1f
+                                    } else {
+                                        val layoutInfo = lazyListState.layoutInfo
+                                        val visibleItems = layoutInfo.visibleItemsInfo
+                                        val itemInfo = visibleItems.firstOrNull { it.key == song.id }
+                                        if (itemInfo != null) {
+                                            val focalPoint = layoutInfo.viewportStartOffset + 16.dp.toPx()
+                                            val distanceFromStart = (itemInfo.offset.toFloat() - focalPoint).absoluteValue
+                                            val maxDistance = (cardSize + 8.dp).toPx()
+                                            val fraction = (distanceFromStart / maxDistance).coerceIn(0f, 1f)
+                                            val scale = 0.9f + (1f - 0.9f) * (1f - fraction)
+                                            scaleX = scale
+                                            scaleY = scale
+                                            alpha = 0.8f + (1f - 0.8f) * (1f - fraction)
+                                        } else {
+                                            scaleX = 0.9f
+                                            scaleY = 0.9f
+                                            alpha = 0.8f
+                                        }
                                     }
                                 },
                             shape = cardShape,
@@ -317,15 +362,24 @@ fun QuickPicksSection(
                                 .size(uncontainedCardSize)
                                 .graphicsLayer {
                                     val layoutInfo = lazyListState.layoutInfo
-                                    val itemInfo = layoutInfo.visibleItemsInfo.find { it.key == song.id }
+                                    val visibleItems = layoutInfo.visibleItemsInfo
+                                    val itemInfo = visibleItems.firstOrNull { it.key == song.id }
                                     if (itemInfo != null) {
-                                        val viewportWidth = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
+                                        val viewportWidth = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
                                         val itemCenter = itemInfo.offset + itemInfo.size / 2f
-                                        val fraction = (itemCenter / viewportWidth).coerceIn(0f, 1f)
-                                        val scale = if (fraction > 0.6f) 1f - (fraction - 0.6f) * 0.3f else 1f
+                                        val fraction = (itemCenter / viewportWidth.toFloat()).coerceIn(0f, 1f)
+                                        
+                                        // dynamic Material 3 uncontained scale
+                                        val scale = if (fraction > 0.6f) {
+                                            1f - (fraction - 0.6f) * 0.3f
+                                        } else {
+                                            1f
+                                        }
                                         scaleX = scale
                                         scaleY = scale
-                                        alpha = 0.7f + 0.3f * scale
+                                        alpha = 0.7f + (1f - 0.7f) * scale
+                                        
+                                        // Dynamic Material 3 shape morphing: squircle corner sizes change on scroll position
                                         val currentCorner = if (fraction > 0.5f) {
                                             val morphProgress = (fraction - 0.5f) * 2f
                                             24.dp + (56.dp - 24.dp) * morphProgress.coerceIn(0f, 1f)
@@ -480,6 +534,18 @@ private fun QuickPickPortraitCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val transition = rememberInfiniteTransition(label = "pulse")
+    val badgeAlphaAnimated by transition.animateFloat(
+        initialValue = 0.75f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "badgePulse"
+    )
+    val badgeAlpha = if (isPlaying) badgeAlphaAnimated else 1f
+
     ElevatedCard(
         onClick = onClick,
         modifier = modifier,
@@ -515,16 +581,6 @@ private fun QuickPickPortraitCard(
             
             // 3. Top-Right Pill Badge — only runs if this card is the active song
             if (isPlaying) {
-                val transition = rememberInfiniteTransition(label = "pulse")
-                val badgeAlpha by transition.animateFloat(
-                    initialValue = 0.75f,
-                    targetValue = 1.0f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "badgePulse"
-                )
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -725,21 +781,17 @@ private fun QuickPickClassicCard(
         label = "ClassicCardBg"
     )
     
-    // Only run the infinite border-glow animation for the actively playing card.
-    // Creating rememberInfiniteTransition on every card item (up to 20) is expensive.
-    val borderGlowAlpha by if (isPlaying) {
-        rememberInfiniteTransition(label = "pulse").animateFloat(
-            initialValue = 0.3f,
-            targetValue = 0.7f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "borderGlow"
-        )
-    } else {
-        remember { mutableFloatStateOf(1f) }
-    }
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val animatedBorderGlowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "borderGlow"
+    )
+    val borderGlowAlpha = if (isPlaying) animatedBorderGlowAlpha else 1f
 
     Card(
         onClick = onClick,

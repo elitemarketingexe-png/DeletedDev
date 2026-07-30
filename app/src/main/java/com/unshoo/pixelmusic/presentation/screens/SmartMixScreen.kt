@@ -671,7 +671,7 @@ private fun PeriodSelectionSection(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        items(periods) { (id, label) ->
+        items(items = periods, key = { it.first }) { (id, label) ->
             val active = selectedPeriod == id
             FilterChip(
                 selected = active,
