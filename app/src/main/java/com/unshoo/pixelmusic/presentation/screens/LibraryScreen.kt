@@ -1319,7 +1319,7 @@ fun LibraryScreen(
                                         onSelectAll = {
                                             when (tabTitles.getOrNull(currentTabIndex)?.toLibraryTabIdOrNull()) {
                                                 LibraryTabId.LIKED -> {
-                                                    multiSelectionState.selectAll(favoritePagingItems.itemSnapshotList.items)
+                                                    multiSelectionState.selectAll(favoritePagingItems.itemSnapshotList.items.filterNotNull())
                                                 }
                                                 LibraryTabId.FOLDERS -> {
                                                     val songsToSelect =
