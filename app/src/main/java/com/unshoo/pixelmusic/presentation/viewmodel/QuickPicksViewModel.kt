@@ -465,61 +465,6 @@ class QuickPicksViewModel @Inject constructor(
             song.youtubeId?.takeIf { it.isNotBlank() } ?: "${song.title.lowercase()}|${song.artist.lowercase()}"
         }
 
-        // 4. Fallback: If not enough personalized items (e.g. fresh install/no history), fetch location-based trending charts/releases
-        if (deduplicated.size < 20) {
-            val countryCode = userPreferencesRepository.contentCountryFlow.first().uppercase()
-            
-            val chartsDeferred = async(Dispatchers.IO) {
-                try {
-                    val charts = YouTube.getChartsPage(countryCode).getOrNull()
-                        ?: YouTube.getChartsPage().getOrNull()
-                    charts?.sections
-                        ?.flatMap { it.items }
-                        ?.filterIsInstance<SongItem>()
-                        ?.filterVideo(pureYtMusicOnly)
-                        ?.map { it.toNativeSong() } ?: emptyList()
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            }
-
-            val newReleasesDeferred = async(Dispatchers.IO) {
-                try {
-                    val albums = YouTube.newReleaseAlbums().getOrNull() ?: emptyList()
-                    val selectedAlbums = albums.shuffled().take(8)
-                    val songsPool = coroutineScope {
-                        selectedAlbums.map { album ->
-                            async {
-                                try {
-                                    YouTube.album(album.browseId).getOrNull()?.songs ?: emptyList()
-                                } catch (e: Exception) {
-                                    emptyList()
-                                }
-                            }
-                        }.flatMap { it.await() }
-                    }
-                    songsPool.filter { item ->
-                        if (pureYtMusicOnly) {
-                            val mvType = item.endpoint?.watchEndpointMusicSupportedConfigs
-                                ?.watchEndpointMusicConfig?.musicVideoType
-                            mvType == "MUSIC_VIDEO_TYPE_ATV" || mvType == null
-                        } else true
-                    }
-                    .map { it.toNativeSong() }
-                } catch (e: Exception) {
-                    emptyList()
-                }
-            }
-
-            val fallbackCharts = chartsDeferred.await()
-            val fallbackNewReleases = newReleasesDeferred.await()
-
-            deduplicated = (deduplicated + fallbackCharts + fallbackNewReleases)
-                .distinctBy { song ->
-                    song.youtubeId?.takeIf { it.isNotBlank() } ?: "${song.title.lowercase()}|${song.artist.lowercase()}"
-                }
-        }
-
         // Shuffle completely to make it dynamic on every view/refresh
         deduplicated.shuffled().take(20)
     }
