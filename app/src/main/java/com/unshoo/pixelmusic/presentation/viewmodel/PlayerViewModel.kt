@@ -6646,19 +6646,23 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    suspend fun removeSong(song: Song) {
-        // Local cleanup only. The previous path used toggleFavoriteSpecificSong(...), which can
-        // trigger remote YouTube liked-song sync while deleting and make removal slow/flaky.
-        runCatching { musicRepository.setFavoriteStatusWithMetadata(song, false, awaitRemoteSync = false) }
-        playbackStateHolder.setCurrentPosition(0L)
-        _playerUiState.update { currentState ->
-            currentState.copy(
-                currentPlaybackQueue = currentState.currentPlaybackQueue.removeSongById(song.id),
-                currentQueueSourceName = ""
-            )
+    suspend fun removeSong(song: Song) = withContext(Dispatchers.IO) {
+        try {
+            runCatching { musicRepository.setFavoriteStatusWithMetadata(song, false, awaitRemoteSync = false) }
+            withContext(Dispatchers.Main.immediate) {
+                playbackStateHolder.setCurrentPosition(0L)
+                _playerUiState.update { currentState ->
+                    currentState.copy(
+                        currentPlaybackQueue = currentState.currentPlaybackQueue.removeSongById(song.id),
+                        currentQueueSourceName = ""
+                    )
+                }
+                _isSheetVisible.value = false
+            }
+            songRemovalStateHolder.removeSongFromLibrary(song)
+        } catch (e: Exception) {
+            Log.e("PlayerViewModel", "Error in removeSong for ${song.id}: ${e.message}", e)
         }
-        _isSheetVisible.value = false
-        songRemovalStateHolder.removeSongFromLibrary(song)
     }
 
     private fun removeFromMediaControllerQueue(songId: String) {

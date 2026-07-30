@@ -1,6 +1,7 @@
 package com.unshoo.pixelmusic.presentation.viewmodel
 
 import android.app.Activity
+import android.util.Log
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.unshoo.pixelmusic.R
 import com.unshoo.pixelmusic.data.model.Song
@@ -60,28 +61,32 @@ class SongRemovalStateHolder @Inject constructor(
         return metadataEditStateHolder.deleteSong(song)
     }
 
-    suspend fun removeSongFromLibrary(song: Song) {
-        libraryStateHolder.removeSong(song.id)
-        if (song.isYouTube) {
-            musicRepository.setDislikedStatus(song.id, true)
-            musicRepository.setFavoriteStatus(song.id, false)
-            val youtubeId = song.youtubeId ?: if (song.id.startsWith("youtube_")) {
-                song.id.substringAfter("youtube_")
-            } else if (song.contentUriString.startsWith("youtube://")) {
-                song.contentUriString.substringAfter("youtube://")
-            } else null
+    suspend fun removeSongFromLibrary(song: Song) = withContext(Dispatchers.IO) {
+        try {
+            libraryStateHolder.removeSong(song.id)
+            if (song.isYouTube) {
+                musicRepository.setDislikedStatus(song.id, true)
+                musicRepository.setFavoriteStatus(song.id, false)
+                val youtubeId = song.youtubeId ?: if (song.id.startsWith("youtube_")) {
+                    song.id.substringAfter("youtube_")
+                } else if (song.contentUriString.startsWith("youtube://")) {
+                    song.contentUriString.substringAfter("youtube://")
+                } else null
 
-            if (youtubeId != null && unshoo.ianshulyadav.pixelmusic.innertube.YouTube.hasLoginCookie()) {
-                kotlin.runCatching {
-                    unshoo.ianshulyadav.pixelmusic.innertube.YouTube.dislikeVideo(youtubeId, true)
+                if (youtubeId != null && unshoo.ianshulyadav.pixelmusic.innertube.YouTube.hasLoginCookie()) {
+                    kotlin.runCatching {
+                        unshoo.ianshulyadav.pixelmusic.innertube.YouTube.dislikeVideo(youtubeId, true)
+                    }
                 }
+            } else {
+                // Some cloud/YouTube songs use non-numeric UI IDs. Do not crash removal if the
+                // backing DB row cannot be addressed by the visible id.
+                song.id.toLongOrNull()?.let { musicRepository.deleteById(it) }
             }
-        } else {
-            // Some cloud/YouTube songs use non-numeric UI IDs. Do not crash removal if the
-            // backing DB row cannot be addressed by the visible id.
-            song.id.toLongOrNull()?.let { musicRepository.deleteById(it) }
+            playlistPreferencesRepository.removeSongFromAllPlaylists(song.id)
+        } catch (e: Exception) {
+            Log.e("SongRemovalStateHolder", "Error removing song from library: ${e.message}", e)
         }
-        playlistPreferencesRepository.removeSongFromAllPlaylists(song.id)
     }
 }
 
