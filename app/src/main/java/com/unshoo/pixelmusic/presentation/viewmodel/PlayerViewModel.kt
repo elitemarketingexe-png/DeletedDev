@@ -2896,13 +2896,11 @@ class PlayerViewModel @Inject constructor(
         lastFmMixToken += 1L
         val requestToken = lastFmMixToken
 
-        val activeSong = playbackStateHolder.stablePlayerState.value.currentSong
         val currentMediaId = dualPlayerEngine.masterPlayer.currentMediaItem?.mediaId
         val isAlreadyPlaying = (currentMediaId != null && (
             currentMediaId == song.id ||
             (song.youtubeId != null && currentMediaId == song.youtubeId) ||
-            currentMediaId.removePrefix("youtube_") == song.id.removePrefix("youtube_") ||
-            (activeSong != null && activeSong.title.equals(song.title, ignoreCase = true) && activeSong.artist.equals(song.artist, ignoreCase = true))
+            currentMediaId.removePrefix("youtube_") == song.id.removePrefix("youtube_")
         ))
 
         if (!LastFM.isInitialized()) {
@@ -3666,13 +3664,11 @@ class PlayerViewModel @Inject constructor(
         Log.i("ArchiveTuneBuilder", "playWithArchiveTuneQueueBuilder: starting for song '${song.title}' (${song.id})")
         val requestToken = beginDirectPlaybackRequest()
 
-        val activeSong = playbackStateHolder.stablePlayerState.value.currentSong
         val currentMediaId = dualPlayerEngine.masterPlayer.currentMediaItem?.mediaId
         val isAlreadyPlaying = (currentMediaId != null && (
             currentMediaId == song.id ||
             (song.youtubeId != null && currentMediaId == song.youtubeId) ||
-            currentMediaId.removePrefix("youtube_") == song.id.removePrefix("youtube_") ||
-            (activeSong != null && activeSong.title.equals(song.title, ignoreCase = true) && activeSong.artist.equals(song.artist, ignoreCase = true))
+            currentMediaId.removePrefix("youtube_") == song.id.removePrefix("youtube_")
         ))
 
         // FIX (search miniplayer vanish): Set preparingSongId IMMEDIATELY so the guard in
