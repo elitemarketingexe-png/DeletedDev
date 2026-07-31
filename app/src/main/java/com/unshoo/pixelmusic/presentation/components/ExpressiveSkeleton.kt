@@ -745,3 +745,103 @@ fun AlbumSkeletonDetail(
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QuickPicksSkeletonSection
+// Dynamic MD3 Expressive Skeleton for Quick Picks section:
+//   Header title + See All action shimmers + 3 stacked rows of rounded pill skeletons.
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+fun QuickPicksSkeletonSection(
+    modifier: Modifier = Modifier
+) {
+    val shimmerBrush = rememberShimmerBrush()
+    val pillWidths = remember { listOf(160.dp, 180.dp, 150.dp, 190.dp, 170.dp) }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp)
+    ) {
+        // Section Header Skeleton
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(20.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(shimmerBrush)
+            )
+            Box(
+                modifier = Modifier
+                    .width(60.dp)
+                    .height(16.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(shimmerBrush)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // 3 stacked rows of pill skeletons matching QuickPicks layout
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            repeat(3) { rowIndex ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    repeat(3) { colIndex ->
+                        val width = pillWidths[(rowIndex + colIndex) % pillWidths.size]
+                        Box(
+                            modifier = Modifier
+                                .width(width)
+                                .height(56.dp)
+                                .clip(RoundedCornerShape(28.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(shimmerBrush)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.75f)
+                                            .height(12.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(shimmerBrush)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.45f)
+                                            .height(10.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(shimmerBrush)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

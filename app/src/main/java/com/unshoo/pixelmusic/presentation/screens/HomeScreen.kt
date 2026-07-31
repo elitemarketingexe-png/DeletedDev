@@ -101,6 +101,7 @@ import com.unshoo.pixelmusic.presentation.components.HomeGradientTopBar
 import com.unshoo.pixelmusic.presentation.components.HomeOptionsBottomSheet
 import com.unshoo.pixelmusic.presentation.components.MiniPlayerHeight
 import com.unshoo.pixelmusic.presentation.components.QuickPicksSection
+import com.unshoo.pixelmusic.presentation.components.QuickPicksSkeletonSection
 import com.unshoo.pixelmusic.presentation.components.RecentlyPlayedSection
 import com.unshoo.pixelmusic.presentation.components.RecentlyPlayedSectionMinSongsToShow
 import com.unshoo.pixelmusic.presentation.viewmodel.QuickPicksViewModel
@@ -159,51 +160,45 @@ fun HomeScreen(
     val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val accountsUiState by accountsViewModel.uiState.collectAsStateWithLifecycle()
     val exploreUiState by exploreViewModel.uiState.collectAsStateWithLifecycle()
-    val discoverYoutubeSongs by remember(exploreUiState.homePageSections) {
-        derivedStateOf {
-            exploreUiState.homePageSections
-                .filter { section ->
-                    val title = section.title
-                    title.contains("daily discover", ignoreCase = true) ||
-                    (title.contains("discover", ignoreCase = true) && title.contains("daily", ignoreCase = true))
-                }
-                .flatMap { section ->
-                    section.items.filterIsInstance<unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem>()
-                        .map { songItem -> songItem.toNativeSong() }
-                }
-                .distinctBy { it.id }
-        }
+    val discoverYoutubeSongs = remember(exploreUiState.homePageSections) {
+        exploreUiState.homePageSections
+            .filter { section ->
+                val title = section.title
+                title.contains("daily discover", ignoreCase = true) ||
+                (title.contains("discover", ignoreCase = true) && title.contains("daily", ignoreCase = true))
+            }
+            .flatMap { section ->
+                section.items.filterIsInstance<unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem>()
+                    .map { songItem -> songItem.toNativeSong() }
+            }
+            .distinctBy { it.id }
     }
     val dailyMixSongsRaw by playerViewModel.dailyMixSongs.collectAsStateWithLifecycle()
-    val mergedDailyMixSongs by remember(dailyMixSongsRaw, discoverYoutubeSongs) {
-        derivedStateOf {
-            (dailyMixSongsRaw + discoverYoutubeSongs).distinctBy { it.id }.toImmutableList()
-        }
+    val mergedDailyMixSongs = remember(dailyMixSongsRaw, discoverYoutubeSongs) {
+        (dailyMixSongsRaw + discoverYoutubeSongs).distinctBy { it.id }.toImmutableList()
     }
-    val userName by remember(accountsUiState.userName) {
-        derivedStateOf {
-            val rawName = accountsUiState.userName
-            if (!rawName.isNullOrBlank()) {
-                val cleanName = if (rawName.startsWith("@")) rawName.substring(1) else rawName
-                val baseName = if (!cleanName.contains("@")) {
-                    cleanName
-                } else {
-                    cleanName.substringBefore("@")
-                }
-                val formattedName = baseName.split(".", "_", "-")
-                    .filter { it.isNotBlank() }
-                    .joinToString(" ") { word ->
-                        word.replaceFirstChar { it.uppercase() }
-                    }
-                val firstName = formattedName.split(" ").firstOrNull()?.trim().orEmpty()
-                if (firstName.length >= 3) {
-                    formattedName.trim()
-                } else {
-                    if (firstName.isNotEmpty()) firstName else formattedName.trim()
-                }
+    val userName = remember(accountsUiState.userName) {
+        val rawName = accountsUiState.userName
+        if (!rawName.isNullOrBlank()) {
+            val cleanName = if (rawName.startsWith("@")) rawName.substring(1) else rawName
+            val baseName = if (!cleanName.contains("@")) {
+                cleanName
             } else {
-                null
+                cleanName.substringBefore("@")
             }
+            val formattedName = baseName.split(".", "_", "-")
+                .filter { it.isNotBlank() }
+                .joinToString(" ") { word ->
+                    word.replaceFirstChar { it.uppercase() }
+                }
+            val firstName = formattedName.split(" ").firstOrNull()?.trim().orEmpty()
+            if (firstName.length >= 3) {
+                formattedName.trim()
+            } else {
+                if (firstName.isNotEmpty()) firstName else formattedName.trim()
+            }
+        } else {
+            null
         }
     }
     val dailyMixSongs = dailyMixSongsRaw  // reuse the already-collected state from line 176
@@ -299,7 +294,9 @@ fun HomeScreen(
 
     // 2) Observar sólo el currentSong (o null) para saber si mostrar padding
     val currentSong by remember(playerViewModel.stablePlayerState) {
-        playerViewModel.stablePlayerState.map { it.currentSong }
+        playerViewModel.stablePlayerState
+            .map { it.currentSong }
+            .distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = null)
 
     // 3) Observe shuffle state for sync
@@ -409,11 +406,10 @@ fun HomeScreen(
                 isRefreshing = isRefreshing,
                 onRefresh = {
                     isRefreshing = true
-                    homePlaceholderRefreshGeneration++
                     quickPicksViewModel.refresh()
                     playerViewModel.forceUpdateDailyMix()
                     scope.launch {
-                        delay(2000)
+                        delay(1800)
                         isRefreshing = false
                     }
                 },
@@ -423,7 +419,11 @@ fun HomeScreen(
                     PullToRefreshDefaults.LoadingIndicator(
                         state = pullRefreshState,
                         isRefreshing = isRefreshing,
-                        modifier = Modifier.align(Alignment.TopCenter)
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = innerPadding.calculateTopPadding() + 8.dp),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             ) {
@@ -463,6 +463,13 @@ fun HomeScreen(
                             currentSongId = currentSong?.id,
                             displayMode = quickPicksDisplayMode
                         )
+                    }
+                } else if (shouldShowYourMixLoadingPlaceholder) {
+                    item(
+                        key = "quick_picks_skeleton",
+                        contentType = "quick_picks_skeleton"
+                    ) {
+                        QuickPicksSkeletonSection()
                     }
                 }
 

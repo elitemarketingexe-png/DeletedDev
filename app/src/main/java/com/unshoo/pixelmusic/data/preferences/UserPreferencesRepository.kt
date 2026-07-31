@@ -146,6 +146,8 @@ constructor(
         val APP_REBRAND_DIALOG_SHOWN = booleanPreferencesKey("app_rebrand_dialog_shown")
         val BETA_05_CLEAN_INSTALL_DISCLAIMER_DISMISSED =
             booleanPreferencesKey("beta_05_clean_install_disclaimer_dismissed")
+        val WHATS_NEW_1608_DISMISSED =
+            booleanPreferencesKey("whats_new_1608_dismissed")
         val ALLOWED_DIRECTORIES = stringSetPreferencesKey("allowed_directories")
         val BLOCKED_DIRECTORIES = stringSetPreferencesKey("blocked_directories")
         val INITIAL_SETUP_DONE = booleanPreferencesKey("initial_setup_done")
@@ -465,12 +467,13 @@ constructor(
 
     val beta05CleanInstallDisclaimerDismissedFlow: Flow<Boolean> =
         dataStore.data.map { preferences ->
-            preferences[PreferencesKeys.BETA_05_CLEAN_INSTALL_DISCLAIMER_DISMISSED] ?: false
+            // v1.6.08+: use the new key so returning users see the updated popup
+            preferences[PreferencesKeys.WHATS_NEW_1608_DISMISSED] ?: false
         }
 
     suspend fun setBeta05CleanInstallDisclaimerDismissed(dismissed: Boolean) {
         dataStore.edit { preferences ->
-            preferences[PreferencesKeys.BETA_05_CLEAN_INSTALL_DISCLAIMER_DISMISSED] = dismissed
+            preferences[PreferencesKeys.WHATS_NEW_1608_DISMISSED] = dismissed
         }
     }
 

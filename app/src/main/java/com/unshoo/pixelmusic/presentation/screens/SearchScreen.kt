@@ -197,7 +197,12 @@ fun SearchScreen(
     }
     val currentFilter = searchUiState.selectedSearchFilter
     val genres by playerViewModel.genres.collectAsStateWithLifecycle()
-    val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
+    val currentPlayingSongId by remember(playerViewModel) {
+        playerViewModel.stablePlayerState.map { it.currentSong?.id }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = null)
+    val isPlaying by remember(playerViewModel) {
+        playerViewModel.stablePlayerState.map { it.isPlaying }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = false)
     val favoriteSongIds by playerViewModel.favoriteSongIds.collectAsStateWithLifecycle()
     val selectedSongForInfo by playerViewModel.selectedSongForInfo.collectAsStateWithLifecycle()
     val searchSource by playerViewModel.searchSource.collectAsStateWithLifecycle()
@@ -527,8 +532,8 @@ fun SearchScreen(
                                                 playerViewModel.onSearchQuerySubmitted(searchQuery)
                                             }
                                         },
-                                        currentPlayingSongId = stablePlayerState.currentSong?.id,
-                                        isPlaying = stablePlayerState.isPlaying,
+                                        currentPlayingSongId = currentPlayingSongId,
+                                        isPlaying = isPlaying,
                                         onSongMoreOptionsClick = handleSongMoreOptionsClick,
                                         navController = navController
                                     )
@@ -799,7 +804,9 @@ fun SearchResultsList(
     navController: NavHostController
 ) {
     val localDensity = LocalDensity.current
-    val playerStableState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
+    val isShuffleEnabled by remember(playerViewModel) {
+        playerViewModel.stablePlayerState.map { it.isShuffleEnabled }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = false)
 
     if (results.isEmpty()) {
         Box(
@@ -823,16 +830,6 @@ fun SearchResultsList(
             }
         }
     }
-    val songResultsQueue = remember(groupedResults, currentFilter) {
-        buildList {
-            val key = if (currentFilter == SearchFilterType.VIDEOS) SearchFilterType.VIDEOS else SearchFilterType.SONGS
-            groupedResults[key]
-                ?.forEach { item ->
-                    val song = (item as? SearchResultItem.SongItem)?.song ?: return@forEach
-                    add(song)
-                }
-        }
-    }
     val sectionOrder = remember(currentFilter) {
         if (currentFilter == SearchFilterType.VIDEOS) {
             listOf(SearchFilterType.VIDEOS)
@@ -845,10 +842,15 @@ fun SearchResultsList(
             )
         }
     }
-    val searchQueueName = remember(searchQuery) { "Search: $searchQuery" }
-    val onSongResultClick = remember(songResultsQueue, searchQueueName, playerViewModel, onItemSelected) {
+    val searchQueueName = remember(searchQuery) {
+        searchQuery.trim()
+            .takeIf { it.isNotEmpty() }
+            ?.let { "Search: $it" }
+            ?: "Search Results"
+    }
+    val onSongResultClick = remember(playerViewModel, onItemSelected, searchQueueName) {
         { song: Song ->
-            playerViewModel.showAndPlaySong(song, songResultsQueue, searchQueueName)
+            playerViewModel.showAndPlaySong(song, listOf(song), searchQueueName)
             onItemSelected()
         }
     }
@@ -1008,7 +1010,7 @@ fun SearchResultsList(
                                                     firstPageSongs.first(),
                                                     item.playlist.name
                                                 )
-                                                if (playerStableState.isShuffleEnabled) playerViewModel.toggleShuffle()
+                                                if (isShuffleEnabled) playerViewModel.toggleShuffle()
                                                 onItemSelected()
                                             } else {
                                                 playerViewModel.sendToast("Empty playlist")
@@ -1026,7 +1028,7 @@ fun SearchResultsList(
                                                 songs.first(),
                                                 item.playlist.name
                                             )
-                                            if (playerStableState.isShuffleEnabled) playerViewModel.toggleShuffle()
+                                            if (isShuffleEnabled) playerViewModel.toggleShuffle()
                                         } else {
                                             playerViewModel.sendToast("Empty playlist")
                                         }
@@ -1191,7 +1193,7 @@ fun SearchResultsList(
                                                             firstPageSongs.first(),
                                                             item.playlist.name
                                                         )
-                                                        if (playerStableState.isShuffleEnabled) playerViewModel.toggleShuffle()
+                                                        if (isShuffleEnabled) playerViewModel.toggleShuffle()
                                                         onItemSelected()
                                                     } else {
                                                         playerViewModel.sendToast("Empty playlist")
@@ -1209,7 +1211,7 @@ fun SearchResultsList(
                                                         songs.first(),
                                                         item.playlist.name
                                                     )
-                                                    if (playerStableState.isShuffleEnabled) playerViewModel.toggleShuffle()
+                                                    if (isShuffleEnabled) playerViewModel.toggleShuffle()
                                                 } else {
                                                     playerViewModel.sendToast("Empty playlist")
                                                 }

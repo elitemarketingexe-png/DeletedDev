@@ -273,18 +273,18 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
             }
         }
 
-        // BUGFIX (slow first playback, part 2 - the bigger one): YouTube.player() - the actual
-        // stream-resolution call used to fetch playable audio URLs, not just telemetry - mints a
-        // BotGuard PoToken SYNCHRONOUSLY as the first thing it does whenever PoToken playback is
-        // enabled (see YouTube.kt's `player()`: `BotGuardTokenGenerator.mintToken(...)` is
-        // awaited before anything else). On a cold engine that means bootstrapping a hidden
-        // WebView and running BotGuard's JS challenge, bounded by a 15s timeout - so the very
-        // first song after a fresh launch can genuinely stall for several seconds to that full
-        // 15s on stream resolution alone, before audio starts. This was previously deliberately
-        // avoided here (see prior comment) to protect memory/CPU on low-end devices; per request,
-        // On-demand BotGuard initialization: BotGuard will initialize 100% on-demand when YouTube playback starts,
-        // ensuring maximum cold launch performance without any background Chromium pre-warm work.
-        botGuardWarmUpJob = null
+        // Deferred BotGuard PoToken Warmup:
+        // Schedule warmup 4 seconds after launch on warmUpScope (lowest thread priority Thread.MIN_PRIORITY),
+        // and await main thread idle so cold-start launch FPS and UI rendering are untouched.
+        botGuardWarmUpJob = warmUpScope.launch {
+            kotlinx.coroutines.delay(4_000L)
+            awaitMainThreadIdle()
+            try {
+                BotGuardTokenGenerator.preWarm("warmup_session")
+            } catch (e: Throwable) {
+                Timber.w(e, "BotGuard pre-warm deferred task failed (non-fatal)")
+            }
+        }
 
         startupScope.launch {
             AlbumArtUtils.migrateLegacyCacheLocation(this@PixelMusicApplication)
