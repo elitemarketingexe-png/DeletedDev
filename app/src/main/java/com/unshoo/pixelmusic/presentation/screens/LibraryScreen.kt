@@ -1656,7 +1656,7 @@ fun LibraryScreen(
                                                 .distinctUntilChanged()
                                         }.collectAsStateWithLifecycle(initialValue = AlbumsTabSlice())
 
-                                        val isLoading = playerUiState.isLoadingLibraryCategories
+                                        val isLoading = playerUiState.isLoadingLibraryCategories && albumsLazyPagingItems.itemCount == 0
 
                                         val stableOnAlbumClick: (Long) -> Unit = remember(navController) {
                                             { albumId: Long ->
@@ -1698,7 +1698,7 @@ fun LibraryScreen(
                                                 .distinctUntilChanged()
                                         }.collectAsStateWithLifecycle(initialValue = ArtistsTabSlice())
 
-                                        val isLoading = playerUiState.isLoadingLibraryCategories
+                                        val isLoading = playerUiState.isLoadingLibraryCategories && artistsLazyPagingItems.itemCount == 0
 
                                         LibraryArtistsTab(
                                             artists = artistsLazyPagingItems,

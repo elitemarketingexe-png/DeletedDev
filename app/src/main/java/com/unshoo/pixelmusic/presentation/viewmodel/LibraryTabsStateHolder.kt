@@ -58,6 +58,7 @@ class LibraryTabsStateHolder @Inject constructor() {
                     LibraryTabId.ALBUMS -> loadAlbums()
                     LibraryTabId.ARTISTS -> loadArtists()
                     LibraryTabId.FOLDERS -> loadFolders()
+                    LibraryTabId.PLAYLISTS -> Unit
                     else -> Unit
                 }
                 loadedTabs.update { currentTabs -> currentTabs + tabIdentifier }
