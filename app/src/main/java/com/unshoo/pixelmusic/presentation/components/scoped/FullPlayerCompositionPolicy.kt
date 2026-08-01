@@ -37,6 +37,11 @@ internal fun rememberFullPlayerCompositionPolicy(
 
     LaunchedEffect(currentSongId, currentSheetState) {
         if (currentSongId == null) {
+            // Wait for expansion to settle at 0 before unmounting the full player tree.
+            // If we reset immediately, a rapid song-end during an open-player animation
+            // would flash the full player gone while the sheet is still mid-expand.
+            snapshotFlow { expansionFraction.value <= 0.05f }
+                .first { it }
             keepFullPlayerComposed = false
             return@LaunchedEffect
         }

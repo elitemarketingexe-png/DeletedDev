@@ -115,6 +115,7 @@ playServicesWearable = "20.0.1"
 accompanist-drawablepainter = { module = "com.google.accompanist:accompanist-drawablepainter", version.ref = "accompanistDrawablepainter" }
 
 lifecycleprocess = { module = "androidx.lifecycle:lifecycle-process", version.ref = "lifecycleRuntimeKtx" }
+androidx-metrics-performance = { module = "androidx.metrics:metrics-performance", version = "1.0.0-beta01" }
 junitplatformlauncher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junitJupiter" }
 worktesting = { group = "androidx.work", name = "work-testing", version.ref = "workRuntimeKtx" }
 credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }

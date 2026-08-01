@@ -54,11 +54,9 @@ internal fun rememberSheetOverlayState(
         derivedStateOf { showPlayerContentArea && !hideMiniPlayer }
     }
 
-    // Keep the sheet mounted while IME is visible to avoid mini-player flicker/recomposition
-    // when the keyboard opens/closes (notably in Search).
-    val actuallyShowSheetContent by remember(shouldShowSheet) {
-        derivedStateOf { shouldShowSheet }
-    }
+    // Note: previously wrapped in derivedStateOf, which was redundant — it just returned
+    // shouldShowSheet unchanged. Removing the extra State object saves one frame-phase read.
+    val actuallyShowSheetContent = shouldShowSheet
 
     val isQueueVisible by remember(showQueueSheet, queueHiddenOffsetPx, screenHeightPx) {
         derivedStateOf {

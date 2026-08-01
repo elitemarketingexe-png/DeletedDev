@@ -121,11 +121,9 @@ internal fun rememberSheetThemeState(
     var lastAlbumSchemeForMini by remember { mutableStateOf<ColorScheme?>(null) }
     var lastAlbumSchemeSongId by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(currentSong?.id) {
-        if (currentSong?.id != lastAlbumSchemeSongId) {
-            lastAlbumSchemeSongId = currentSong?.id
-        }
-    }
+    // Single consolidated effect: update last known album scheme AND songId together
+    // to eliminate the double-write race that occurred when two separate effects both
+    // wrote lastAlbumSchemeSongId on the same song change event.
     LaunchedEffect(currentSongActiveSchemeForFull, currentSongActiveSchemeForMini, currentSong?.id) {
         val currentSongId = currentSong?.id
         if (currentSongId != null) {
@@ -136,6 +134,9 @@ internal fun rememberSheetThemeState(
                 lastAlbumSchemeForMini = currentSongActiveSchemeForMini
             }
             lastAlbumSchemeSongId = currentSongId
+        } else {
+            // Song cleared — reset the cross-song fallback so stale colors don't persist
+            lastAlbumSchemeSongId = null
         }
     }
 

@@ -1,7 +1,9 @@
 package com.unshoo.pixelmusic.data.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
+@Immutable
 @Serializable
 data class PlaybackQueueItemSnapshot(
     val mediaId: String,
@@ -13,6 +15,7 @@ data class PlaybackQueueItemSnapshot(
     val durationMs: Long? = null,
 )
 
+@Immutable
 @Serializable
 data class PlaybackQueueSnapshot(
     val items: List<PlaybackQueueItemSnapshot>,

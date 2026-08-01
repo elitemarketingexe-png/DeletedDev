@@ -3,9 +3,11 @@ package com.unshoo.pixelmusic.presentation.components.scoped
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.util.lerp
 
+@Stable
 internal class FullPlayerVisualState(
     private val expansionFraction: Animatable<Float, AnimationVector1D>,
     private val initialOffsetY: Float

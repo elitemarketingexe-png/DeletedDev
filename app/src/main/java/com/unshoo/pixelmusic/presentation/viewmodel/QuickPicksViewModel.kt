@@ -28,7 +28,11 @@ import unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem
 import unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumItem
 import unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint
 import javax.inject.Inject
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import com.unshoo.pixelmusic.data.stats.PlaybackStatsRepository
+import com.unshoo.pixelmusic.utils.AppReadinessSignal
 import unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem
 
 private const val PREFS_NAME = "quick_picks_cache"
@@ -47,14 +51,14 @@ class QuickPicksViewModel @Inject constructor(
     private val playbackStatsRepository: PlaybackStatsRepository
 ) : ViewModel() {
 
-    private val _quickPicks = MutableStateFlow<List<Song>>(emptyList())
-    val quickPicks: StateFlow<List<Song>> = _quickPicks.asStateFlow()
+    private val _quickPicks = MutableStateFlow<ImmutableList<Song>>(persistentListOf())
+    val quickPicks: StateFlow<ImmutableList<Song>> = _quickPicks.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _categories = MutableStateFlow<List<String>>(listOf("All"))
-    val categories: StateFlow<List<String>> = _categories.asStateFlow()
+    private val _categories = MutableStateFlow<ImmutableList<String>>(persistentListOf("All"))
+    val categories: StateFlow<ImmutableList<String>> = _categories.asStateFlow()
 
     private val _selectedCategory = MutableStateFlow("All")
     val selectedCategory: StateFlow<String> = _selectedCategory.asStateFlow()
@@ -62,9 +66,14 @@ class QuickPicksViewModel @Inject constructor(
     private val prefs by lazy { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
 
     init {
-        // Immediately populate from cache so the UI shows something on relaunch
+        // Immediately populate from cache so the UI shows something on relaunch.
+        // This runs synchronously on the VM thread before the first frame.
         loadFromCache()
         viewModelScope.launch {
+            // Suspend until MainActivity signals the UI is ready (contentVisible = true).
+            // This is more precise than delay(1_500L): it fires as soon as the first
+            // frame is committed regardless of device speed — no wasted time, no races.
+            AppReadinessSignal.awaitReady()
             loadQuickPicks(_selectedCategory.value, forceRefresh = isCacheExpired())
             userPreferencesRepository.discoverFlow.collect { _ ->
                 if (_selectedCategory.value == "All") {
@@ -97,7 +106,7 @@ class QuickPicksViewModel @Inject constructor(
 
     private fun clearCache() {
         prefs.edit().clear().apply()
-        _quickPicks.value = emptyList()
+        _quickPicks.value = persistentListOf()
     }
 
     private fun loadFromCache() {
@@ -114,13 +123,13 @@ class QuickPicksViewModel @Inject constructor(
             for (i in 0 until songsArray.length()) {
                 songs.add(songFromJson(songsArray.getJSONObject(i)))
             }
-            if (songs.isNotEmpty()) _quickPicks.value = songs
+            if (songs.isNotEmpty()) _quickPicks.value = songs.toImmutableList()
 
             if (categoriesJson != null) {
                 val catArray = JSONArray(categoriesJson)
                 val cats = mutableListOf<String>()
                 for (i in 0 until catArray.length()) cats.add(catArray.getString(i))
-                if (cats.isNotEmpty()) _categories.value = cats
+                if (cats.isNotEmpty()) _categories.value = cats.toImmutableList()
             }
         } catch (e: Exception) {
             Timber.tag("QuickPicks").w(e, "Failed to load cache")
@@ -206,13 +215,13 @@ class QuickPicksViewModel @Inject constructor(
                     val discover = userPreferencesRepository.discoverFlow.first()
                     when (discover) {
                         QuickPicks.DONT_SHOW -> {
-                            _quickPicks.value = emptyList()
+                            _quickPicks.value = persistentListOf()
                         }
                         QuickPicks.QUICK_PICKS -> {
                             // Try enhanced 5-bucket algorithm first
                             val songs = loadEnhancedQuickPicks()
                             if (songs.isNotEmpty()) {
-                                _quickPicks.value = songs
+                                _quickPicks.value = songs.toImmutableList()
                                 saveToCache(songs, _categories.value)
                             }
                         }
@@ -229,12 +238,12 @@ class QuickPicksViewModel @Inject constructor(
 
                             if (related.isNotEmpty()) {
                                 val songs = related.shuffled().take(20)
-                                _quickPicks.value = songs
+                                _quickPicks.value = songs.toImmutableList()
                                 saveToCache(songs, _categories.value)
                             } else {
                                 val songs = loadEnhancedQuickPicks()
                                 if (songs.isNotEmpty()) {
-                                    _quickPicks.value = songs
+                                    _quickPicks.value = songs.toImmutableList()
                                     saveToCache(songs, _categories.value)
                                 }
                             }
@@ -410,7 +419,7 @@ class QuickPicksViewModel @Inject constructor(
                 val homePage = YouTube.home().getOrNull() ?: return@async emptyList<SongItem>()
                 val chipTitles = homePage.chips?.map { it.title } ?: emptyList()
                 if (chipTitles.isNotEmpty()) {
-                    _categories.value = listOf("All") + chipTitles
+                    _categories.value = (listOf("All") + chipTitles).toImmutableList()
                 }
                 homePage.sections
                     .flatMap { section -> section.items.filterIsInstance<SongItem>() }
@@ -491,7 +500,7 @@ class QuickPicksViewModel @Inject constructor(
             }
         }
         if (songs.isNotEmpty()) {
-            _quickPicks.value = songs
+            _quickPicks.value = songs.toImmutableList()
         }
     }
 }

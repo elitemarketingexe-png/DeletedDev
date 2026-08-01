@@ -110,6 +110,7 @@ data class SettingsUiState(
     val useAnimatedLyrics: Boolean = false,
     val animatedLyricsBlurEnabled: Boolean = true,
     val animatedLyricsBlurStrength: Float = 2.5f,
+    val floatingHeaderBarEnabled: Boolean = false,
     val backupInfoDismissed: Boolean = false,
     val isDataTransferInProgress: Boolean = false,
     val restorePlan: RestorePlan? = null,
@@ -204,7 +205,8 @@ private sealed interface SettingsUiUpdate {
         val libraryNavigationMode: String,
         val carouselStyle: String,
         val launchTab: String,
-        val showPlayerFileInfo: Boolean
+        val showPlayerFileInfo: Boolean,
+        val floatingHeaderBarEnabled: Boolean
     ) : SettingsUiUpdate
     
     data class Group2(
@@ -589,7 +591,8 @@ class SettingsViewModel @Inject constructor(
                 userPreferencesRepository.launchTabFlow,
                 userPreferencesRepository.showPlayerFileInfoFlow,
                 themePreferencesRepository.appFontModeFlow,
-                themePreferencesRepository.pitchBlackEnabledFlow
+                themePreferencesRepository.pitchBlackEnabledFlow,
+                userPreferencesRepository.floatingHeaderBarEnabledFlow
             ) { values ->
                 SettingsUiUpdate.Group1(
                     appRebrandDialogShown = values[0] as Boolean,
@@ -608,7 +611,8 @@ class SettingsViewModel @Inject constructor(
                     launchTab = values[13] as String,
                     showPlayerFileInfo = values[14] as Boolean,
                     appFontMode = values[15] as String,
-                    pitchBlackEnabled = values[16] as Boolean
+                    pitchBlackEnabled = values[16] as Boolean,
+                    floatingHeaderBarEnabled = values[17] as Boolean
                 )
             }.collect { update ->
                 _uiState.update { state ->
@@ -629,7 +633,8 @@ class SettingsViewModel @Inject constructor(
                         libraryNavigationMode = update.libraryNavigationMode,
                         carouselStyle = update.carouselStyle,
                         launchTab = update.launchTab,
-                        showPlayerFileInfo = update.showPlayerFileInfo
+                        showPlayerFileInfo = update.showPlayerFileInfo,
+                        floatingHeaderBarEnabled = update.floatingHeaderBarEnabled
                     )
                 }
             }
@@ -1448,6 +1453,13 @@ class SettingsViewModel @Inject constructor(
             userPreferencesRepository.setForceHighQualityOnMobile(enabled)
         }
     }
+
+    fun setFloatingHeaderBarEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setFloatingHeaderBarEnabled(enabled)
+        }
+    }
+
 
     fun setAlbumArtQualityMobile(quality: AlbumArtQuality) {
         viewModelScope.launch {

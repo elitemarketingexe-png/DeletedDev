@@ -229,6 +229,7 @@ dependencies {
     // Core & Optimization
     coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.androidx.profileinstaller)
+    implementation(libs.androidx.metrics.performance) // JankStats for real frame-drop measurement
     "baselineProfile"(project(":baselineprofile"))
 
     // AndroidX & Compose

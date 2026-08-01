@@ -3,6 +3,7 @@ package com.unshoo.pixelmusic.presentation.components
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -130,7 +131,12 @@ internal fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                 }
                 val fullPlayerOffset by remember {
                     derivedStateOf {
-                        if (playerContentExpansionFraction.value <= 0.01f) IntOffset(0, 10000)
+                        // Threshold raised from 0.01f → 0.05f so the full player is
+                        // reliably off-screen during collapse. The 0.01f value was too
+                        // close to zero — spring undershoot could momentarily tick above
+                        // it, leaving the full-player painted (even at near-zero alpha)
+                        // and exposing the window background as a white flash.
+                        if (playerContentExpansionFraction.value <= 0.05f) IntOffset(0, 10000)
                         else IntOffset.Zero
                     }
                 }
@@ -147,6 +153,10 @@ internal fun BoxScope.UnifiedPlayerMiniAndFullLayers(
                     modifier = Modifier
                         .fillMaxWidth()
                         .requiredHeight(containerHeight)
+                        // Color.Transparent background prevents any window-background
+                        // bleed-through during the collapse animation — belt-and-suspenders
+                        // defense against flash when fullPlayerOffset is IntOffset.Zero.
+                        .background(androidx.compose.ui.graphics.Color.Transparent)
                         .graphicsLayer {
                             val ca = fullPlayerVisualState.contentAlpha
                             alpha = ca

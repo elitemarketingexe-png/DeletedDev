@@ -281,6 +281,7 @@ constructor(
         val USE_ANIMATED_LYRICS = booleanPreferencesKey("use_animated_lyrics")
         val ANIMATED_LYRICS_BLUR_ENABLED = booleanPreferencesKey("animated_lyrics_blur_enabled")
         val ANIMATED_LYRICS_BLUR_STRENGTH = androidx.datastore.preferences.core.floatPreferencesKey("animated_lyrics_blur_strength")
+        val FLOATING_HEADER_BAR_ENABLED = booleanPreferencesKey("floating_header_bar_enabled")
 
         // Genre View Preference
         val IS_GENRE_GRID_VIEW = booleanPreferencesKey("is_genre_grid_view")
@@ -645,6 +646,16 @@ constructor(
 
     suspend fun resetArtistDelimitersToDefault() {
         setArtistDelimiters(DEFAULT_ARTIST_DELIMITERS)
+    }
+
+    val floatingHeaderBarEnabledFlow: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.FLOATING_HEADER_BAR_ENABLED] ?: false
+    }
+
+    suspend fun setFloatingHeaderBarEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.FLOATING_HEADER_BAR_ENABLED] = enabled
+        }
     }
 
     val artistWordDelimitersFlow: Flow<List<String>> =

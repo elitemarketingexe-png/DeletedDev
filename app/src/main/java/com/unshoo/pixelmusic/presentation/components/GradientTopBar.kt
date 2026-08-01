@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
@@ -99,7 +100,6 @@ fun GenreGradientTopBar(
     )
 }
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeGradientTopBar(
@@ -109,6 +109,7 @@ fun HomeGradientTopBar(
     onTelegramClick: () -> Unit,
     onMenuClick: () -> Unit = {},
     isScrolled: Boolean = false,
+    floatingHeaderEnabled: Boolean = false
 ) {
     val baseContainerColor = MaterialTheme.colorScheme.primaryContainer
     val surfaceColor = MaterialTheme.colorScheme.surface
@@ -120,72 +121,147 @@ fun HomeGradientTopBar(
             alpha = 1f
         )
     }
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
-        color = solidTintedColor,
-        contentColor = MaterialTheme.colorScheme.onSurface
-    ) {
-        TopAppBar(
+
+    if (floatingHeaderEnabled) {
+        Row(
             modifier = Modifier
-                .background(Color.Transparent)
-                .padding(bottom = 2.dp),
-            title = { /* nada, usamos solo acciones */ },
-            navigationIcon = {
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = solidTintedColor,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                shadowElevation = 4.dp
+            ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.padding(start = 16.dp)
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.pixelmusic_base_monochrome),
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                     Text(
                         text = "PixelMusic",
                         fontFamily = GoogleSansRounded,
                         fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
-            },
-            actions = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(end = 14.dp)
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledIconButton(
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = solidTintedColor,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    onClick = onTelegramClick,
+                    modifier = Modifier.size(44.dp),
+                    shape = CircleShape
                 ) {
-                    FilledIconButton(
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        onClick = onTelegramClick
-                    ) {
-                        Icon(
-                             imageVector = Icons.Rounded.Cloud,
-                             contentDescription = stringResource(R.string.presentation_batch_g_topbar_cd_telegram)
-                        )
-                    }
-                    Spacer(modifier = Modifier.size(6.dp))
-                    FilledIconButton(
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        onClick = onNavigationIconClick
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.rounded_settings_24),
-                            contentDescription = stringResource(R.string.settings_top_bar_title)
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Rounded.Cloud,
+                        contentDescription = stringResource(R.string.presentation_batch_g_topbar_cd_telegram),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
-            },
-            colors = topAppBarColors(
-                containerColor = Color.Transparent
+                FilledIconButton(
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = solidTintedColor,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    onClick = onNavigationIconClick,
+                    modifier = Modifier.size(44.dp),
+                    shape = CircleShape
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.rounded_settings_24),
+                        contentDescription = stringResource(R.string.settings_top_bar_title),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+    } else {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+            color = solidTintedColor,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ) {
+            TopAppBar(
+                modifier = Modifier
+                    .background(Color.Transparent)
+                    .padding(bottom = 2.dp),
+                title = { /* nada, usamos solo acciones */ },
+                navigationIcon = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.padding(start = 16.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.pixelmusic_base_monochrome),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Text(
+                            text = "PixelMusic",
+                            fontFamily = GoogleSansRounded,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+                },
+                actions = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 14.dp)
+                    ) {
+                        FilledIconButton(
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            onClick = onTelegramClick
+                        ) {
+                            Icon(
+                                 imageVector = Icons.Rounded.Cloud,
+                                 contentDescription = stringResource(R.string.presentation_batch_g_topbar_cd_telegram)
+                            )
+                        }
+                        Spacer(modifier = Modifier.size(6.dp))
+                        FilledIconButton(
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            onClick = onNavigationIconClick
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.rounded_settings_24),
+                                contentDescription = stringResource(R.string.settings_top_bar_title)
+                            )
+                        }
+                    }
+                },
+                colors = topAppBarColors(
+                    containerColor = Color.Transparent
+                )
             )
-        )
+        }
     }
 }
+

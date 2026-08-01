@@ -271,16 +271,23 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Sync Trigger: When we are NOT showing setup (meaning permissions are good and setup is done)
+            // Sync Trigger: When we are NOT showing setup (meaning permissions are good and setup is done).
+            // Defer by 800ms after contentVisible so the first frame fully renders before
+            // MediaStore/library sync I/O competes with the composition thread.
             LaunchedEffect(showSetupScreen) {
                 if (showSetupScreen == false) {
-                     LogUtils.i(this, "Setup complete/skipped and permissions valid. Starting sync.")
-                     mainViewModel.startSync()
+                    // Wait for the content fade-in to finish before kicking off sync.
+                    // This ensures the UI is interactive before background I/O starts.
+                    kotlinx.coroutines.delay(800L)
+                    LogUtils.i(this, "Setup complete/skipped and permissions valid. Starting sync.")
+                    mainViewModel.startSync()
                 }
             }
 
-            // Check for crash log when app starts
+            // Check for crash log when app starts.
+            // Small delay so crash dialog doesn't race with first-frame composition.
             LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(300L)
                 if (!isBenchmarkMode && CrashHandler.hasCrashLog()) {
                     crashLogData = CrashHandler.getCrashLog()
                     showCrashReportDialog = true
@@ -320,6 +327,11 @@ class MainActivity : ComponentActivity() {
                     // Delay slightly to ensure first frame layout is done behind Splash
                     delay(100)
                     contentVisible = true
+                    // Signal ViewModels that defer work until UI is ready.
+                    // This fires after the first frame has been committed, giving
+                    // QuickPicks and other deferred loaders an event-driven trigger
+                    // instead of relying on a fixed delay.
+                    com.unshoo.pixelmusic.utils.AppReadinessSignal.markReady()
                 }
 
                 Surface(
@@ -410,6 +422,28 @@ class MainActivity : ComponentActivity() {
             }
         }
         handleIntent(intent)
+    }
+
+    private var jankStats: androidx.metrics.performance.JankStats? = null
+
+    override fun onResume() {
+        super.onResume()
+        if (jankStats == null) {
+            jankStats = androidx.metrics.performance.JankStats.createAndTrack(
+                window,
+                { frameData ->
+                    if (frameData.isJank && BuildConfig.DEBUG) {
+                        LogUtils.d(this, "JankStats frame drop detected: ${frameData.frameDurationUiNanos / 1_000_000}ms (isJank=${frameData.isJank})")
+                    }
+                }
+            )
+        }
+        jankStats?.isTrackingEnabled = true
+    }
+
+    override fun onPause() {
+        super.onPause()
+        jankStats?.isTrackingEnabled = false
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -1225,10 +1259,6 @@ class MainActivity : ComponentActivity() {
         mediaControllerFuture?.let {
             MediaController.releaseFuture(it)
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
     }
 }
 

@@ -72,6 +72,7 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import com.unshoo.pixelmusic.ui.theme.GoogleSansRounded
 import kotlin.math.absoluteValue
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.snapshotFlow
@@ -153,14 +154,14 @@ fun QuickPicksSection(
             // coroutine doesn't restart on every user touch — it just waits inside.
             LaunchedEffect(limitSongs) {
                 if (limitSongs.isEmpty()) return@LaunchedEffect
-                while (true) {
+                while (isActive) {
                     // Wait until the user is not scrolling before auto-advancing
                     snapshotFlow { lazyListState.isScrollInProgress }
                         .filter { !it }
                         .first()
                     delay(2500)
                     // Re-check after delay in case user started scrolling again
-                    if (!lazyListState.isScrollInProgress) {
+                    if (isActive && !lazyListState.isScrollInProgress) {
                         val nextIndex = (lazyListState.firstVisibleItemIndex + 1) % limitSongs.size
                         lazyListState.animateScrollToItem(nextIndex)
                     }
@@ -224,12 +225,12 @@ fun QuickPicksSection(
             // Same snapshotFlow-based fix as CARD mode above
             LaunchedEffect(limitSongs) {
                 if (limitSongs.isEmpty()) return@LaunchedEffect
-                while (true) {
+                while (isActive) {
                     snapshotFlow { lazyListState.isScrollInProgress }
                         .filter { !it }
                         .first()
                     delay(2500)
-                    if (!lazyListState.isScrollInProgress) {
+                    if (isActive && !lazyListState.isScrollInProgress) {
                         val nextIndex = (lazyListState.firstVisibleItemIndex + 1) % limitSongs.size
                         if (isReducedMotion) {
                             lazyListState.scrollToItem(nextIndex)
