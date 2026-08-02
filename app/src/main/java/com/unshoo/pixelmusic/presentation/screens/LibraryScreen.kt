@@ -10,6 +10,9 @@ import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -472,7 +475,12 @@ private data class FoldersTabSlice(
 )
 
 @RequiresApi(Build.VERSION_CODES.R)
-@OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(
+    ExperimentalPermissionsApi::class,
+    ExperimentalMaterial3Api::class,
+    ExperimentalMaterial3ExpressiveApi::class,
+    ExperimentalSharedTransitionApi::class
+)
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun LibraryScreen(
@@ -480,7 +488,10 @@ fun LibraryScreen(
     playerViewModel: PlayerViewModel,
     playlistViewModel: PlaylistViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
-    songInfoBottomSheetViewModel: SongInfoBottomSheetViewModel = hiltViewModel()
+    songInfoBottomSheetViewModel: SongInfoBottomSheetViewModel = hiltViewModel(),
+    // M3 Expressive shared-element scopes from the NavHost's SharedTransitionLayout.
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     // La recolecciÃ³n de estados de alto nivel se mantiene mÃ­nima.
     val context = LocalContext.current // Added context
@@ -1681,7 +1692,9 @@ fun LibraryScreen(
                                             onAlbumLongPress = onAlbumLongPress,
                                             onAlbumSelectionToggle = onAlbumSelectionToggle,
                                             getSelectionIndex = getAlbumSelectionIndex,
-                                            storageFilter = if (albumsTabSlice.hideLocalMedia) StorageFilter.ONLINE else albumsTabSlice.currentStorageFilter
+                                            storageFilter = if (albumsTabSlice.hideLocalMedia) StorageFilter.ONLINE else albumsTabSlice.currentStorageFilter,
+                                            sharedTransitionScope = sharedTransitionScope,
+                                            animatedVisibilityScope = animatedVisibilityScope
                                         )
                                     }
 
@@ -3946,6 +3959,7 @@ private fun MusicFolder.collectAllSongs(): List<Song> {
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AlbumGridItemRedesigned(
     album: Album,
@@ -3956,10 +3970,25 @@ fun AlbumGridItemRedesigned(
     isSelected: Boolean = false,
     selectionIndex: Int? = null,
     onLongPress: () -> Unit = {},
-    onSelectionToggle: () -> Unit = {}
+    onSelectionToggle: () -> Unit = {},
+    // M3 Expressive: shared-element source — this art container-transforms into the
+    // Album Detail hero when the user taps the card.
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     val albumColorSchemePair by albumColorSchemePairFlow.collectAsStateWithLifecycle()
     val systemIsDark = LocalPixelMusicDarkTheme.current
+
+    val albumArtSharedModifier = sharedTransitionScope?.let { scope ->
+        animatedVisibilityScope?.let { avs ->
+            with(scope) {
+                Modifier.sharedElement(
+                    sharedContentState = rememberSharedContentState(key = "album_hero_${album.id}"),
+                    animatedVisibilityScope = avs
+                )
+            }
+        }
+    } ?: Modifier
 
     // 1. ObtÃ©n el colorScheme del tema actual aquÃ­, en el scope Composable.
     val currentMaterialColorScheme = MaterialTheme.colorScheme
@@ -4082,7 +4111,8 @@ fun AlbumGridItemRedesigned(
                             targetSize = Size(256, 256),
                             modifier = Modifier
                                 .aspectRatio(3f / 2f)
-                                .fillMaxSize(),
+                                .fillMaxSize()
+                                .then(albumArtSharedModifier),
                             onState = { state ->
                                 isLoadingImage = state is AsyncImagePainter.State.Loading
                             }

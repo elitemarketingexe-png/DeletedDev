@@ -1,10 +1,13 @@
-@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalSharedTransitionApi::class)
 
 package com.unshoo.pixelmusic.presentation.screens
 
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafelyReplacing
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -146,7 +149,11 @@ fun AlbumDetailScreen(
     navController: NavController,
     playerViewModel: PlayerViewModel,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
-    playlistViewModel: PlaylistViewModel = hiltViewModel()
+    playlistViewModel: PlaylistViewModel = hiltViewModel(),
+    // M3 Expressive: provided by the SharedTransitionLayout that wraps the NavHost,
+    // so the header art can container-transform from the Library album grid.
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
@@ -490,6 +497,8 @@ fun AlbumDetailScreen(
                             collapseFraction = collapseFraction,
                             headerHeight = currentTopBarHeightDp,
                             headerImageRequestSize = headerImageRequestSize,
+                            sharedTransitionScope = sharedTransitionScope,
+                            animatedVisibilityScope = animatedVisibilityScope,
                             onHeaderArtworkState = { state ->
                                 if (state is AsyncImagePainter.State.Success) {
                                     headerArtworkLoaded = true
@@ -529,6 +538,8 @@ fun AlbumDetailScreen(
                             collapseFraction = collapseFraction,
                             headerHeight = currentTopBarHeightDp,
                             headerImageRequestSize = headerImageRequestSize,
+                            sharedTransitionScope = sharedTransitionScope,
+                            animatedVisibilityScope = animatedVisibilityScope,
                             onHeaderArtworkState = { state ->
                                 if (state is AsyncImagePainter.State.Success) {
                                     headerArtworkLoaded = true
@@ -823,11 +834,25 @@ private fun SharedAlbumTopBarProbe(
     collapseFraction: Float,
     headerHeight: Dp,
     headerImageRequestSize: Size,
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null,
     onHeaderArtworkState: ((AsyncImagePainter.State) -> Unit)? = null,
     onBackPressed: () -> Unit,
     onPlayClick: () -> Unit,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
+    // M3 Expressive container transform: this hero art is the shared target of the
+    // album art flying in from the Library grid (same key on both screens).
+    val albumArtSharedModifier = sharedTransitionScope?.let { scope ->
+        animatedVisibilityScope?.let { avs ->
+            with(scope) {
+                Modifier.sharedElement(
+                    sharedContentState = rememberSharedContentState(key = "album_hero_${album.id}"),
+                    animatedVisibilityScope = avs
+                )
+            }
+        }
+    } ?: Modifier
     val surfaceColor = MaterialTheme.colorScheme.surface
     val statusBarColor =
         if (LocalPixelMusicDarkTheme.current) Color.Black.copy(alpha = 0.6f)
@@ -874,7 +899,7 @@ private fun SharedAlbumTopBarProbe(
                 crossfadeDurationMillis = 0,
                 alpha = expandedContentAlpha,
                 onState = onHeaderArtworkState,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().then(albumArtSharedModifier)
             )
             Box(
                 modifier = Modifier
@@ -953,11 +978,24 @@ private fun CollapsingAlbumTopBar(
     collapseFraction: Float,
     headerHeight: Dp,
     headerImageRequestSize: Size,
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null,
     onHeaderArtworkState: ((AsyncImagePainter.State) -> Unit)? = null,
     onBackPressed: () -> Unit,
     onPlayClick: () -> Unit,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
+    // M3 Expressive container transform: shared target of the Library-grid album art.
+    val albumArtSharedModifier = sharedTransitionScope?.let { scope ->
+        animatedVisibilityScope?.let { avs ->
+            with(scope) {
+                Modifier.sharedElement(
+                    sharedContentState = rememberSharedContentState(key = "album_hero_${album.id}"),
+                    animatedVisibilityScope = avs
+                )
+            }
+        }
+    } ?: Modifier
     val surfaceColor = MaterialTheme.colorScheme.surface
     val statusBarColor =
         if (LocalPixelMusicDarkTheme.current) Color.Black.copy(alpha = 0.6f) else Color.White.copy(
@@ -1029,7 +1067,7 @@ private fun CollapsingAlbumTopBar(
                     crossfadeDurationMillis = 0,
                     alpha = headerContentAlpha,
                     onState = onHeaderArtworkState,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize().then(albumArtSharedModifier)
                 )
                 Box(
                     modifier = Modifier

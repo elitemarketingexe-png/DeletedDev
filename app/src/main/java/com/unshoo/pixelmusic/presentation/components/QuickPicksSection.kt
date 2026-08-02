@@ -794,12 +794,13 @@ private fun QuickPickClassicCard(
     )
     val borderGlowAlpha = if (isPlaying) animatedBorderGlowAlpha else 1f
 
-    Card(
+    // M3 Expressive card: press-scale spring + corner morph instead of a static Card.
+    ExpressiveCard(
         onClick = onClick,
         modifier = modifier
             .height(112.dp)
             .padding(bottom = 6.dp),
-        shape = RoundedCornerShape(24.dp),
+        cornerRadius = 24.dp,
         colors = CardDefaults.cardColors(containerColor = bgColor),
         border = if (isPlaying) {
             BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = borderGlowAlpha))

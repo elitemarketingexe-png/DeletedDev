@@ -2,10 +2,8 @@ package com.unshoo.pixelmusic.presentation.components
 
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -33,6 +31,7 @@ import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import com.unshoo.pixelmusic.ui.theme.defaultSpatial
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -193,10 +192,7 @@ private fun ExpressiveFloatingPillNavigationBar(
 
                     val itemWeight by animateFloatAsState(
                         targetValue = if (isSelected && !shouldHideLabel) 2.2f else 1.0f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioLowBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
+                        animationSpec = MaterialTheme.motionScheme.defaultSpatial(),
                         label = "pill_item_weight_$index"
                     )
 

@@ -1,10 +1,7 @@
 package com.unshoo.pixelmusic.presentation.components.scoped
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -38,7 +35,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layoutId
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -46,10 +42,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-// Easing curves para animaciones más suaves y premium (Material 3 Emphasized)
-private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
-private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
+import com.unshoo.pixelmusic.ui.theme.defaultEffects
+import com.unshoo.pixelmusic.ui.theme.fastEffects
+import com.unshoo.pixelmusic.ui.theme.fastSpatial
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -71,26 +66,25 @@ fun RowScope.CustomNavigationBarItem(
     indicatorColor: Color = MaterialTheme.colorScheme.secondaryContainer,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() }
 ) {
-    // Colores animados con transición fluida Emphasized
+    // M3 Expressive tokens: colors/opacity → effects springs (critically damped, no overshoot),
+    // size/scale/indicator → fast spatial springs (under-damped, subtle bounce on selection).
+    val motionScheme = MaterialTheme.motionScheme
     val iconColor by animateColorAsState(
         targetValue = if (selected) selectedIconColor else unselectedIconColor,
-        animationSpec = tween(durationMillis = 250, easing = EmphasizedDecelerate),
+        animationSpec = motionScheme.defaultEffects(),
         label = "iconColor"
     )
 
     val textColor by animateColorAsState(
         targetValue = if (selected) selectedTextColor else unselectedTextColor,
-        animationSpec = tween(durationMillis = 250, easing = EmphasizedDecelerate),
+        animationSpec = motionScheme.defaultEffects(),
         label = "textColor"
     )
 
-    // Micro-interacción: escala responsiva y natural
+    // Micro-interacción: escala responsiva y natural (fast spatial spring — M3 token)
     val iconScale by animateFloatAsState(
         targetValue = if (selected) 1.15f else 1f,
-        animationSpec = spring(
-            dampingRatio = 0.7f,
-            stiffness = 350f
-        ),
+        animationSpec = motionScheme.fastSpatial(),
         label = "iconScale"
     )
 
@@ -99,17 +93,13 @@ fun RowScope.CustomNavigationBarItem(
 
     val labelScale by animateFloatAsState(
         targetValue = if (selected) 1.05f else 1f,
-        animationSpec = tween(durationMillis = 300, easing = EmphasizedDecelerate),
+        animationSpec = motionScheme.fastSpatial(),
         label = "labelScale"
     )
 
     val indicatorProgress by animateFloatAsState(
         targetValue = if (selected) 1f else 0f,
-        animationSpec = if (selected) {
-            tween(durationMillis = 350, easing = EmphasizedDecelerate)
-        } else {
-            tween(durationMillis = 200, easing = EmphasizedAccelerate)
-        },
+        animationSpec = motionScheme.fastSpatial(),
         label = "indicatorProgress"
     )
 
@@ -118,7 +108,7 @@ fun RowScope.CustomNavigationBarItem(
 
     val labelProgress by animateFloatAsState(
         targetValue = if (showLabel) 1f else 0f,
-        animationSpec = tween(durationMillis = 300, easing = EmphasizedDecelerate),
+        animationSpec = motionScheme.fastEffects(),
         label = "labelProgress"
     )
 

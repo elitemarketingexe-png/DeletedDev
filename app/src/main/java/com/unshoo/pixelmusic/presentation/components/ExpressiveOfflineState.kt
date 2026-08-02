@@ -2,9 +2,7 @@
 
 package com.unshoo.pixelmusic.presentation.components
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,8 +44,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.unshoo.pixelmusic.ui.theme.GoogleSansRounded
+import com.unshoo.pixelmusic.ui.theme.slowEffects
+import com.unshoo.pixelmusic.ui.theme.slowSpatial
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ExpressiveOfflineState(
     modifier: Modifier = Modifier,
@@ -64,19 +65,14 @@ fun ExpressiveOfflineState(
 
     val scale by animateFloatAsState(
         targetValue = if (isVisible) 1f else 0.8f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        animationSpec = MaterialTheme.motionScheme.slowSpatial(),
         label = "scale"
     )
 
     val alpha by animateFloatAsState(
         targetValue = if (isVisible) 1f else 0f,
-         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        // Opacity is an effects property — critically damped, never overshoots.
+        animationSpec = MaterialTheme.motionScheme.slowEffects(),
         label = "alpha"
     )
     

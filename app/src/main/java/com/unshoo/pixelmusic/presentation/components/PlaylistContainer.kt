@@ -8,8 +8,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
@@ -110,6 +108,7 @@ import com.unshoo.pixelmusic.presentation.viewmodel.PlaylistUiState
 import com.unshoo.pixelmusic.presentation.viewmodel.PlaylistSelectionStateHolder
 import com.unshoo.pixelmusic.utils.formatSongCount
 import com.unshoo.pixelmusic.ui.theme.GoogleSansRounded
+import com.unshoo.pixelmusic.ui.theme.defaultSpatial
 import androidx.compose.foundation.combinedClickable
 
 
@@ -354,6 +353,7 @@ fun PlaylistItems(
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PlaylistItem(
     playlist: Playlist,
@@ -386,10 +386,7 @@ fun PlaylistItem(
 
     val selectionScale by animateFloatAsState(
         targetValue = if (isSelected) 0.98f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
+        animationSpec = MaterialTheme.motionScheme.defaultSpatial(),
         label = "playlistSelectionScaleAnimation"
     )
 

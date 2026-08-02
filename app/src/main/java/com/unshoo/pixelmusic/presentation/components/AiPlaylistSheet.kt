@@ -3,13 +3,11 @@ package com.unshoo.pixelmusic.presentation.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -85,6 +83,7 @@ import com.unshoo.pixelmusic.R
 import com.unshoo.pixelmusic.presentation.viewmodel.LastFmTrack
 import com.unshoo.pixelmusic.ui.theme.ExpTitleTypography
 import com.unshoo.pixelmusic.ui.theme.GoogleSansRounded
+import com.unshoo.pixelmusic.ui.theme.fastSpatial
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -191,19 +190,14 @@ fun AiPlaylistSheet(
     
     val buttonScale by animateFloatAsState(
         targetValue = if (isPressed) 0.92f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = MaterialTheme.motionScheme.fastSpatial(),
         label = "buttonScale"
     )
     
     val buttonCornerRadius by animateDpAsState(
         targetValue = if (isPressed || isGenerating) 24.dp else 50.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        // Corner radius is a spatial property in M3 Expressive — same spring family as size/position.
+        animationSpec = MaterialTheme.motionScheme.fastSpatial(),
         label = "buttonCorner"
     )
     

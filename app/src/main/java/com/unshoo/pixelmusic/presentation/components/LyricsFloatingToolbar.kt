@@ -25,8 +25,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.ui.draw.scale
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
@@ -49,6 +47,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.util.lerp
+import com.unshoo.pixelmusic.ui.theme.fastSpatial
 
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 
@@ -79,13 +78,10 @@ fun LyricsFloatingToolbar(
         val backInteractionSource = remember { MutableInteractionSource() }
         val isBackPressed by backInteractionSource.collectIsPressedAsState()
 
-        // Animate scale on press: shrinks on press, springs back on release.
+        // Animate scale on press: shrinks on press, springs back on release (fast spatial token).
         val backPressScale by animateFloatAsState(
             targetValue = if (isBackPressed) 0.82f else 1f,
-            animationSpec = spring(
-                stiffness = Spring.StiffnessMedium,
-                dampingRatio = Spring.DampingRatioMediumBouncy
-            ),
+            animationSpec = MaterialTheme.motionScheme.fastSpatial(),
             label = "backPressScale"
         )
 

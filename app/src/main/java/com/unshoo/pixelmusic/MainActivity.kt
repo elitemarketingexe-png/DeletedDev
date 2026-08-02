@@ -133,6 +133,7 @@ import com.unshoo.pixelmusic.presentation.screens.SetupScreen
 import com.unshoo.pixelmusic.presentation.viewmodel.MainViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import com.unshoo.pixelmusic.ui.theme.PixelMusicTheme
+import com.unshoo.pixelmusic.ui.theme.slowSpatial
 import com.unshoo.pixelmusic.utils.CrashHandler
 import com.unshoo.pixelmusic.utils.AppLocaleManager
 import com.unshoo.pixelmusic.utils.LogUtils
@@ -1215,13 +1216,10 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3ExpressiveApi::class)
     @Composable
     private fun LoadingOverlay(syncProgress: SyncProgress) {
-        // Animate progress smoothly instead of jumping in steps
+        // Animate progress smoothly instead of jumping in steps (M3 slow spatial spring)
         val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
             targetValue = syncProgress.progress,
-            animationSpec = androidx.compose.animation.core.spring(
-                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                stiffness = androidx.compose.animation.core.Spring.StiffnessLow
-            ),
+            animationSpec = MaterialTheme.motionScheme.slowSpatial(),
             label = "SyncProgressAnimation"
         )
         

@@ -4,8 +4,6 @@ import android.widget.Toast
 import com.unshoo.pixelmusic.presentation.components.ExpressiveOfflineDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.MutatorMutex
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,8 +16,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import com.unshoo.pixelmusic.ui.theme.defaultSpatial
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -99,6 +99,7 @@ private data class PlayerUiSheetSliceV2(
  * profile and optimize V2 independently while preserving the Experimental switch.
  */
 @androidx.annotation.OptIn(UnstableApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun UnifiedPlayerSheetV2(
     playerViewModel: PlayerViewModel,
@@ -243,10 +244,12 @@ fun UnifiedPlayerSheetV2(
     val playerContentExpansionFraction = playerViewModel.playerContentExpansionFraction
     val visualOvershootScaleY = remember { Animatable(1f) }
     val initialFullPlayerOffsetY = remember(density) { with(density) { 24.dp.toPx() } }
-    // Material 3 Emphasized Decelerate easing — no overshoot, no bounce, one clean arc.
-    val emphasizedDecelerate = remember { CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f) }
-    val sheetExpandAnimSpec = remember { tween<Float>(durationMillis = 450, easing = emphasizedDecelerate) }
-    val sheetCollapseAnimSpec = remember { tween<Float>(durationMillis = 350, easing = emphasizedDecelerate) }
+    // M3 Expressive: partial-screen motion (bottom sheets) uses the DEFAULT SPATIAL spring
+    // (0.8 damping / 380 stiffness) — under-damped so the sheet overshoots subtly into place,
+    // and gesture flings retarget seamlessly because springs carry initial velocity natively.
+    val motionScheme = MaterialTheme.motionScheme
+    val sheetExpandAnimSpec = remember { motionScheme.defaultSpatial<Float>() }
+    val sheetCollapseAnimSpec = remember { motionScheme.defaultSpatial<Float>() }
     // Use expand spec as the default (collapse overrides it in SheetMotionController)
     val sheetAnimationSpec = sheetExpandAnimSpec
     val sheetAnimationMutex = remember { MutatorMutex() }

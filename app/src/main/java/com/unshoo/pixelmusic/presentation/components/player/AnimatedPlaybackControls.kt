@@ -6,8 +6,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,11 +39,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.unshoo.pixelmusic.presentation.components.LocalMaterialTheme
+import com.unshoo.pixelmusic.ui.theme.fastSpatial
 import kotlinx.coroutines.delay
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 
@@ -137,13 +143,28 @@ fun AnimatedPlaybackControls(
                 animationSpec = pressAnimationSpec,
                 label = "prevWeight"
             )
+            // Micro-interaction: press-scale via fast spatial spring (M3 token).
+            val prevInteractionSource = remember { MutableInteractionSource() }
+            val isPrevPressed by prevInteractionSource.collectIsPressedAsState()
+            val prevPressScale by animateFloatAsState(
+                targetValue = if (isPrevPressed) 0.88f else 1f,
+                animationSpec = MaterialTheme.motionScheme.fastSpatial(),
+                label = "prevPressScale"
+            )
             Box(
                 modifier = Modifier
                     .weight(prevWeight)
                     .fillMaxHeight()
                     .clip(CircleShape)
                     .background(colorPreviousButton)
-                    .clickable {
+                    .graphicsLayer {
+                        scaleX = prevPressScale
+                        scaleY = prevPressScale
+                    }
+                    .clickable(
+                        interactionSource = prevInteractionSource,
+                        indication = LocalIndication.current
+                    ) {
                         lastClicked = PlaybackButtonType.PREVIOUS
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         latestOnPrevious()
@@ -184,13 +205,28 @@ fun AnimatedPlaybackControls(
                 cornerRadiusBR = playCorner,
                 smoothnessAsPercentBR = 60
             )
+            // Micro-interaction: press-scale on the hero button (fast spatial spring).
+            val playInteractionSource = remember { MutableInteractionSource() }
+            val isPlayPressed by playInteractionSource.collectIsPressedAsState()
+            val playPressScale by animateFloatAsState(
+                targetValue = if (isPlayPressed) 0.9f else 1f,
+                animationSpec = MaterialTheme.motionScheme.fastSpatial(),
+                label = "playPressScale"
+            )
             Box(
                 modifier = Modifier
                     .weight(playWeight)
                     .fillMaxHeight()
                     .clip(playShape)
                     .background(colorPlayPause)
-                    .clickable {
+                    .graphicsLayer {
+                        scaleX = playPressScale
+                        scaleY = playPressScale
+                    }
+                    .clickable(
+                        interactionSource = playInteractionSource,
+                        indication = LocalIndication.current
+                    ) {
                         lastClicked = PlaybackButtonType.PLAY_PAUSE
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         latestOnPlayPause()
@@ -209,13 +245,28 @@ fun AnimatedPlaybackControls(
                 animationSpec = pressAnimationSpec,
                 label = "nextWeight"
             )
+            // Micro-interaction: press-scale via fast spatial spring (M3 token).
+            val nextInteractionSource = remember { MutableInteractionSource() }
+            val isNextPressed by nextInteractionSource.collectIsPressedAsState()
+            val nextPressScale by animateFloatAsState(
+                targetValue = if (isNextPressed) 0.88f else 1f,
+                animationSpec = MaterialTheme.motionScheme.fastSpatial(),
+                label = "nextPressScale"
+            )
             Box(
                 modifier = Modifier
                     .weight(nextWeight)
                     .fillMaxHeight()
                     .clip(CircleShape)
                     .background(colorNextButton)
-                    .clickable {
+                    .graphicsLayer {
+                        scaleX = nextPressScale
+                        scaleY = nextPressScale
+                    }
+                    .clickable(
+                        interactionSource = nextInteractionSource,
+                        indication = LocalIndication.current
+                    ) {
                         lastClicked = PlaybackButtonType.NEXT
                         hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         latestOnNext()

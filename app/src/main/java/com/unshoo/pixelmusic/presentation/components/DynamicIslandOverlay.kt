@@ -1,9 +1,7 @@
 package com.unshoo.pixelmusic.presentation.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -41,6 +39,7 @@ import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -64,6 +63,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
+import com.unshoo.pixelmusic.ui.theme.defaultSpatial
 import kotlinx.coroutines.delay
 
 /**
@@ -82,6 +82,7 @@ import kotlinx.coroutines.delay
  * system-level island that also appears in the status bar while the app is in the
  * background, combine it with Android 16 Live Updates (see `LiveUpdateUtil`).
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun DynamicIslandOverlay(
     playerViewModel: PlayerViewModel,
@@ -135,20 +136,16 @@ fun DynamicIslandOverlay(
         modifier = modifier
     ) {
         val currentSong = song ?: return@AnimatedVisibility
+        // M3 Expressive: island expansion is size motion → default spatial spring (overshoots subtly).
+        val motionScheme = MaterialTheme.motionScheme
         val islandWidth by animateDpAsState(
             targetValue = if (expanded) 320.dp else 152.dp,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
+            animationSpec = motionScheme.defaultSpatial(),
             label = "islandWidth"
         )
         val islandHeight by animateDpAsState(
             targetValue = if (expanded) 82.dp else 38.dp,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
+            animationSpec = motionScheme.defaultSpatial(),
             label = "islandHeight"
         )
 

@@ -6,7 +6,10 @@
 
 package com.unshoo.pixelmusic.presentation.screens
 
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
@@ -80,6 +83,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.text.style.TextOverflow
 
 @androidx.annotation.OptIn(UnstableApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun LibraryAlbumsTab(
     albums: LazyPagingItems<Album>,
@@ -96,7 +100,10 @@ fun LibraryAlbumsTab(
     onAlbumLongPress: (Album) -> Unit = {},
     onAlbumSelectionToggle: (Album) -> Unit = {},
     getSelectionIndex: (Long) -> Int? = { null },
-    storageFilter: StorageFilter = StorageFilter.ALL
+    storageFilter: StorageFilter = StorageFilter.ALL,
+    // M3 Expressive shared-element scopes (album art → Album Detail hero container transform).
+    sharedTransitionScope: SharedTransitionScope? = null,
+    animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
@@ -456,7 +463,9 @@ fun LibraryAlbumsTab(
                                             isSelected = selectedAlbumIds.contains(album.id),
                                             selectionIndex = getSelectionIndex(album.id),
                                             onLongPress = rememberedOnLongPress,
-                                            onSelectionToggle = rememberedOnSelectionToggle
+                                            onSelectionToggle = rememberedOnSelectionToggle,
+                                            sharedTransitionScope = sharedTransitionScope,
+                                            animatedVisibilityScope = animatedVisibilityScope
                                         )
                                     } else {
                                         AlbumGridItemRedesigned(

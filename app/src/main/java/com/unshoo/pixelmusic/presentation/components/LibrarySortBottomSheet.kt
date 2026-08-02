@@ -3,9 +3,7 @@ package com.unshoo.pixelmusic.presentation.components
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,6 +25,7 @@ import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -57,6 +56,9 @@ import com.unshoo.pixelmusic.R
 import com.unshoo.pixelmusic.data.model.SortDirection
 import com.unshoo.pixelmusic.data.model.SortOption
 import com.unshoo.pixelmusic.ui.theme.GoogleSansRounded
+import com.unshoo.pixelmusic.ui.theme.defaultEffects
+import com.unshoo.pixelmusic.ui.theme.defaultSpatial
+import com.unshoo.pixelmusic.ui.theme.fastSpatial
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -270,6 +272,7 @@ fun LibrarySortBottomSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LibrarySheetSortDirectionCard(
     modifier: Modifier = Modifier,
@@ -283,12 +286,12 @@ private fun LibrarySheetSortDirectionCard(
         targetState = isDescending,
         label = "sortDirectionTransition"
     )
+    // M3 Expressive tokens: colors → effects springs (critically damped, no overshoot),
+    // rotation/scale → spatial springs (overshoot allowed).
+    val motionScheme = MaterialTheme.motionScheme
     val containerColor by transition.animateColor(
         transitionSpec = {
-            spring(
-                dampingRatio = 0.82f,
-                stiffness = Spring.StiffnessMediumLow
-            )
+            motionScheme.defaultEffects()
         },
         label = "sortDirectionContainerColor"
     ) { descending ->
@@ -300,10 +303,7 @@ private fun LibrarySheetSortDirectionCard(
     }
     val contentColor by transition.animateColor(
         transitionSpec = {
-            spring(
-                dampingRatio = 0.86f,
-                stiffness = Spring.StiffnessMediumLow
-            )
+            motionScheme.defaultEffects()
         },
         label = "sortDirectionContentColor"
     ) { descending ->
@@ -315,14 +315,12 @@ private fun LibrarySheetSortDirectionCard(
     }
     val iconContainerColor by animateColorAsState(
         targetValue = contentColor.copy(alpha = if (enabled) 0.16f else 0.1f),
+        animationSpec = motionScheme.defaultEffects(),
         label = "sortDirectionIconContainerColor"
     )
     val iconRotation by transition.animateFloat(
         transitionSpec = {
-            spring(
-                dampingRatio = 0.7f,
-                stiffness = Spring.StiffnessLow
-            )
+            motionScheme.defaultSpatial()
         },
         label = "sortDirectionIconRotation"
     ) { descending ->
@@ -330,10 +328,7 @@ private fun LibrarySheetSortDirectionCard(
     }
     val iconScale by transition.animateFloat(
         transitionSpec = {
-            spring(
-                dampingRatio = 0.62f,
-                stiffness = Spring.StiffnessMediumLow
-            )
+            motionScheme.fastSpatial()
         },
         label = "sortDirectionIconScale"
     ) { descending ->
