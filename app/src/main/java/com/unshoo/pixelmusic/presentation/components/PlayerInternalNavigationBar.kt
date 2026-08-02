@@ -52,6 +52,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.unshoo.pixelmusic.BottomNavItem
 import com.unshoo.pixelmusic.data.preferences.NavBarStyle
@@ -166,8 +167,8 @@ private fun ExpressiveFloatingPillNavigationBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Main navigation floating toolbar — M3 Expressive pill container
@@ -183,7 +184,7 @@ private fun ExpressiveFloatingPillNavigationBar(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -191,7 +192,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                     val isSelected = selectedIndex == index
 
                     val itemWeight by animateFloatAsState(
-                        targetValue = if (isSelected && !shouldHideLabel) 1.5f else 1.0f,
+                        targetValue = if (isSelected && !shouldHideLabel) 2.2f else 1.0f,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioLowBouncy,
                             stiffness = Spring.StiffnessMediumLow
@@ -208,7 +209,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                         },
                         modifier = Modifier
                             .weight(itemWeight)
-                            .height(52.dp),
+                            .height(56.dp),
                         shape = CircleShape,
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.secondaryContainer
@@ -226,7 +227,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                             horizontalArrangement = Arrangement.Center,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 12.dp)
+                                .padding(horizontal = 8.dp)
                         ) {
                             val iconRes = if (isSelected && item.selectedIconResId != null && item.selectedIconResId != 0) {
                                 item.selectedIconResId
@@ -237,7 +238,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                             Icon(
                                 painter = painterResource(id = iconRes),
                                 contentDescription = item.label,
-                                modifier = Modifier.size(26.dp)
+                                modifier = Modifier.size(24.dp)
                             )
 
                             AnimatedVisibility(
@@ -246,10 +247,10 @@ private fun ExpressiveFloatingPillNavigationBar(
                                 exit = fadeOut(animationSpec = tween(150)) + shrinkHorizontally(shrinkTowards = Alignment.Start)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = item.label,
-                                        style = MaterialTheme.typography.titleMedium,
+                                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp),
                                         maxLines = 1,
                                         fontWeight = FontWeight.Bold,
                                         softWrap = false
