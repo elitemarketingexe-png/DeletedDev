@@ -698,7 +698,7 @@ fun ExploreScreen(
                             }
                         }
 
-                        // Move New Releases here - shown under New Releases filter as full 2-column grid or main All/For You filters as carousel
+                        // New Releases section
                         if (filterSlice.selectedFilter == "New Releases" && contentSlice.newReleaseAlbums.isNotEmpty()) {
                             item(key = "new_releases_full_header") {
                                 SectionHeader(title = "All New Releases & Singles")
@@ -727,7 +727,9 @@ fun ExploreScreen(
                                     }
                                 }
                             }
-                        } else if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") &&
+                        }
+
+                        if ((filterSlice.selectedFilter == "All" || filterSlice.selectedFilter == "For You") &&
                             contentSlice.newReleaseAlbums.isNotEmpty()
                         ) {
                             item(key = "new_releases_header") {
