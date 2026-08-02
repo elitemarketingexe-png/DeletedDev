@@ -178,7 +178,7 @@ object CardColorExtractor {
                     val request = ImageRequest.Builder(ctx)
                         .data(imageUrl)
                         .allowHardware(false)
-                        .size(64) // 64x64 for optimal color fidelity and rich Palette extraction
+                        .size(32) // 32x32 sample size for lightning-fast color extraction without frame drops
                         .precision(Precision.INEXACT)
                         .memoryCachePolicy(CachePolicy.ENABLED)
                         .diskCachePolicy(CachePolicy.ENABLED)
@@ -189,8 +189,8 @@ object CardColorExtractor {
                         val bmp = (result.drawable as? BitmapDrawable)?.bitmap
                         if (bmp != null && !bmp.isRecycled) {
                             val rgb = Palette.from(bmp)
-                                .maximumColorCount(12) // analyze up to 12 swatches for best color matching
-                                .resizeBitmapArea(64 * 64)
+                                .maximumColorCount(4) // fast swatch extraction
+                                .resizeBitmapArea(32 * 32)
                                 .generate()
                                 .let { palette ->
                                     val swatches = listOfNotNull(
