@@ -853,7 +853,8 @@ fun SettingsCategoryScreen(
                                     description = stringResource(R.string.setcat_navbar_style_desc),
                                     options = mapOf(
                                         NavBarStyle.DEFAULT to stringResource(R.string.setcat_navbar_style_default),
-                                        NavBarStyle.FULL_WIDTH to stringResource(R.string.setcat_navbar_style_full_width)
+                                        NavBarStyle.FULL_WIDTH to stringResource(R.string.setcat_navbar_style_full_width),
+                                        NavBarStyle.FLOATING_PILL to "Floating Pill"
                                     ),
                                     selectedKey = uiState.navBarStyle,
                                     onSelectionChanged = { settingsViewModel.setNavBarStyle(it) },
