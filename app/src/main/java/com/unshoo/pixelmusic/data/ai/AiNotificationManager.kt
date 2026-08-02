@@ -48,7 +48,12 @@ class AiNotificationManager @Inject constructor(
             .setOngoing(true)
             .setProgress(max, progress, progress == 0)
 
-        notificationManager.notify(PROGRESS_NOTIFICATION_ID, builder.build())
+        val notification = builder.build()
+
+        // Android 16 Live Updates: render AI generation progress as an island-style status-bar pill.
+        com.unshoo.pixelmusic.data.service.LiveUpdateUtil.promote(notification)
+
+        notificationManager.notify(PROGRESS_NOTIFICATION_ID, notification)
     }
 
     fun showCompletion(title: String, message: String) {

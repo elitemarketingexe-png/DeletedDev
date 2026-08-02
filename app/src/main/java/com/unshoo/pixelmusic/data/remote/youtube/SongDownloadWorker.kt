@@ -108,7 +108,13 @@ class SongDownloadWorker(
 
                 if (audioPath != null) {
                     val mainId = -(15_000_000_000_000L + song.youtubeId.hashCode().toLong().absoluteValue)
-                    val parentDir = File(audioPath).parentFile?.absolutePath ?: ""
+                    // Adopted from PixelMusic: safely handle MediaStore URIs so the
+                    // database doesn't crash when the download lands in content:// space.
+                    val parentDir = if (audioPath.startsWith("content://")) {
+                        "Music/PixelMusic"
+                    } else {
+                        File(audioPath).parentFile?.absolutePath ?: ""
+                    }
                     musicDao.updateSongFilePathAndParent(mainId, audioPath, parentDir)
                     playlistRepository.insertCrossRef(
                         com.unshoo.pixelmusic.data.model.youtube.PlaylistSongCrossRef(

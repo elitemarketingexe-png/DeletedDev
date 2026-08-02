@@ -46,6 +46,34 @@ private data class RawDirectoryEntry(
     val displayName: String? = null
 )
 
+/**
+ * Adopted from PixelMusic: merges the filesystem listing with the MediaStore
+ * index (union by canonical path), so neither source is lost and MediaStore
+ * display names fill in gaps.
+ */
+private fun mergeDirectoryEntryLists(
+    filesystemEntries: List<RawDirectoryEntry>,
+    mediaStoreEntries: List<RawDirectoryEntry>
+): List<RawDirectoryEntry> {
+    val merged = linkedMapOf<String, RawDirectoryEntry>()
+
+    filesystemEntries.forEach { entry ->
+        merged[entry.canonicalPath] = entry
+    }
+
+    mediaStoreEntries.forEach { mediaEntry ->
+        val existing = merged[mediaEntry.canonicalPath]
+        merged[mediaEntry.canonicalPath] =
+            if (existing == null) {
+                mediaEntry
+            } else {
+                mediaEntry.copy(displayName = mediaEntry.displayName ?: existing.displayName)
+            }
+    }
+
+    return merged.values.sortedWith(compareBy({ it.file.name.lowercase() }))
+}
+
 private data class MediaStoreDirectoryIndex(
     val childrenByParent: Map<String, Set<String>>,
     val directAudioCountByPath: Map<String, Int>,
@@ -418,17 +446,10 @@ class FileExplorerStateHolder(
                     }
                     .sortedWith(compareBy({ it.file.name.lowercase() }))
                 
-                val enrichedEntries = if (currentEntries.isNotEmpty()) {
-                    currentEntries.map { raw ->
-                        val key = raw.canonicalPath
-                        raw.copy(
-                            directAudioCount = index.directAudioCountByPath[key] ?: 0,
-                            totalAudioCount = index.totalAudioCountByPath[key] ?: 0
-                        )
-                    }
-                } else {
-                    mediaStoreEntries
-                }
+                val enrichedEntries = mergeDirectoryEntryLists(
+                    filesystemEntries = currentEntries,
+                    mediaStoreEntries = mediaStoreEntries
+                )
 
                 directoryChildrenCache[targetKey] = enrichedEntries
                 resolvedDirectoryKeys.add(targetKey)

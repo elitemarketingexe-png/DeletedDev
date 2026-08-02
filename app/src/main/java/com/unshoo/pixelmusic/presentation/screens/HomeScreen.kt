@@ -331,7 +331,7 @@ fun HomeScreen(
 
     val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
     val density = LocalDensity.current
-    val scrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
+    val scrollThresholdPx = remember(density) { with(density) { 180.dp.toPx() } } // Adopted from PixelMusic: higher threshold = header flip-flops less
     val isScrolledPastThreshold = remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > scrollThresholdPx }
     }

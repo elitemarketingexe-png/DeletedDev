@@ -63,6 +63,9 @@ object UmihiNotificationManager {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
+        // Android 16 Live Updates: render download progress as an island-style status-bar pill.
+        com.unshoo.pixelmusic.data.service.LiveUpdateUtil.promote(notification)
+
         notificationManager.notify(getNotificationID(playlist.info.id), notification)
         updateGroupSummary(context)
     }

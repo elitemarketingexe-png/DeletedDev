@@ -105,12 +105,6 @@ fun LibrarySongsTab(
             .distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = null)
 
-    val isPlaybackPlaying by remember(playerViewModel) {
-        playerViewModel.stablePlayerState
-            .map { it.isPlaying }
-            .distinctUntilChanged()
-    }.collectAsStateWithLifecycle(initialValue = false)
-
     // Check if list is effectively empty (based on Paging state)
     // val isListEmpty = songs.itemCount == 0 && songs.loadState.refresh is LoadState.NotLoading
     
@@ -358,8 +352,7 @@ fun LibrarySongsTab(
 
                                     LibraryPlaybackAwareSongItem(
                                         song = song,
-                                        currentSongId = currentSongId,
-                                        isPlaying = isPlaybackPlaying,
+                                        playerViewModel = playerViewModel,
                                         isSelected = isSelected,
                                         //albumArtSize = 46.dp,
                                         isSelectionMode = isSelectionMode,

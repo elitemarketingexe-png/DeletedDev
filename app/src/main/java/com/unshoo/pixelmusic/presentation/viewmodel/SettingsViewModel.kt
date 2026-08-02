@@ -83,6 +83,7 @@ data class SettingsUiState(
     val keepPlayingInBackground: Boolean = true,
     val disableCastAutoplay: Boolean = false,
     val resumeOnHeadsetReconnect: Boolean = false,
+    val dynamicIslandEnabled: Boolean = false,
     val showQueueHistory: Boolean = true,
     val isCrossfadeEnabled: Boolean = false,
     val hiFiModeEnabled: Boolean = false,
@@ -238,7 +239,8 @@ private sealed interface SettingsUiUpdate {
         val lastfmUseNowPlaying: Boolean,
         val scrobbleDelayPercent: Float,
         val scrobbleMinSongDuration: Int,
-        val scrobbleDelaySeconds: Int
+        val scrobbleDelaySeconds: Int,
+        val dynamicIslandEnabled: Boolean
     ) : SettingsUiUpdate
 }
 
@@ -671,7 +673,8 @@ class SettingsViewModel @Inject constructor(
                 userPreferencesRepository.lastfmUseNowPlayingFlow,
                 userPreferencesRepository.scrobbleDelayPercentFlow,
                 userPreferencesRepository.scrobbleMinSongDurationFlow,
-                userPreferencesRepository.scrobbleDelaySecondsFlow
+                userPreferencesRepository.scrobbleDelaySecondsFlow,
+                userPreferencesRepository.dynamicIslandEnabledFlow
             ) { values ->
                 SettingsUiUpdate.Group2(
                     keepPlayingInBackground = values[0] as Boolean,
@@ -702,7 +705,8 @@ class SettingsViewModel @Inject constructor(
                     lastfmUseNowPlaying = values[25] as Boolean,
                     scrobbleDelayPercent = values[26] as Float,
                     scrobbleMinSongDuration = values[27] as Int,
-                    scrobbleDelaySeconds = values[28] as Int
+                    scrobbleDelaySeconds = values[28] as Int,
+                    dynamicIslandEnabled = values[29] as Boolean
                 )
             }.collect { update ->
                 _uiState.update { state ->
@@ -735,7 +739,8 @@ class SettingsViewModel @Inject constructor(
                         lastfmUseNowPlaying = update.lastfmUseNowPlaying,
                         scrobbleDelayPercent = update.scrobbleDelayPercent,
                         scrobbleMinSongDuration = update.scrobbleMinSongDuration,
-                        scrobbleDelaySeconds = update.scrobbleDelaySeconds
+                        scrobbleDelaySeconds = update.scrobbleDelaySeconds,
+                        dynamicIslandEnabled = update.dynamicIslandEnabled
                     )
                 }
             }
@@ -1245,6 +1250,12 @@ class SettingsViewModel @Inject constructor(
     fun setResumeOnHeadsetReconnect(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setResumeOnHeadsetReconnect(enabled)
+        }
+    }
+
+    fun setDynamicIslandEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setDynamicIslandEnabled(enabled)
         }
     }
 

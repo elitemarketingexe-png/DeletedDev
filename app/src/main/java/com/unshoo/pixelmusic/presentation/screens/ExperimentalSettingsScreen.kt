@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Style
 import androidx.compose.material.icons.rounded.LinearScale
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.PhoneIphone
 import androidx.compose.material.icons.rounded.Rectangle
 import androidx.compose.material.icons.rounded.Title
 import androidx.compose.material.icons.rounded.ViewCarousel
@@ -317,6 +318,21 @@ fun ExperimentalSettingsScreen(
                                     }
                                 }
                             }
+
+
+                            SwitchSettingItem(
+                                title = "Dynamic Island",
+                                subtitle = "Floating now-playing pill below the camera cutout (tap to expand, swipe up to dismiss)",
+                                checked = uiState.dynamicIslandEnabled,
+                                onCheckedChange = settingsViewModel::setDynamicIslandEnabled,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.PhoneIphone,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            )
 
                             SwitchSettingItem(
                                 title = "Floating Pill Header Bar",

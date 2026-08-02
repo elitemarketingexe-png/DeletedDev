@@ -208,6 +208,7 @@ constructor(
         val PERSISTENT_SHUFFLE_ENABLED = booleanPreferencesKey("persistent_shuffle_enabled")
         val DISABLE_CAST_AUTOPLAY = booleanPreferencesKey("disable_cast_autoplay")
         val RESUME_ON_HEADSET_RECONNECT = booleanPreferencesKey("resume_on_headset_reconnect")
+        val DYNAMIC_ISLAND_ENABLED = booleanPreferencesKey("dynamic_island_enabled")
         val SHOW_QUEUE_HISTORY = booleanPreferencesKey("show_queue_history")
         val PLAYBACK_QUEUE_SNAPSHOT = stringPreferencesKey("playback_queue_snapshot_v1")
         val FULL_PLAYER_SHOW_FILE_INFO = booleanPreferencesKey("full_player_show_file_info")
@@ -1168,6 +1169,11 @@ constructor(
                 preferences[PreferencesKeys.RESUME_ON_HEADSET_RECONNECT] ?: false
             }
 
+    val dynamicIslandEnabledFlow: Flow<Boolean> =
+            dataStore.data.map { preferences ->
+                preferences[PreferencesKeys.DYNAMIC_ISLAND_ENABLED] ?: false
+            }
+
     val showQueueHistoryFlow: Flow<Boolean> =
             dataStore.data.map { preferences ->
                 preferences[PreferencesKeys.SHOW_QUEUE_HISTORY] ?: false  // Default to false for performance
@@ -1684,6 +1690,12 @@ constructor(
     suspend fun setResumeOnHeadsetReconnect(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.RESUME_ON_HEADSET_RECONNECT] = enabled
+        }
+    }
+
+    suspend fun setDynamicIslandEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DYNAMIC_ISLAND_ENABLED] = enabled
         }
     }
 

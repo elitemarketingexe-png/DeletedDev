@@ -403,6 +403,16 @@ class MusicService : MediaLibraryService() {
     }
 
     override fun onCreate() {
+        // --- CRITICAL LIFECYCLE FIX (adopted from PixelMusic) ---
+        // Self-start the service to decouple it from MainActivity's bound lifecycle.
+        // This guarantees the OS won't instantly destroy it when the app is swiped
+        // from recents, so music + the media notification keep running.
+        try {
+            startService(Intent(this, MusicService::class.java))
+        } catch (e: Exception) {
+            Timber.tag(TAG).w(e, "Failed to self-start service")
+        }
+
         // Media3's Cast SDK callback path (MediaSessionImpl$$ExternalSyntheticLambda →
         // Util.postOrRun → MediaNotificationManager.updateNotificationInternal) calls
         // Service.startForeground() directly, bypassing onUpdateNotification() entirely.
@@ -448,6 +458,10 @@ class MusicService : MediaLibraryService() {
         syncLocalListeningStatsFromPlayer(engine.masterPlayer)
 
         engine.masterPlayer.addListener(playerListener)
+
+        // Adopted from PixelMusic: force a PARTIAL_WAKE_LOCK so aggressive OEM skins
+        // (Funtouch OS etc.) don't sleep the CPU when the app is swiped from Recents.
+        (engine.masterPlayer as? androidx.media3.exoplayer.ExoPlayer)?.setWakeMode(C.WAKE_MODE_LOCAL)
 
         // Handle player swaps (crossfade) to keep MediaSession in sync
         engine.addPlayerSwapListener(playerSwapListener)
