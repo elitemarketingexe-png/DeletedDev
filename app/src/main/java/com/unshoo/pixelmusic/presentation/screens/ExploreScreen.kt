@@ -7,6 +7,8 @@ package com.unshoo.pixelmusic.presentation.screens
 import androidx.compose.material3.IconButton
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 import androidx.compose.animation.AnimatedVisibility
@@ -924,11 +926,10 @@ fun YTItemCarousel(
                     )
                 }
                 is PlaylistItem -> {
-                    PlaylistCardItem(
+                    PlaylistBentoCard(
                         playlist = item,
-                        onClick = {
-                            navController.navigateSafely(Screen.PlaylistDetail.createRoute(item.id))
-                        }
+                        navController = navController,
+                        playerViewModel = playerViewModel
                     )
                 }
                 is ArtistItem -> {
@@ -1651,6 +1652,191 @@ fun ArtistCardItem(
                         contentDescription = "Artist Radio",
                         tint = colorScheme.onSecondaryContainer,
                         modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PlaylistBentoCard(
+    playlist: PlaylistItem,
+    navController: NavController,
+    playerViewModel: PlayerViewModel,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkTheme = isSystemInDarkTheme()
+    val baseSurface = colorScheme.surfaceContainerHigh
+
+    val animatedBgColor = rememberDominantCardColor(
+        imageUrl = playlist.thumbnail,
+        baseColor = baseSurface,
+        isDarkTheme = isDarkTheme,
+        darkBlendFraction = 0.28f,
+        lightBlendFraction = 0.45f
+    )
+
+    val playlistTitle = playlist.title
+    val authorName = playlist.author?.name ?: "YouTube Music"
+    val songCountText = playlist.songCountText ?: ""
+
+    // Extract endpoint for play & radio action buttons
+    val playEndpoint = remember(playlist) {
+        playlist.playEndpoint 
+            ?: playlist.shuffleEndpoint 
+            ?: unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                playlistId = playlist.id,
+                videoId = null
+            )
+    }
+
+    val radioEndpoint = remember(playlist) {
+        playlist.radioEndpoint 
+            ?: playlist.shuffleEndpoint 
+            ?: unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                playlistId = "RDAMPL${playlist.id}",
+                videoId = null
+            )
+    }
+
+    Card(
+        modifier = modifier
+            .width(280.dp)
+            .wrapContentHeight(),
+        shape = AbsoluteSmoothCornerShape(28.dp, 80),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = animatedBgColor),
+        onClick = {
+            navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id))
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header: Large Cover Thumbnail + Title, Author, Song Count
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(AbsoluteSmoothCornerShape(20.dp, 80))
+                        .background(colorScheme.surfaceContainerHighest)
+                ) {
+                    if (!playlist.thumbnail.isNullOrBlank()) {
+                        SmartImage(
+                            model = playlist.thumbnail,
+                            contentDescription = playlistTitle,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = playlistTitle,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = GoogleSansRounded,
+                            letterSpacing = (-0.3).sp
+                        ),
+                        color = colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = authorName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (songCountText.isNotBlank()) {
+                        Text(
+                            text = songCountText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            // Bottom Circular Action Buttons (Play, Radio/Mix, Bookmark/Save) matching reference M3 layout
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Play Button
+                IconButton(
+                    onClick = {
+                        playerViewModel.playRadio(
+                            endpoint = playEndpoint,
+                            title = playlistTitle,
+                            artistName = authorName
+                        )
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(colorScheme.primary, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = "Play Playlist",
+                        tint = colorScheme.onPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                // Radio Button
+                IconButton(
+                    onClick = {
+                        playerViewModel.playRadio(
+                            endpoint = radioEndpoint,
+                            title = "${playlistTitle} Radio",
+                            artistName = authorName
+                        )
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(colorScheme.surfaceContainerHighest.copy(alpha = 0.8f), CircleShape)
+                        .border(1.dp, colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Radio,
+                        contentDescription = "Playlist Radio",
+                        tint = colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Bookmark / Detail Button
+                IconButton(
+                    onClick = {
+                        navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id))
+                    },
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(colorScheme.surfaceContainerHighest.copy(alpha = 0.8f), CircleShape)
+                        .border(1.dp, colorScheme.outlineVariant.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.BookmarkBorder,
+                        contentDescription = "Save Playlist",
+                        tint = colorScheme.onSurface,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
