@@ -426,7 +426,7 @@ fun SearchScreen(
                 }
             }
 
-            val showGenreBrowse by remember(searchQuery) { derivedStateOf { searchQuery.isBlank() } }
+            val showGenreBrowse = remember(searchQuery) { searchQuery.isBlank() }
             AnimatedContent(
                 targetState = showGenreBrowse,
                 transitionSpec = {

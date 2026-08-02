@@ -20,6 +20,7 @@ object MediaMetadataRetrieverPool {
     
     private const val MAX_POOL_SIZE = 4
     private val pool = ConcurrentLinkedQueue<MediaMetadataRetriever>()
+    private val poolCount = AtomicInteger(0)
     private val createdCount = AtomicInteger(0)
     
     /**
@@ -28,10 +29,13 @@ object MediaMetadataRetrieverPool {
      */
     @PublishedApi
     internal fun acquire(): MediaMetadataRetriever {
-        return pool.poll() ?: run {
-            createdCount.incrementAndGet()
-            MediaMetadataRetriever()
+        val retriever = pool.poll()
+        if (retriever != null) {
+            poolCount.decrementAndGet()
+            return retriever
         }
+        createdCount.incrementAndGet()
+        return MediaMetadataRetriever()
     }
     
     /**
@@ -40,10 +44,9 @@ object MediaMetadataRetrieverPool {
      */
     @PublishedApi
     internal fun release(retriever: MediaMetadataRetriever) {
-        if (pool.size < MAX_POOL_SIZE) {
-            // Reset the retriever for reuse (best effort - setDataSource with null is not supported)
-            // The next setDataSource call will override the previous state
+        if (poolCount.get() < MAX_POOL_SIZE) {
             pool.offer(retriever)
+            poolCount.incrementAndGet()
         } else {
             try {
                 retriever.release()
@@ -78,6 +81,7 @@ object MediaMetadataRetrieverPool {
     fun clear() {
         var retriever = pool.poll()
         while (retriever != null) {
+            poolCount.decrementAndGet()
             try {
                 retriever.release()
             } catch (_: Exception) {
@@ -91,7 +95,7 @@ object MediaMetadataRetrieverPool {
     /**
      * Returns the current number of retrievers held in the pool.
      */
-    fun poolSize(): Int = pool.size
+    fun poolSize(): Int = poolCount.get()
     
     /**
      * Returns the total number of retrievers created (including those in use).

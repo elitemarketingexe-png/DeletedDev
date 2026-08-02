@@ -225,7 +225,7 @@ fun LibraryFavoritesTab(
                     LazyColumn(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(start = 12.dp, end = if (listState.canScrollForward || listState.canScrollBackward) 22.dp else 12.dp, bottom = 6.dp)
+                            .padding(start = 12.dp, end = 22.dp, bottom = 6.dp)
                             .clip(
                                 RoundedCornerShape(
                                     topStart = 26.dp,
@@ -407,7 +407,7 @@ fun LibrarySongsTabPaginated(
                     Box(modifier = Modifier.fillMaxSize()) {
                         LazyColumn(
                             modifier = Modifier
-                                .padding(start = 12.dp, end = if (listState.canScrollForward || listState.canScrollBackward) 22.dp else 12.dp, bottom = 6.dp)
+                                .padding(start = 12.dp, end = 22.dp, bottom = 6.dp)
                                 .clip(
                                     RoundedCornerShape(
                                         topStart = 26.dp,
@@ -432,23 +432,19 @@ fun LibrarySongsTabPaginated(
                             ) { index ->
                                 val song = paginatedSongs[index]
                                 if (song != null) {
-                                    val isPlayingThisSong = song.id == stablePlayerState.currentSong?.id && stablePlayerState.isPlaying
-
-                                    val rememberedOnMoreOptionsClick: (Song) -> Unit = remember(onMoreOptionsClick) {
+                                     val rememberedOnMoreOptionsClick: (Song) -> Unit = remember(onMoreOptionsClick) {
                                         { songFromListItem -> onMoreOptionsClick(songFromListItem) }
-                                    }
-                                    val rememberedOnClick: () -> Unit = remember(song) {
-                                        { playerViewModel.showAndPlaySongFromLibrary(song) }
-                                    }
+                                     }
+                                     val rememberedOnClick: () -> Unit = remember(song.id) {
+                                         { playerViewModel.showAndPlaySongFromLibrary(song) }
+                                     }
 
-                                    EnhancedSongListItem(
-                                        song = song,
-                                        isPlaying = isPlayingThisSong,
-                                        isCurrentSong = stablePlayerState.currentSong?.id == song.id,
-                                        isLoading = false,
-                                        onMoreOptionsClick = rememberedOnMoreOptionsClick,
-                                        onClick = rememberedOnClick
-                                    )
+                                     LibraryPlaybackAwareSongItem(
+                                         song = song,
+                                         playerViewModel = playerViewModel,
+                                         onMoreOptionsClick = rememberedOnMoreOptionsClick,
+                                         onClick = rememberedOnClick
+                                     )
                                 } else {
                                     EnhancedSongListItem(
                                         song = Song.emptySong(),

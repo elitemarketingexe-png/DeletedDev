@@ -344,7 +344,7 @@ class PlayerViewModel @Inject constructor(
         .distinctUntilChanged()
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5000),
             initialValue = persistentListOf()
         )
 
@@ -439,6 +439,7 @@ class PlayerViewModel @Inject constructor(
     ) { sortOption, storageFilter ->
         sortOption to storageFilter
     }
+        .distinctUntilChanged()
         .flatMapLatest { (sortOption, storageFilter) ->
             musicRepository.getPaginatedFavoriteSongs(
                 sortOption = sortOption,
@@ -454,6 +455,7 @@ class PlayerViewModel @Inject constructor(
     ) { sortOption, storageFilter ->
         sortOption to storageFilter
     }
+        .distinctUntilChanged()
         .flatMapLatest { (sortOption, storageFilter) ->
             musicRepository.getPaginatedSongs(
                 sortOption = sortOption,
@@ -773,7 +775,7 @@ class PlayerViewModel @Inject constructor(
     val lyricsSourcePreference: StateFlow<LyricsSourcePreference> = userPreferencesRepository.lyricsSourcePreferenceFlow
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5000),
             initialValue = LyricsSourcePreference.EMBEDDED_FIRST
         )
 
@@ -2734,20 +2736,7 @@ class PlayerViewModel @Inject constructor(
                 }
             }
             return
-        }    // Local playback logic
-        // Immediate optimistic UI update so player bar/sheet reflects tapped song instantly
-        playbackStateHolder.setCurrentPosition(0L)
-        playbackStateHolder.updateStablePlayerState { state ->
-            state.copy(
-                currentSong = song,
-                isPlaying = true,
-                playWhenReady = true,
-                totalDuration = song.duration.coerceAtLeast(0L),
-                lyrics = null,
-                isLoadingLyrics = true
-            )
         }
-        _isSheetVisible.value = true
 
         // Local playback logic
         if (playbackContext.size <= 1) {
@@ -3836,25 +3825,11 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun playLoadedControllerItem(controller: MediaController, targetIndex: Int, targetSong: Song? = null): Job {
-        // Optimistic UI first so the miniplayer/card respond instantly.
+        // No optimistic UI — the miniplayer reflects real player state only (Saurav behavior).
+        // Keep the preparing-song guard (race fix): prevents the null-transition/STATE_IDLE
+        // handler from clearing currentSong while the seek is still in flight.
         runOnMainImmediate {
-            targetSong?.let { song ->
-                setPreparingSong(song.id)
-                playbackStateHolder.setCurrentPosition(0L)
-                playbackStateHolder.updateStablePlayerState { state ->
-                    state.copy(
-                        currentSong = song,
-                        currentMediaItemIndex = targetIndex,
-                        isPlaying = true,
-                        playWhenReady = true,
-                        totalDuration = song.duration.coerceAtLeast(0L),
-                        lyrics = null,
-                        isLoadingLyrics = true
-                    )
-                }
-                resetLyricsSearchState()
-                loadLyricsForCurrentSong()
-            }
+            targetSong?.let { song -> setPreparingSong(song.id) }
         }
 
         // FREEZE FIX: queue reuse used to seekTo() a still-unresolved youtube:// URI.

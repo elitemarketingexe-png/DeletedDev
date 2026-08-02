@@ -89,15 +89,11 @@ fun SmartImage(
     onState: ((AsyncImagePainter.State) -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val appContext = context.applicationContext
-    val entryPoint = remember(appContext) {
-        EntryPointAccessors.fromApplication(appContext, SmartImageEntryPoint::class.java)
+    if (!SmartImageCache.isInitialized) {
+        val appContext = context.applicationContext
+        val entryPoint = EntryPointAccessors.fromApplication(appContext, SmartImageEntryPoint::class.java)
+        SmartImageCache.initialize(entryPoint.connectivityStateHolder(), entryPoint.userPreferencesRepository())
     }
-    val connectivityStateHolder = entryPoint.connectivityStateHolder()
-    val userPreferencesRepository = entryPoint.userPreferencesRepository()
-
-    // Initialize the shared Compose State-backed cache once
-    SmartImageCache.initialize(connectivityStateHolder, userPreferencesRepository)
 
     val isMeteredNetwork = SmartImageCache.isMeteredNetwork
     val albumArtQualityWifi = SmartImageCache.albumArtQualityWifi
@@ -305,7 +301,8 @@ object SmartImageCache {
     var performanceModeEnabled by androidx.compose.runtime.mutableStateOf(false)
 
     @Volatile
-    private var isInitialized = false
+    var isInitialized = false
+        private set(value) { field = value }
     private val cacheScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate
     )

@@ -338,7 +338,7 @@ fun LibrarySongsTab(
                                     }
                                     
                                     // In selection mode, click toggles selection instead of playing
-                                    val rememberedOnClick: () -> Unit = remember(song, isSelectionMode) {
+                                    val rememberedOnClick: () -> Unit = remember(song.id, isSelectionMode) {
                                         if (isSelectionMode) {
                                             { onSongSelectionToggle(song) }
                                         } else {
@@ -346,7 +346,7 @@ fun LibrarySongsTab(
                                         }
                                     }
                                     
-                                    val rememberedOnLongPress: () -> Unit = remember(song) {
+                                    val rememberedOnLongPress: () -> Unit = remember(song.id) {
                                         { onSongLongPress(song) }
                                     }
 

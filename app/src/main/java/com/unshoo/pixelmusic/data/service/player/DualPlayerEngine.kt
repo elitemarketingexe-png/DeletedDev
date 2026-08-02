@@ -263,7 +263,7 @@ class DualPlayerEngine @Inject constructor(
             // --- Pre-Resolve Next/Prev Tracks with Debounce to prevent flooding ---
             preResolutionJob?.cancel()
             preResolutionJob = scope.launch {
-                delay(600) // Wait for user to stop skipping/navigating
+                delay(150) // Reduced from 600ms for faster online stream pre-resolution
                 try {
                     val currentIndex = playerA.currentMediaItemIndex
                     if (currentIndex != C.INDEX_UNSET) {

@@ -344,7 +344,7 @@ fun LibraryAlbumsTab(
                         if (isListView) {
                             LazyColumn(
                                 modifier = Modifier
-                                    .padding(start = 14.dp, end = if (listState.canScrollForward || listState.canScrollBackward) 24.dp else 14.dp, bottom = 6.dp)
+                                    .padding(start = 14.dp, end = 24.dp, bottom = 6.dp)
                                     .clip(
                                         RoundedCornerShape(
                                             topStart = 16.dp,
@@ -412,7 +412,7 @@ fun LibraryAlbumsTab(
                         } else {
                             LazyVerticalGrid(
                                 modifier = Modifier
-                                    .padding(start = 14.dp, end = if (gridState.canScrollForward || gridState.canScrollBackward) 24.dp else 14.dp, bottom = 6.dp)
+                                    .padding(start = 14.dp, end = 24.dp, bottom = 6.dp)
                                     .clip(
                                         RoundedCornerShape(
                                             topStart = 16.dp,

@@ -62,9 +62,6 @@ fun PlayingEqIcon(
         }
     }
 
-    val phase = phaseAnim.value
-    val wander = wanderAnim.value
-
     // Factor de actividad: 1 = barras, 0 = puntitos (morph suave)
     val activity by animateFloatAsState(
         targetValue = if (isPlaying) 1f else 0f,
@@ -77,6 +74,8 @@ fun PlayingEqIcon(
     val shifts = remember(bars) { List(bars) { i -> i * 0.9f } }
 
     Canvas(modifier = modifier) {
+        val phase = phaseAnim.value
+        val wander = wanderAnim.value
         val w = size.width
         val h = size.height
 

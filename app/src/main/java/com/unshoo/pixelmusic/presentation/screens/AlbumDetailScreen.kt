@@ -270,6 +270,7 @@ fun AlbumDetailScreen(
                     }
                 }
 
+                var topBarSnapJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
                 val nestedScrollConnection = remember {
                     object : NestedScrollConnection {
                         override fun onPreScroll(
@@ -289,7 +290,8 @@ fun AlbumDetailScreen(
                             val consumed = newHeight - previousHeight
 
                             if (consumed.roundToInt() != 0) {
-                                coroutineScope.launch {
+                                topBarSnapJob?.cancel()
+                                topBarSnapJob = coroutineScope.launch {
                                     topBarHeight.snapTo(newHeight)
                                 }
                             }

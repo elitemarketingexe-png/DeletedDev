@@ -96,7 +96,7 @@ class LibraryStateHolder @Inject constructor(
             userPreferencesRepository.hideLocalMediaFlow
         ) { filter, hideLocal ->
             if (hideLocal) StorageFilter.ONLINE else filter
-        }
+        }.distinctUntilChanged()
 
     // --- Paging flows wired to the local Room DB ---
 
@@ -104,7 +104,8 @@ class LibraryStateHolder @Inject constructor(
     val songsPagingFlow: Flow<androidx.paging.PagingData<Song>> =
         combine(_currentSongSortOption, effectiveStorageFilter) { sort, filter ->
             sort to filter
-        }.flatMapLatest { (sortOption, filter) ->
+        }.distinctUntilChanged()
+        .flatMapLatest { (sortOption, filter) ->
             musicRepository.getPaginatedSongs(sortOption, filter)
         }.flowOn(Dispatchers.IO)
 
@@ -116,7 +117,8 @@ class LibraryStateHolder @Inject constructor(
             userPreferencesRepository.minTracksPerAlbumFlow
         ) { sort, filter, minTracks ->
             Triple(sort, filter, minTracks)
-        }.flatMapLatest { (sortOption, filter, minTracks) ->
+        }.distinctUntilChanged()
+        .flatMapLatest { (sortOption, filter, minTracks) ->
             musicRepository.getPaginatedAlbums(sortOption, filter, minTracks)
         }.flowOn(Dispatchers.IO)
 
@@ -127,7 +129,8 @@ class LibraryStateHolder @Inject constructor(
             effectiveStorageFilter
         ) { sortOption, filter ->
             sortOption to filter
-        }.flatMapLatest { (sortOption, filter) ->
+        }.distinctUntilChanged()
+        .flatMapLatest { (sortOption, filter) ->
             musicRepository.getPaginatedArtists(sortOption, filter)
         }.flowOn(Dispatchers.IO)
 
@@ -135,12 +138,14 @@ class LibraryStateHolder @Inject constructor(
     val favoritesPagingFlow: Flow<androidx.paging.PagingData<Song>> =
         combine(_currentFavoriteSortOption, effectiveStorageFilter) { sort, filter ->
             sort to filter
-        }.flatMapLatest { (sortOption, storageFilter) ->
+        }.distinctUntilChanged()
+        .flatMapLatest { (sortOption, storageFilter) ->
             musicRepository.getPaginatedFavoriteSongs(sortOption, storageFilter)
         }.flowOn(Dispatchers.IO)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val favoriteSongCountFlow: Flow<Int> = effectiveStorageFilter
+        .distinctUntilChanged()
         .flatMapLatest { filter -> musicRepository.getFavoriteSongCountFlow(filter) }
         .flowOn(Dispatchers.IO)
 
