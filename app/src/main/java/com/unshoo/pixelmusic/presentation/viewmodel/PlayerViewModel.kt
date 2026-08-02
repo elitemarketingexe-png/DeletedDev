@@ -4744,7 +4744,10 @@ class PlayerViewModel @Inject constructor(
                     startProgressUpdates()
                 }
             } else {
-                if (_playerUiState.value.preparingSongId == null) {
+                // FIX (miniplayer flash): If resolveSongFromMediaItem is transiently null during
+                // buffering (before song is fully cached in allSongsById), do NOT overwrite currentSong
+                // with null if a media item is actively loaded in the player. Keep last-known song.
+                if (_playerUiState.value.preparingSongId == null && playerCtrl.currentMediaItem == null) {
                     playbackStateHolder.updateStablePlayerState {
                         it.copy(
                             currentSong = null,
