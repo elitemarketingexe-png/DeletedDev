@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
@@ -13,6 +14,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -164,42 +166,39 @@ private fun ExpressiveFloatingPillNavigationBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Main navigation floating toolbar — M3 Expressive pill
-        HorizontalFloatingToolbar(
-            modifier = Modifier.weight(1f),
-            expanded = true,
-            colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(
-                toolbarContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ),
-            content = {
+        // Main navigation floating toolbar — M3 Expressive pill container
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .height(64.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            shadowElevation = 4.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 mainItems.forEachIndexed { index, item ->
                     val isSelected = selectedIndex == index
 
-                    // M3 Expressive: spring-based width animation (Section 7 — spatial springs)
-                    val itemWidth by animateDpAsState(
-                        targetValue = if (isSelected && !shouldHideLabel) 100.dp else 48.dp,
+                    val itemWeight by animateFloatAsState(
+                        targetValue = if (isSelected && !shouldHideLabel) 1.5f else 1.0f,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioLowBouncy,
                             stiffness = Spring.StiffnessMediumLow
                         ),
-                        label = "pill_item_width_$index"
+                        label = "pill_item_weight_$index"
                     )
 
-                    val spacerWidth by animateDpAsState(
-                        targetValue = if (index < mainItems.size - 1) 4.dp else 0.dp,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMedium
-                        ),
-                        label = "pill_spacer_$index"
-                    )
-
-                    // M3 Section 4: secondaryContainer for selected indicator, transparent for unselected
                     Surface(
                         onClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -208,13 +207,13 @@ private fun ExpressiveFloatingPillNavigationBar(
                             }
                         },
                         modifier = Modifier
-                            .width(itemWidth)
-                            .height(48.dp),
+                            .weight(itemWeight)
+                            .height(52.dp),
                         shape = CircleShape,
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.secondaryContainer
                         } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
+                            Color.Transparent
                         },
                         contentColor = if (isSelected) {
                             MaterialTheme.colorScheme.onSecondaryContainer
@@ -227,7 +226,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                             horizontalArrangement = Arrangement.Center,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 8.dp)
+                                .padding(horizontal = 12.dp)
                         ) {
                             val iconRes = if (isSelected && item.selectedIconResId != null && item.selectedIconResId != 0) {
                                 item.selectedIconResId
@@ -235,16 +234,11 @@ private fun ExpressiveFloatingPillNavigationBar(
                                 item.iconResId
                             }
 
-                            Box(
-                                modifier = Modifier.size(24.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = iconRes),
-                                    contentDescription = item.label,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
+                            Icon(
+                                painter = painterResource(id = iconRes),
+                                contentDescription = item.label,
+                                modifier = Modifier.size(26.dp)
+                            )
 
                             AnimatedVisibility(
                                 visible = isSelected && !shouldHideLabel,
@@ -252,10 +246,10 @@ private fun ExpressiveFloatingPillNavigationBar(
                                 exit = fadeOut(animationSpec = tween(150)) + shrinkHorizontally(shrinkTowards = Alignment.Start)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = item.label,
-                                        style = MaterialTheme.typography.labelLarge,
+                                        style = MaterialTheme.typography.titleMedium,
                                         maxLines = 1,
                                         fontWeight = FontWeight.Bold,
                                         softWrap = false
@@ -264,15 +258,11 @@ private fun ExpressiveFloatingPillNavigationBar(
                             }
                         }
                     }
-
-                    if (index < mainItems.size - 1) {
-                        Spacer(modifier = Modifier.width(spacerWidth))
-                    }
                 }
             }
-        )
+        }
 
-        // Disconnected Search FAB — M3 Section 8: separate action surface
+        // Disconnected Search FAB — M3 Expressive floating action button
         if (searchItem != null) {
             val isSearchSelected = latestCurrentRoute == searchItem.screen.route
             val searchIconRes = if (isSearchSelected && searchItem.selectedIconResId != null && searchItem.selectedIconResId != 0) {
@@ -298,26 +288,25 @@ private fun ExpressiveFloatingPillNavigationBar(
                         onSearchIconDoubleTap()
                     }
                 },
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(64.dp),
                 shape = CircleShape,
-                // M3 Section 4: primaryContainer for FAB-like action, surfaceContainerHighest for unselected
                 color = if (isSearchSelected) {
                     MaterialTheme.colorScheme.primaryContainer
                 } else {
-                    MaterialTheme.colorScheme.surfaceContainerHighest
+                    MaterialTheme.colorScheme.surfaceContainerHigh
                 },
                 contentColor = if (isSearchSelected) {
                     MaterialTheme.colorScheme.onPrimaryContainer
                 } else {
-                    MaterialTheme.colorScheme.onSurface
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 },
-                shadowElevation = 6.dp  // M3 elevation level 3 for FAB
+                shadowElevation = 4.dp
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Icon(
                         painter = painterResource(id = searchIconRes),
                         contentDescription = searchItem.label,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(26.dp)
                     )
                 }
             }

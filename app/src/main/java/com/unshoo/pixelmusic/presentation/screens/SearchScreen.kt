@@ -544,14 +544,6 @@ fun SearchScreen(
                 }
             }
         }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .height(bottomGradientHeight)
-                .background(brush = bottomGradientBrush)
-        )
     }
 
     if (showSongInfoBottomSheet && selectedSongForInfo != null) {

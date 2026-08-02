@@ -634,24 +634,6 @@ fun HomeScreen(
             }
             } // end PullToRefreshBox
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .height(bottomGradientHeight)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0.0f to Color.Transparent,
-                            0.2f to Color.Transparent,
-                            0.8f to MaterialTheme.colorScheme.surfaceContainerLowest,
-                            1.0f to MaterialTheme.colorScheme.surfaceContainerLowest
-                        )
-                    )
-                )
-        ) {
-
-        }
     }
     if (showOptionsBottomSheet) {
         ModalBottomSheet(
