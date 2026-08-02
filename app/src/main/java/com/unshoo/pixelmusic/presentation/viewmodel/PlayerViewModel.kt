@@ -4657,6 +4657,14 @@ class PlayerViewModel @Inject constructor(
         val currentSongId = playbackStateHolder.stablePlayerState.value.currentSong?.id
         if (currentSongId == mediaItem.mediaId) return
 
+        // MINIPLAYER GLITCH FIX: while a direct tap-request for another song is in
+        // flight (preparingSongId is set), the controller can still report the OLD
+        // current item until the seek/transition lands. Ignore stale reports so the
+        // miniplayer does NOT flash back to the previous song before the tapped song
+        // starts (it would otherwise show: tapped song -> old song -> tapped song).
+        val preparingSongId = _playerUiState.value.preparingSongId
+        if (preparingSongId != null && mediaItem.mediaId != preparingSongId) return
+
         playbackStateHolder.onPlaybackOccurrenceTransition(mediaItem.mediaId)
         preparePlaybackAudioMetadataForMedia(mediaItem.mediaId)
         transitionSchedulerJob?.cancel()
