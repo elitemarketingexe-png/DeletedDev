@@ -379,24 +379,6 @@ fun HomeScreen(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        if (settingsUiState.floatingHeaderBarEnabled) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .zIndex(2f)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.surface,
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-        }
-
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {

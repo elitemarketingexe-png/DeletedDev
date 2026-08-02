@@ -226,20 +226,6 @@ fun ExperimentalSettingsScreen(
                                 }
                             )
 
-                            SwitchSettingItem(
-                                title = "Floating Pill Header Bar",
-                                subtitle = "Enable floating capsule-style headers with top edge blur fade",
-                                checked = uiState.floatingHeaderBarEnabled,
-                                onCheckedChange = settingsViewModel::setFloatingHeaderBarEnabled,
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Title,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                            )
-
                             AnimatedVisibility(
                                 visible = uiState.useAnimatedLyrics,
                                 enter = fadeIn() + expandVertically(),
@@ -331,6 +317,20 @@ fun ExperimentalSettingsScreen(
                                     }
                                 }
                             }
+
+                            SwitchSettingItem(
+                                title = "Floating Pill Header Bar",
+                                subtitle = "Enable floating capsule-style headers with top edge blur fade",
+                                checked = uiState.floatingHeaderBarEnabled,
+                                onCheckedChange = settingsViewModel::setFloatingHeaderBarEnabled,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Title,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            )
 
                             Surface(
                                 color = MaterialTheme.colorScheme.surfaceContainer,
