@@ -365,18 +365,11 @@ fun ExploreScreen(
                         contentSlice.homePageSections
                     }
                     val (cardShelfSections, fromYourLibraryAlbums, remainingSections) = remember(homeSectionsRaw) {
-                        val filtered = homeSectionsRaw.filter { section ->
-                            val title = section.title.lowercase()
-                            !title.contains("cover") && 
-                            !title.contains("remix") &&
-                            !title.contains("new music videos") &&
-                            !title.contains("new albums & singles")
-                        }
                         val cardShelf = mutableListOf<HomePage.Section>()
                         var libraryAlbums = emptyList<AlbumItem>()
                         val remaining = mutableListOf<HomePage.Section>()
 
-                        for (section in filtered) {
+                        for (section in homeSectionsRaw) {
                             val title = section.title.lowercase()
                             if (title.contains("from your library")) {
                                 libraryAlbums = section.items.filterIsInstance<AlbumItem>()
@@ -388,7 +381,7 @@ fun ExploreScreen(
                                         (title.contains("mix") || title.contains("listen again") || 
                                         title.contains("favorites") || title.contains("suggest") || 
                                         title.contains("recommend") || title.contains("radio") || 
-                                        title.contains("similar") || title.contains("played") ||
+                                        title.contains("played") ||
                                         title.contains("liked") || title.contains("cached") ||
                                         title.contains("you might like") || title.contains("recently") ||
                                         title.contains("most"))
