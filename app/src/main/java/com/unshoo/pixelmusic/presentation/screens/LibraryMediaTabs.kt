@@ -224,6 +224,9 @@ fun LibraryAlbumsTab(
         isLoading || refreshState is LoadState.Loading
     )
 
+    // Upstream PixelPlayerOSS pattern: plain when-branching (no Crossfade).
+    // Crossfade double-composed the skeleton + content trees on every state swap,
+    // which caused jank in the image grid and a visible 220ms fade on load.
     val pageTarget = when {
         refreshState is LoadState.Error && albums.itemCount == 0 -> "error"
         shouldShowInitialLoading -> "loading"
@@ -231,12 +234,7 @@ fun LibraryAlbumsTab(
         else -> "content"
     }
 
-    Crossfade(
-        targetState = pageTarget,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "AlbumsTabContentTransition"
-    ) { state ->
-        when (state) {
+    when (pageTarget) {
             "error" -> {
                 val error = (refreshState as? LoadState.Error)?.error
                 Box(
@@ -489,7 +487,6 @@ fun LibraryAlbumsTab(
         }
     }
 }
-}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -552,12 +549,8 @@ fun LibraryArtistsTab(
         else -> "content"
     }
 
-    Crossfade(
-        targetState = pageTarget,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "ArtistsTabContentTransition"
-    ) { state ->
-        when (state) {
+    // Upstream pattern: plain when-branching — no Crossfade double-composition.
+    when (pageTarget) {
             "error" -> {
                 val error = (refreshState as? LoadState.Error)?.error
                 Box(
@@ -690,7 +683,6 @@ fun LibraryArtistsTab(
             }
         }
     }
-}
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)

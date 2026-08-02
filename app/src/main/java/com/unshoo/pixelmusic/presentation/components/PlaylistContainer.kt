@@ -2,9 +2,9 @@ package com.unshoo.pixelmusic.presentation.components
 
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
 
-import androidx.compose.animation.Crossfade
+
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
+
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -35,7 +35,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Topic
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Link
@@ -48,22 +47,16 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.PlaylistViewModel
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material3.IconButton
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -85,9 +78,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -134,70 +125,61 @@ fun PlaylistContainer(
     playlistSelectionStateHolder: PlaylistSelectionStateHolder? = null
 ) {
 
-    val playlistStateTarget = when {
-        playlistUiState.isLoading && filteredPlaylists.isEmpty() -> "loading"
-        filteredPlaylists.isEmpty() && !playlistUiState.isLoading -> "empty"
-        else -> "content"
-    }
+    // Upstream PixelPlayerOSS pattern: plain conditionals — no Crossfade.
+    // Crossfade double-composed the loading + content trees on every transition,
+    // causing jank when switching to the Playlists tab.
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (playlistUiState.isLoading && filteredPlaylists.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) { ContainedLoadingIndicator() }
+        }
 
-    Crossfade(
-        targetState = playlistStateTarget,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "PlaylistContainerStateTransition",
-        modifier = Modifier.fillMaxSize()
-    ) { state ->
-        when (state) {
-            "loading" -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator() }
-            }
-            "empty" -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.TopCenter
+        if (filteredPlaylists.isEmpty() && !playlistUiState.isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column(
-                        modifier = Modifier.padding(top = 28.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        SineWaveLine(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(32.dp)
-                                .padding(horizontal = 8.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
-                            alpha = 0.95f,
-                            strokeWidth = 3.dp,
-                            amplitude = 4.dp,
-                            waves = 7.6f,
-                            phase = 0f
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Icon(
-                            Icons.AutoMirrored.Rounded.PlaylistPlay,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            stringResource(R.string.presentation_batch_e_no_playlist_created),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            stringResource(R.string.presentation_batch_e_new_playlist_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    SineWaveLine(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(32.dp)
+                            .padding(horizontal = 8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+                        alpha = 0.95f,
+                        strokeWidth = 3.dp,
+                        amplitude = 4.dp,
+                        waves = 7.6f,
+                        phase = 0f
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Icon(
+                        Icons.AutoMirrored.Rounded.PlaylistPlay,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.presentation_batch_e_no_playlist_created),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        stringResource(R.string.presentation_batch_e_new_playlist_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
-            else -> {
+        } else {
             if (isAddingToPlaylist) {
                 PlaylistItems(
                     currentSong = currentSong,
@@ -239,7 +221,6 @@ fun PlaylistContainer(
             }
         }
     }
-}
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)

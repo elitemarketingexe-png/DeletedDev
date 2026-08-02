@@ -37,7 +37,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -109,7 +108,7 @@ import com.unshoo.pixelmusic.data.preferences.ThemePreference
 import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
 import com.unshoo.pixelmusic.data.service.MusicService
 import com.unshoo.pixelmusic.data.worker.SyncManager
-import com.unshoo.pixelmusic.data.worker.SyncProgress
+
 import com.unshoo.pixelmusic.presentation.components.AllFilesAccessDialog
 import com.unshoo.pixelmusic.presentation.components.AppSidebarDrawer
 import com.unshoo.pixelmusic.presentation.components.CrashReportDialog
@@ -133,7 +132,7 @@ import com.unshoo.pixelmusic.presentation.screens.SetupScreen
 import com.unshoo.pixelmusic.presentation.viewmodel.MainViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import com.unshoo.pixelmusic.ui.theme.PixelMusicTheme
-import com.unshoo.pixelmusic.ui.theme.slowSpatial
+
 import com.unshoo.pixelmusic.utils.CrashHandler
 import com.unshoo.pixelmusic.utils.AppLocaleManager
 import com.unshoo.pixelmusic.utils.LogUtils
@@ -661,10 +660,10 @@ class MainActivity : ComponentActivity() {
     private fun MainAppContent(playerViewModel: PlayerViewModel, mainViewModel: MainViewModel) {
         Trace.beginSection("MainActivity.MainAppContent")
         val navController = rememberNavController()
-        val isSyncing by mainViewModel.isSyncing.collectAsStateWithLifecycle()
-        val isLibraryEmpty by mainViewModel.isLibraryEmpty.collectAsStateWithLifecycle()
-        val hasCompletedInitialSync by mainViewModel.hasCompletedInitialSync.collectAsStateWithLifecycle()
-        val syncProgress by mainViewModel.syncProgress.collectAsStateWithLifecycle()
+        // Note: initial-sync feedback is handled inside LibraryScreen itself
+        // (in-place skeletons + LibraryInlineSyncIndicator + LibrarySyncOverlay for
+        // the empty first-run case) — matching upstream PixelPlayerOSS. No blocking
+        // full-screen overlay here, so the app UI is interactive during first sync.
         
         // isMediaControllerReady used below for playlist navigation gate
         val isMediaControllerReady by playerViewModel.isMediaControllerReady.collectAsStateWithLifecycle()
@@ -701,46 +700,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Estado para controlar si el indicador de carga puede mostrarse después de un delay
-        var canShowLoadingIndicator by remember { mutableStateOf(false) }
-        // Track when the loading indicator was first shown for minimum display time
-        var loadingShownTimestamp by remember { mutableStateOf(0L) }
-        val minimumDisplayDuration = 1500L // Show loading for at least 1.5 seconds
-
-        val shouldPotentiallyShowLoading = isSyncing && isLibraryEmpty && !hasCompletedInitialSync
-
-        LaunchedEffect(shouldPotentiallyShowLoading) {
-            if (shouldPotentiallyShowLoading) {
-                // Espera un breve período antes de permitir que se muestre el indicador de carga
-                // Ajusta este valor según sea necesario (por ejemplo, 300-500 ms)
-                delay(300L)
-                // Vuelve a verificar la condición después del delay,
-                // ya que el estado podría haber cambiado.
-                if (mainViewModel.isSyncing.value && mainViewModel.isLibraryEmpty.value) {
-                    canShowLoadingIndicator = true
-                    loadingShownTimestamp = System.currentTimeMillis()
-                }
-            } else {
-                // Ensure minimum display time before hiding
-                if (canShowLoadingIndicator && loadingShownTimestamp > 0) {
-                    val elapsed = System.currentTimeMillis() - loadingShownTimestamp
-                    val remaining = minimumDisplayDuration - elapsed
-                    if (remaining > 0) {
-                        delay(remaining)
-                    }
-                }
-                canShowLoadingIndicator = false
-                loadingShownTimestamp = 0L
-            }
-        }
-
         Box(modifier = Modifier.fillMaxSize()) {
             MainUI(playerViewModel, navController)
-
-            // Muestra el LoadingOverlay solo si las condiciones se cumplen Y el delay ha pasado
-            if (canShowLoadingIndicator) {
-                LoadingOverlay(syncProgress)
-            }
 
             // Dynamic Island — floating now-playing pill below the status bar / camera cutout
             val dynamicIslandEnabled by userPreferencesRepository.dynamicIslandEnabledFlow
@@ -1211,52 +1172,6 @@ class MainActivity : ComponentActivity() {
         }
 
         Trace.endSection()
-    }
-
-    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
-    @Composable
-    private fun LoadingOverlay(syncProgress: SyncProgress) {
-        // Animate progress smoothly instead of jumping in steps (M3 slow spatial spring)
-        val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
-            targetValue = syncProgress.progress,
-            animationSpec = MaterialTheme.motionScheme.slowSpatial(),
-            label = "SyncProgressAnimation"
-        )
-        
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.9f))
-                .clickable(enabled = false, onClick = {}),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(horizontal = 32.dp)
-            ) {
-                CircularWavyProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Preparing your library...",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                
-                if (syncProgress.hasProgress) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    androidx.compose.material3.LinearWavyProgressIndicator(
-                        progress = { animatedProgress },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Scanned ${syncProgress.currentCount} of ${syncProgress.totalCount} songs",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
     }
 
 
