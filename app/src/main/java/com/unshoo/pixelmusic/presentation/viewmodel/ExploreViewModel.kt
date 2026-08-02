@@ -195,12 +195,7 @@ class ExploreViewModel @Inject constructor(
             }
 
             if (home != null) {
-                val rawSections = home.sections.filter { section ->
-                    val title = section.title.lowercase()
-                    !title.contains("new music videos") &&
-                            !title.contains("new albums & singles") &&
-                            !title.contains("trending")
-                }
+                val rawSections = home.sections
 
                 // Progressive streaming: map to domain UI models once
                 val uiSections = rawSections.map { it.toUiModel() }

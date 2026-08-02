@@ -779,10 +779,6 @@ fun ExploreScreen(
 
                             remainingSections.forEachIndexed { index, section ->
                                 val titleLower = section.title.lowercase()
-                                if (titleLower.contains("local") || 
-                                    titleLower.contains("trending") || 
-                                    titleLower.contains("long listens")
-                                ) return@forEachIndexed
 
                                 val isShelf = (section.title.contains("recently played", ignoreCase = true) ||
                                               section.title.contains("most played", ignoreCase = true) ||
