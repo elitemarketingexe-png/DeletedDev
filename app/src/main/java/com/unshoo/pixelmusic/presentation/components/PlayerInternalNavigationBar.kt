@@ -174,7 +174,7 @@ private fun ExpressiveFloatingPillNavigationBar(
         Surface(
             modifier = Modifier
                 .weight(1f)
-                .height(64.dp),
+                .height(58.dp),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -205,7 +205,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                         },
                         modifier = Modifier
                             .weight(itemWeight)
-                            .height(56.dp),
+                            .height(46.dp),
                         shape = CircleShape,
                         color = if (isSelected) {
                             MaterialTheme.colorScheme.secondaryContainer

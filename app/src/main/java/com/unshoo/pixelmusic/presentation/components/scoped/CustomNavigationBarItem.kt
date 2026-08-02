@@ -113,12 +113,12 @@ fun RowScope.CustomNavigationBarItem(
     )
 
     val density = LocalDensity.current.density
-    val indicatorWidth = 64.dp
-    val indicatorHeight = 32.dp
-    val iconWidth = 48.dp
+    val indicatorWidth = 52.dp
+    val indicatorHeight = 26.dp
+    val iconWidth = 44.dp
     val iconHeight = 24.dp
-    val indicatorPadding = 4.dp
-    val indicatorShape = RoundedCornerShape(16.dp)
+    val indicatorPadding = 2.dp
+    val indicatorShape = RoundedCornerShape(13.dp)
 
     // Layout principal
     Column(
