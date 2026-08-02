@@ -141,7 +141,7 @@ internal fun rememberSheetThemeState(
     }
 
     val isPreparingPlayback = remember(preparingSongId, currentSong?.id) {
-        preparingSongId != null && preparingSongId == currentSong?.id
+        preparingSongId != null && (currentSong == null || preparingSongId == currentSong.id)
     }
 
     val systemColorSchemeForFull = remember(resolveIsDarkForFull, colorPalette, systemColorScheme) {
