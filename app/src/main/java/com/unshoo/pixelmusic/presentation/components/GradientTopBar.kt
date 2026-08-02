@@ -124,7 +124,7 @@ fun HomeGradientTopBar(
 
     if (floatingHeaderEnabled) {
         val pillElevation by animateDpAsState(
-            targetValue = if (isScrolled) 4.dp else 0.dp,
+            targetValue = if (isScrolled) 1.5.dp else 0.dp,
             label = "pill_elevation_anim"
         )
 
