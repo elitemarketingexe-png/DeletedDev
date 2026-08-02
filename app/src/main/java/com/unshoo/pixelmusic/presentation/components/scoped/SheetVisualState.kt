@@ -179,7 +179,7 @@ internal fun rememberSheetVisualState(
     }
 
     val actualCollapsedStateHorizontalPadding =
-        if (navBarStyle == NavBarStyle.FULL_WIDTH) 0.dp else 16.dp
+        if (navBarStyle == NavBarStyle.FULL_WIDTH) 0.dp else collapsedStateHorizontalPadding
     val collapsedStateHorizontalPaddingPx = remember(actualCollapsedStateHorizontalPadding, density) {
         with(density) { actualCollapsedStateHorizontalPadding.toPx() }
     }

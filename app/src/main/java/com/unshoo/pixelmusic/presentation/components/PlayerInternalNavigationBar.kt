@@ -66,8 +66,8 @@ import kotlinx.coroutines.launch
 internal val NavBarContentHeight = 76.dp
 internal val NavBarCompactContentHeight = 64.dp
 internal val NavBarContentHeightFullWidth = NavBarContentHeight
-private val FloatingPillContentHeight = 64.dp
-private val MainScreenBottomGradientExtraHeight = 64.dp + MiniPlayerBottomSpacer + 8.dp
+private val FloatingPillContentHeight = 76.dp
+private val MainScreenBottomGradientExtraHeight = 76.dp + MiniPlayerBottomSpacer + 8.dp
 internal val MaxNavigationBarBottomInset = 96.dp
 
 internal fun sanitizeNavigationBarBottomInset(systemNavBarInset: Dp): Dp {
