@@ -4249,6 +4249,7 @@ class PlayerViewModel @Inject constructor(
                 ?: libraryStateHolder.allSongsById.value[mediaItem.mediaId]
                 ?: _playerUiState.value.currentPlaybackQueue.find { it.id == mediaItem.mediaId }
                 ?: mediaMapper.resolveSongFromMediaItem(mediaItem)
+                ?: playbackStateHolder.stablePlayerState.value.currentSong?.takeIf { it.id == mediaItem.mediaId }
 
         return resolvedSong?.let { normalizeArtworkForResolvedSong(it, mediaItem) }
     }
