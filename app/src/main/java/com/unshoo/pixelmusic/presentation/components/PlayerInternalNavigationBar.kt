@@ -158,46 +158,37 @@ private fun ExpressiveFloatingPillNavigationBar(
         modifier = modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         HorizontalFloatingToolbar(
             modifier = Modifier.weight(1f),
             expanded = true,
             colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(
-                toolbarContentColor = MaterialTheme.colorScheme.onSurface,
-                toolbarContainerColor = MaterialTheme.colorScheme.primary
+                toolbarContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
             ),
             content = {
                 mainItems.forEachIndexed { index, item ->
                     val isSelected = selectedIndex == index
 
                     val itemWidth by animateDpAsState(
-                        targetValue = 48.dp,
+                        targetValue = if (isSelected && !shouldHideLabel) 92.dp else 44.dp,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessLow
                         ),
-                        label = "item_width_$index"
-                    )
-
-                    val labelWidth by animateDpAsState(
-                        targetValue = if (isSelected && !shouldHideLabel) 80.dp else 0.dp,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessLow
-                        ),
-                        label = "label_width_$index"
+                        label = "pill_item_width_$index"
                     )
 
                     val spacerWidth by animateDpAsState(
-                        targetValue = if (index < mainItems.size - 1) 8.dp else 0.dp,
+                        targetValue = if (index < mainItems.size - 1) 2.dp else 0.dp,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessLow
                         ),
-                        label = "spacer_width_$index"
+                        label = "pill_spacer_width_$index"
                     )
 
                     Surface(
@@ -208,18 +199,18 @@ private fun ExpressiveFloatingPillNavigationBar(
                             }
                         },
                         modifier = Modifier
-                            .width(itemWidth + labelWidth)
+                            .width(itemWidth)
                             .height(48.dp),
                         shape = CircleShape,
                         color = if (isSelected) {
-                            MaterialTheme.colorScheme.background
+                            MaterialTheme.colorScheme.primaryContainer
                         } else {
-                            MaterialTheme.colorScheme.primary
+                            MaterialTheme.colorScheme.surfaceContainerHigh
                         },
                         contentColor = if (isSelected) {
-                            MaterialTheme.colorScheme.primary
+                            MaterialTheme.colorScheme.onPrimaryContainer
                         } else {
-                            MaterialTheme.colorScheme.background
+                            MaterialTheme.colorScheme.onSurfaceVariant
                         }
                     ) {
                         Row(
@@ -227,7 +218,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                             horizontalArrangement = Arrangement.Center,
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 8.dp)
+                                .padding(horizontal = 6.dp)
                         ) {
                             val iconRes = if (isSelected && item.selectedIconResId != null && item.selectedIconResId != 0) {
                                 item.selectedIconResId
@@ -235,19 +226,21 @@ private fun ExpressiveFloatingPillNavigationBar(
                                 item.iconResId
                             }
 
+                            val iconColor = if (isSelected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+
                             Box(
-                                modifier = Modifier.size(24.dp),
+                                modifier = Modifier.size(22.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     painter = painterResource(id = iconRes),
                                     contentDescription = item.label,
-                                    tint = if (isSelected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.background
-                                    },
-                                    modifier = Modifier.size(24.dp)
+                                    tint = iconColor,
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
 
@@ -257,13 +250,13 @@ private fun ExpressiveFloatingPillNavigationBar(
                                 exit = fadeOut(animationSpec = tween(150)) + shrinkHorizontally(shrinkTowards = Alignment.Start)
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = item.label,
-                                        style = MaterialTheme.typography.labelLarge,
+                                        style = MaterialTheme.typography.labelMedium,
                                         maxLines = 1,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                                         softWrap = false
                                     )
                                 }
@@ -299,17 +292,18 @@ private fun ExpressiveFloatingPillNavigationBar(
                         onSearchIconDoubleTap()
                     }
                 },
-                modifier = Modifier.size(64.dp),
+                modifier = Modifier.size(48.dp),
                 shape = CircleShape,
-                color = if (isSearchSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-                contentColor = if (isSearchSelected) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onPrimaryContainer,
-                shadowElevation = 8.dp
+                color = if (isSearchSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = if (isSearchSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                shadowElevation = 2.dp
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Icon(
                         painter = painterResource(id = searchIconRes),
                         contentDescription = searchItem.label,
-                        modifier = Modifier.size(24.dp)
+                        tint = if (isSearchSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
