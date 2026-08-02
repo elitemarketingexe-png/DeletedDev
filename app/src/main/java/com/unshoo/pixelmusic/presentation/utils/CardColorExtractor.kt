@@ -281,9 +281,15 @@ fun rememberDominantCardColor(
         if (!imageUrl.isNullOrBlank()) CardColorExtractor.colorCache.get(imageUrl) else null
     }
 
+    val whiteSolid = Color.White
+    val whiteBlendFraction = if (isDarkTheme) 0.14f else 0.22f
+
     var targetColor by remember(imageUrl, baseColor, isDarkTheme) {
         mutableStateOf(
-            if (initialArgb != null) lerp(baseColor, Color(initialArgb), blendFraction) else baseColor
+            if (initialArgb != null) {
+                val extracted = lerp(baseColor, Color(initialArgb), blendFraction)
+                lerp(extracted, whiteSolid, whiteBlendFraction)
+            } else baseColor
         )
     }
 
@@ -293,7 +299,8 @@ fun rememberDominantCardColor(
             delay(120)
             val argb = CardColorExtractor.extractColorArgb(context, imageUrl)
             if (argb != null) {
-                targetColor = lerp(baseColor, Color(argb), blendFraction)
+                val extracted = lerp(baseColor, Color(argb), blendFraction)
+                targetColor = lerp(extracted, whiteSolid, whiteBlendFraction)
             }
         }
     }
