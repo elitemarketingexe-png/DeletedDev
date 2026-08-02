@@ -45,17 +45,21 @@ fun SineWaveLine(
 ) {
     val density = LocalDensity.current
 
-    val infiniteTransition = rememberInfiniteTransition(label = "SineWaveAnimation")
-    val animatedPhase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 2f * PI.toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = animationDurationMillis, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "phaseAnimation"
-    )
-    val currentPhase = if (animate == true) animatedPhase else phase
+    val currentPhase = if (animate == true) {
+        val infiniteTransition = rememberInfiniteTransition(label = "SineWaveAnimation")
+        val animatedPhase by infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 2f * PI.toFloat(),
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = animationDurationMillis, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "phaseAnimation"
+        )
+        animatedPhase
+    } else {
+        phase
+    }
 
     val cachedPath = remember { Path() }
 
