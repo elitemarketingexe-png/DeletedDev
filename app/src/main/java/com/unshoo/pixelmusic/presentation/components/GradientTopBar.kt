@@ -123,6 +123,11 @@ fun HomeGradientTopBar(
     }
 
     if (floatingHeaderEnabled) {
+        val pillElevation by animateDpAsState(
+            targetValue = if (isScrolled) 4.dp else 0.dp,
+            label = "pill_elevation_anim"
+        )
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -135,7 +140,7 @@ fun HomeGradientTopBar(
                 shape = CircleShape,
                 color = solidTintedColor,
                 contentColor = MaterialTheme.colorScheme.onSurface,
-                shadowElevation = 4.dp
+                shadowElevation = pillElevation
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -161,35 +166,48 @@ fun HomeGradientTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FilledIconButton(
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = solidTintedColor,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    onClick = onTelegramClick,
-                    modifier = Modifier.size(44.dp),
-                    shape = CircleShape
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Transparent,
+                    shadowElevation = pillElevation
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Cloud,
-                        contentDescription = stringResource(R.string.presentation_batch_g_topbar_cd_telegram),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    FilledIconButton(
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = solidTintedColor,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        onClick = onTelegramClick,
+                        modifier = Modifier.size(44.dp),
+                        shape = CircleShape
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Cloud,
+                            contentDescription = stringResource(R.string.presentation_batch_g_topbar_cd_telegram),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
-                FilledIconButton(
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = solidTintedColor,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    onClick = onNavigationIconClick,
-                    modifier = Modifier.size(44.dp),
-                    shape = CircleShape
+
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Transparent,
+                    shadowElevation = pillElevation
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.rounded_settings_24),
-                        contentDescription = stringResource(R.string.settings_top_bar_title),
-                        modifier = Modifier.size(20.dp)
-                    )
+                    FilledIconButton(
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = solidTintedColor,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        onClick = onNavigationIconClick,
+                        modifier = Modifier.size(44.dp),
+                        shape = CircleShape
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.rounded_settings_24),
+                            contentDescription = stringResource(R.string.settings_top_bar_title),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
