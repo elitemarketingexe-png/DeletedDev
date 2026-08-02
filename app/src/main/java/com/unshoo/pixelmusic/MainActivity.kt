@@ -843,14 +843,15 @@ class MainActivity : ComponentActivity() {
             rootView.rootView?.isHapticFeedbackEnabled = hapticsEnabled
         }
 
-        val horizontalPadding = if (navBarStyle == NavBarStyle.DEFAULT) {
-            if (systemNavBarInset > 0.dp) {
-                if (systemNavBarInset > 30.dp) 14.dp else systemNavBarInset
-            } else {
-                14.dp
+        val horizontalPadding = when (navBarStyle) {
+            NavBarStyle.DEFAULT -> {
+                if (systemNavBarInset > 0.dp) {
+                    if (systemNavBarInset > 30.dp) 14.dp else systemNavBarInset
+                } else {
+                    14.dp
+                }
             }
-        } else {
-            0.dp
+            else -> 0.dp
         }
         val targetBottomBarPadding = if (navBarStyle == NavBarStyle.FULL_WIDTH) {
             0.dp
@@ -1030,27 +1031,25 @@ class MainActivity : ComponentActivity() {
                                 { playerViewModel.onSearchNavIconDoubleTapped() }
                             }
 
-                            Surface(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    .padding(bottom = bottomBarPadding)
-                                    .onSizeChanged { componentHeightPx = it.height }
-                                    .graphicsLayer {
-                                        val hideFraction = if (showPlayerContentArea) {
-                                            playerViewModel.playerContentExpansionFraction.value.coerceIn(0f, 1f)
-                                        } else {
-                                            0f
-                                        }
-                                        translationY = (componentHeightPx + shadowOverflowPx + bottomBarPaddingPx) * hideFraction
-                                        alpha = 1f
+                            val isFloatingPill = navBarStyle == NavBarStyle.FLOATING_PILL
+                            val navBarContainerModifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .padding(bottom = bottomBarPadding)
+                                .onSizeChanged { componentHeightPx = it.height }
+                                .graphicsLayer {
+                                    val hideFraction = if (showPlayerContentArea) {
+                                        playerViewModel.playerContentExpansionFraction.value.coerceIn(0f, 1f)
+                                    } else {
+                                        0f
                                     }
-                                    .height(navBarHeight)
-                                    .padding(horizontal = horizontalPadding),
-                                color = NavigationBarDefaults.containerColor,
-                                shape = actualShape,
-                                shadowElevation = navBarElevation
-                            ) {
+                                    translationY = (componentHeightPx + shadowOverflowPx + bottomBarPaddingPx) * hideFraction
+                                    alpha = 1f
+                                }
+                                .height(navBarHeight)
+                                .padding(horizontal = horizontalPadding)
+
+                            val navBarContent: @Composable () -> Unit = {
                                 PlayerInternalNavigationBar(
                                     navController = navController,
                                     navItems = commonNavItems,
@@ -1061,6 +1060,22 @@ class MainActivity : ComponentActivity() {
                                     onSearchIconDoubleTap = onSearchIconDoubleTap,
                                     modifier = Modifier.fillMaxSize()
                                 )
+                            }
+
+                            if (isFloatingPill) {
+                                // No parent Surface — floating pill draws its own containers
+                                Box(modifier = navBarContainerModifier) {
+                                    navBarContent()
+                                }
+                            } else {
+                                Surface(
+                                    modifier = navBarContainerModifier,
+                                    color = NavigationBarDefaults.containerColor,
+                                    shape = actualShape,
+                                    shadowElevation = navBarElevation
+                                ) {
+                                    navBarContent()
+                                }
                             }
                         }
                     }
