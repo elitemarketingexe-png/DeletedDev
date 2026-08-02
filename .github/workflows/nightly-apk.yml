@@ -119,9 +119,6 @@ jobs:
       - name: Build Phone nightly release APKs
         run: ./gradlew :app:assembleRelease -Ppixelmusic.enableAbiSplits=true -Ppixelmusic.onlyArm64=true -PAPP_VERSION_CODE=${{ steps.commit_count.outputs.count }}
 
-      - name: Build Wear OS nightly release APK
-        run: ./gradlew :wear:assembleRelease -PAPP_VERSION_CODE=${{ steps.commit_count.outputs.count }}
-
       - name: Verify Phone nightly split APKs
         run: |
           BUILD_TOOLS_VERSION="$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
