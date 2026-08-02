@@ -63,6 +63,7 @@ import kotlinx.coroutines.launch
 internal val NavBarContentHeight = 76.dp
 internal val NavBarCompactContentHeight = 64.dp
 internal val NavBarContentHeightFullWidth = NavBarContentHeight
+private val FloatingPillContentHeight = 64.dp
 private val MainScreenBottomGradientExtraHeight = 64.dp + MiniPlayerBottomSpacer + 8.dp
 internal val MaxNavigationBarBottomInset = 96.dp
 
@@ -90,6 +91,12 @@ internal fun calculatePlayerSheetCollapsedTargetY(
 internal fun resolveNavBarContentHeight(compactMode: Boolean, heightOffset: Dp = 0.dp): Dp =
     (if (compactMode) NavBarCompactContentHeight else NavBarContentHeight) + heightOffset
 
+internal fun resolveNavBarContentHeight(navBarStyle: String, compactMode: Boolean, heightOffset: Dp = 0.dp): Dp =
+    when (navBarStyle) {
+        NavBarStyle.FLOATING_PILL -> FloatingPillContentHeight + heightOffset
+        else -> resolveNavBarContentHeight(compactMode, heightOffset)
+    }
+
 internal fun resolveMainScreenBottomGradientHeight(compactMode: Boolean, heightOffset: Dp = 0.dp): Dp =
     resolveNavBarContentHeight(compactMode, heightOffset) + MainScreenBottomGradientExtraHeight
 
@@ -99,7 +106,7 @@ internal fun resolveNavBarSurfaceHeight(
     compactMode: Boolean,
     heightOffset: Dp = 0.dp
 ): Dp {
-    val contentHeight = resolveNavBarContentHeight(compactMode, heightOffset)
+    val contentHeight = resolveNavBarContentHeight(navBarStyle, compactMode, heightOffset)
     return if (navBarStyle == NavBarStyle.FULL_WIDTH) {
         contentHeight + systemNavBarInset
     } else {
@@ -118,7 +125,7 @@ internal fun resolveNavBarOccupiedHeight(
     compactMode: Boolean,
     heightOffset: Dp = 0.dp
 ): Dp {
-    val contentHeight = resolveNavBarContentHeight(compactMode, heightOffset)
+    val contentHeight = resolveNavBarContentHeight(navBarStyle, compactMode, heightOffset)
     return if (navBarStyle == NavBarStyle.FULL_WIDTH) {
         contentHeight + systemNavBarInset
     } else {
@@ -157,8 +164,7 @@ private fun ExpressiveFloatingPillNavigationBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            .padding(start = 16.dp, end = 16.dp, bottom = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
