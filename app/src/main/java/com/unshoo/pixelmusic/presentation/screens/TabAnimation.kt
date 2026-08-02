@@ -2,16 +2,15 @@ package com.unshoo.pixelmusic.presentation.screens
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
-import com.unshoo.pixelmusic.ui.theme.defaultSpatial
-import com.unshoo.pixelmusic.ui.theme.fastEffects
-import com.unshoo.pixelmusic.ui.theme.fastSpatial
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,7 +27,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun TabAnimation(
     modifier: Modifier = Modifier,
@@ -49,17 +47,16 @@ fun TabAnimation(
     val offsetX = remember { Animatable(0f) }
     var hasAnimatedSelectionChange by remember { mutableStateOf(false) }
 
-    // M3 Expressive tokens: colors → effects springs (no overshoot), selection pulse → fast spatial.
-    val motionScheme = MaterialTheme.motionScheme
+    val springSpec = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
 
     val backgroundColor by animateColorAsState(
         targetValue = if (isSelected) selectedColor else unselectedColor,
-        animationSpec = motionScheme.fastEffects(),
+        animationSpec = tween(durationMillis = 200),
         label = "TabBackground"
     )
     val contentColor by animateColorAsState(
         targetValue = if (isSelected) onSelectedColor else onUnselectedColor,
-        animationSpec = motionScheme.fastEffects(),
+        animationSpec = tween(durationMillis = 200),
         label = "TabContent"
     )
 
@@ -73,13 +70,11 @@ fun TabAnimation(
 
         if (isSelected) {
             launch {
-                // Spatial springs overshoot by design (0.6 damping / 800 stiffness) — the
-                // classic "pop" on selection, then a soft settle.
-                scale.animateTo(1.05f, animationSpec = motionScheme.fastSpatial())
-                scale.animateTo(1f, animationSpec = motionScheme.defaultSpatial())
+                scale.animateTo(1.05f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium))
+                scale.animateTo(1f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium))
             }
         } else {
-            scale.animateTo(1f, animationSpec = motionScheme.fastEffects())
+            scale.animateTo(1f, animationSpec = tween(150))
         }
         offsetX.snapTo(0f)
     }

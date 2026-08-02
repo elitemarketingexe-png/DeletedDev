@@ -4,12 +4,8 @@ import DelimiterConfigScreen
 import com.unshoo.pixelmusic.presentation.screens.WordDelimiterConfigScreen
 import android.annotation.SuppressLint
 import androidx.annotation.OptIn
-import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -19,7 +15,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,7 +67,7 @@ import com.unshoo.pixelmusic.presentation.viewmodel.PlaylistViewModel
 import kotlinx.coroutines.flow.first
 import com.unshoo.pixelmusic.presentation.components.ScreenWrapper
 
-@OptIn(UnstableApi::class, ExperimentalSharedTransitionApi::class)
+@OptIn(UnstableApi::class)
 @SuppressLint("UnrememberedGetBackStackEntry")
 @Composable
 fun AppNavigation(
@@ -90,11 +85,6 @@ fun AppNavigation(
     }
 
     startDestination?.let { initialRoute ->
-        // M3 Expressive: SharedTransitionLayout powers cross-destination container transforms
-        // (e.g. album art flying from the Library grid into the Album Detail hero).
-        SharedTransitionLayout(
-            modifier = Modifier.fillMaxSize()
-        ) {
         NavHost(
             navController = navController,
             startDestination = initialRoute
@@ -250,12 +240,7 @@ fun AppNavigation(
                 },
             ) {
                 ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
-                    LibraryScreen(
-                        navController = navController,
-                        playerViewModel = playerViewModel,
-                        sharedTransitionScope = this@SharedTransitionLayout,
-                        animatedVisibilityScope = this
-                    )
+                    LibraryScreen(navController = navController, playerViewModel = playerViewModel)
                 }
             }
             composable(
@@ -462,9 +447,7 @@ fun AppNavigation(
                         AlbumDetailScreen(
                             albumId = albumId,
                             navController = navController,
-                            playerViewModel = playerViewModel,
-                            sharedTransitionScope = this@SharedTransitionLayout,
-                            animatedVisibilityScope = this
+                            playerViewModel = playerViewModel
                         )
                     }
                 }
@@ -658,7 +641,6 @@ fun AppNavigation(
                     )
                 }
             }
-        }
         }
     }
 }
