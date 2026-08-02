@@ -782,7 +782,10 @@ fun ExploreScreen(
 
                             remainingSections.forEachIndexed { index, section ->
                                 val titleLower = section.title.lowercase()
-                                if (titleLower.contains("local")) return@forEachIndexed
+                                if (titleLower.contains("local") || 
+                                    titleLower.contains("trending") || 
+                                    titleLower.contains("long listens")
+                                ) return@forEachIndexed
 
                                 val isShelf = (section.title.contains("recently played", ignoreCase = true) ||
                                               section.title.contains("most played", ignoreCase = true) ||
@@ -931,7 +934,8 @@ fun YTItemCarousel(
                         artist = item,
                         onClick = {
                             navController.navigateSafely(Screen.ArtistDetail.createRoute(item.id))
-                        }
+                        },
+                        playerViewModel = playerViewModel
                     )
                 }
             }
@@ -1493,81 +1497,160 @@ fun AlbumCarouselItem(
 @Composable
 fun ArtistCardItem(
     artist: ArtistItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    playerViewModel: PlayerViewModel? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val bodyMediumStyle = MaterialTheme.typography.bodyMedium
-    val titleStyle = remember(bodyMediumStyle, colorScheme.onSurface) {
-        bodyMediumStyle.copy(
+    val artistId = artist.id
+    val artistName = artist.title
+    val artistThumbnail = artist.thumbnail
+
+    val isDarkTheme = isSystemInDarkTheme()
+    val baseSurface = colorScheme.surfaceContainerHigh
+    val animatedBgColor = rememberDominantCardColor(
+        imageUrl = artistThumbnail,
+        baseColor = baseSurface,
+        isDarkTheme = isDarkTheme,
+        darkBlendFraction = 0.35f,
+        lightBlendFraction = 0.50f
+    )
+
+    val playEndpoint = remember(artist) {
+        artist.shuffleEndpoint 
+            ?: artist.radioEndpoint
+            ?: unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                playlistId = "RDAMVM$artistId",
+                videoId = null
+            )
+    }
+
+    val radioEndpoint = remember(artist) {
+        artist.radioEndpoint
+            ?: artist.shuffleEndpoint
+            ?: unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                playlistId = "RDAMVM$artistId",
+                videoId = null
+            )
+    }
+
+    val bodyLargeStyle = MaterialTheme.typography.bodyMedium
+    val nameTextStyle = remember(bodyLargeStyle, colorScheme.onSurface) {
+        bodyLargeStyle.copy(
             fontWeight = FontWeight.Bold,
             fontFamily = GoogleSansRounded
         )
     }
 
-    Surface(
-        onClick = onClick,
-        shape = ExpressiveLargeShape,
-        color = colorScheme.surfaceContainerLow,
-        tonalElevation = 1.dp,
+    Card(
         modifier = Modifier
-            .width(116.dp)
-            .wrapContentHeight()
+            .width(136.dp)
+            .height(204.dp),
+        shape = ExpressiveLargeShape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = animatedBgColor),
+        onClick = onClick
     ) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp)
+                .fillMaxSize()
+                .padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
+            // Circular artist photo avatar
             Box(
                 modifier = Modifier
                     .size(80.dp)
                     .clip(CircleShape)
-                    .background(colorScheme.surfaceContainerHigh),
+                    .background(colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center
             ) {
-                if (!artist.thumbnail.isNullOrBlank()) {
+                if (!artistThumbnail.isNullOrBlank()) {
                     SmartImage(
-                        model = artist.thumbnail,
-                        contentDescription = artist.title,
+                        model = artistThumbnail,
+                        contentDescription = artistName,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
                 } else {
                     Icon(
                         painter = painterResource(R.drawable.rounded_music_note_24),
-                        contentDescription = artist.title,
+                        contentDescription = artistName,
                         tint = colorScheme.primary,
                         modifier = Modifier.size(36.dp)
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = artist.title,
-                style = titleStyle,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                color = colorScheme.onSurface,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = colorScheme.secondaryContainer.copy(alpha = 0.6f),
-                modifier = Modifier.padding(top = 2.dp)
+
+            // Artist details
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "Artist",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = colorScheme.onSecondaryContainer,
+                    text = artistName,
+                    style = nameTextStyle,
+                    color = colorScheme.onSurface,
                     maxLines = 1,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
+                Text(
+                    text = "Artist",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // Clean action buttons row (Play + Radio) matching M3 Expressive style
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        playerViewModel?.playRadio(
+                            endpoint = playEndpoint,
+                            title = "${artistName} Mix",
+                            artistName = artistName
+                        )
+                    },
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(colorScheme.primary, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = "Play Artist",
+                        tint = colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        playerViewModel?.playRadio(
+                            endpoint = radioEndpoint,
+                            title = "${artistName} Radio",
+                            artistName = artistName
+                        )
+                    },
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(colorScheme.secondaryContainer, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Radio,
+                        contentDescription = "Artist Radio",
+                        tint = colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }
