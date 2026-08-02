@@ -926,10 +926,11 @@ fun YTItemCarousel(
                     )
                 }
                 is PlaylistItem -> {
-                    PlaylistBentoCard(
+                    PlaylistCardItem(
                         playlist = item,
-                        navController = navController,
-                        playerViewModel = playerViewModel
+                        onClick = {
+                            navController.navigateSafely(Screen.PlaylistDetail.createRoute(item.id))
+                        }
                     )
                 }
                 is ArtistItem -> {
@@ -1508,16 +1509,6 @@ fun ArtistCardItem(
     val artistName = artist.title
     val artistThumbnail = artist.thumbnail
 
-    val isDarkTheme = isSystemInDarkTheme()
-    val baseSurface = colorScheme.surfaceContainerHigh
-    val animatedBgColor = rememberDominantCardColor(
-        imageUrl = artistThumbnail,
-        baseColor = baseSurface,
-        isDarkTheme = isDarkTheme,
-        darkBlendFraction = 0.35f,
-        lightBlendFraction = 0.50f
-    )
-
     val playEndpoint = remember(artist) {
         artist.shuffleEndpoint 
             ?: artist.radioEndpoint
@@ -1550,7 +1541,7 @@ fun ArtistCardItem(
             .height(204.dp),
         shape = ExpressiveLargeShape,
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        colors = CardDefaults.cardColors(containerColor = animatedBgColor),
+        colors = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainerLow),
         onClick = onClick
     ) {
         Column(
