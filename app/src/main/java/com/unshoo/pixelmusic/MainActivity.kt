@@ -116,7 +116,6 @@ import com.unshoo.pixelmusic.presentation.components.DismissUndoBar
 import com.unshoo.pixelmusic.presentation.components.DrawerDestination
 import com.unshoo.pixelmusic.presentation.components.MiniPlayerBottomSpacer
 import com.unshoo.pixelmusic.presentation.components.MiniPlayerHeight
-import com.unshoo.pixelmusic.presentation.components.DynamicIslandOverlay
 import com.unshoo.pixelmusic.presentation.components.PlayerInternalNavigationBar
 import com.unshoo.pixelmusic.presentation.components.PlayStoreAnnouncementDefaults
 import com.unshoo.pixelmusic.presentation.components.PlayStoreAnnouncementDialog
@@ -726,15 +725,6 @@ class MainActivity : ComponentActivity() {
 
         Box(modifier = Modifier.fillMaxSize()) {
             MainUI(playerViewModel, navController)
-
-            // Dynamic Island — floating now-playing pill below the status bar / camera cutout
-            val dynamicIslandEnabled by userPreferencesRepository.dynamicIslandEnabledFlow
-                .collectAsStateWithLifecycle(initialValue = false)
-            DynamicIslandOverlay(
-                playerViewModel = playerViewModel,
-                enabled = dynamicIslandEnabled,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
         }
         Trace.endSection() // End MainActivity.MainAppContent
     }

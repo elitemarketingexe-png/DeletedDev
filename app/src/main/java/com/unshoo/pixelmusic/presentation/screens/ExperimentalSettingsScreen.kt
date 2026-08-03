@@ -320,19 +320,7 @@ fun ExperimentalSettingsScreen(
                             }
 
 
-                            SwitchSettingItem(
-                                title = "Dynamic Island",
-                                subtitle = "Floating now-playing pill below the camera cutout (tap to expand, swipe up to dismiss)",
-                                checked = uiState.dynamicIslandEnabled,
-                                onCheckedChange = settingsViewModel::setDynamicIslandEnabled,
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Rounded.PhoneIphone,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                            )
+
 
                             SwitchSettingItem(
                                 title = "Floating Pill Header Bar",

@@ -670,18 +670,18 @@ private enum class MainRootDirection {
 // was taking longer to cross-fade than any M3 Expressive effects token calls for, which is
 // exactly the kind of thing that makes a tab switch feel like it's dragging.
 private val MAIN_ROOT_SPATIAL_SPRING = spring<IntOffset>(
-    dampingRatio = ExpressiveSprings.DefaultSpatialDampingRatio,
-    stiffness = ExpressiveSprings.DefaultSpatialStiffness
+    dampingRatio = ExpressiveSprings.FastSpatialDampingRatio,
+    stiffness = ExpressiveSprings.FastSpatialStiffness
 )
 
 private val MAIN_ROOT_SCALE_SPRING = spring<Float>(
-    dampingRatio = ExpressiveSprings.DefaultSpatialDampingRatio,
-    stiffness = ExpressiveSprings.DefaultSpatialStiffness
+    dampingRatio = ExpressiveSprings.FastSpatialDampingRatio,
+    stiffness = ExpressiveSprings.FastSpatialStiffness
 )
 
 private val MAIN_ROOT_FADE_SPRING = spring<Float>(
-    dampingRatio = ExpressiveSprings.DefaultEffectsDampingRatio,
-    stiffness = ExpressiveSprings.DefaultEffectsStiffness
+    dampingRatio = ExpressiveSprings.FastEffectsDampingRatio,
+    stiffness = ExpressiveSprings.FastEffectsStiffness
 )
 
 private fun mainRootDirection(

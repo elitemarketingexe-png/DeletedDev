@@ -202,11 +202,7 @@ class MusicService : MediaLibraryService() {
     // (see e.g. the auto-queue re-seed path), but the *bulk* of the
     // service's work — snapshot writes, queue re-seeds, MediaLibrary
     // callbacks, telemetry — now runs off the UI thread.
-    private val serviceDispatcher = java.util.concurrent.Executors
-        .newFixedThreadPool(4) { runnable ->
-            Thread(runnable, "PixelMusic-Service").apply { isDaemon = true }
-        }.asCoroutineDispatcher()
-    private val serviceScope = CoroutineScope(SupervisorJob() + serviceDispatcher)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var keepPlayingInBackground = true
     private var isManualShuffleEnabled = false
     private var persistentShuffleEnabled = false
@@ -2409,9 +2405,6 @@ class MusicService : MediaLibraryService() {
         engine.release()
         controller.release()
         serviceScope.cancel()
-        // Tear down the dedicated service dispatcher created in onCreate so
-        // its 4 daemon threads don't outlive the service.
-        serviceDispatcher.close()
         Thread.currentThread().setUncaughtExceptionHandler(previousMainThreadExceptionHandler)
         previousMainThreadExceptionHandler = null
         super.onDestroy()
