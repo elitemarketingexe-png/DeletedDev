@@ -86,14 +86,17 @@ internal class SheetVerticalDragGestureHandler(
         if (abs(dragFrame.translationY - lastSnappedY) >= 0.5f ||
             abs(dragFrame.expansionFraction - lastSnappedFraction) >= 0.0015f
         ) {
-            lastSnappedY = dragFrame.translationY
-            lastSnappedFraction = dragFrame.expansionFraction
-            dragSnapJob?.cancel()
-            dragSnapJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                sheetMotionController.snapTo(
-                    translationYValue = dragFrame.translationY,
-                    expansionFractionValue = dragFrame.expansionFraction
-                )
+            val tY = dragFrame.translationY
+            val eF = dragFrame.expansionFraction
+            lastSnappedY = tY
+            lastSnappedFraction = eF
+            if (dragSnapJob?.isActive != true) {
+                dragSnapJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    sheetMotionController.snapToDirect(
+                        translationYValue = tY,
+                        expansionFractionValue = eF
+                    )
+                }
             }
         }
         velocityTracker.addPosition(uptimeMillis, position)

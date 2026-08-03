@@ -2,8 +2,7 @@ package com.unshoo.pixelmusic.presentation.components
 
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,7 +30,7 @@ import androidx.lifecycle.compose.currentStateAsState
 import com.unshoo.pixelmusic.presentation.navigation.isMainRootRoute
 
 
-@OptIn(UnstableApi::class)
+@OptIn(UnstableApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ScreenWrapper(
     navController: androidx.navigation.NavController,
@@ -101,9 +100,13 @@ fun ScreenWrapper(
     // Declarative Animations
     // Radius: If NOT Resumed -> 32dp. (Background OR Popped)
     val targetRadius = if (shouldRunDepthEffects && !isResumed) 32f else 0f
+    // M3 Expressive effects springs — critically damped (no overshoot), settling ~250ms.
+    // Faster and more cohesive than the old fixed 400ms tween.
+    val motionScheme = MaterialTheme.motionScheme
+
     val cornerRadius by animateFloatAsState(
         targetValue = targetRadius,
-        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+        animationSpec = motionScheme.defaultEffectsSpec(),
         label = "cornerRadius"
     )
 
@@ -111,7 +114,7 @@ fun ScreenWrapper(
     val targetDim = if (shouldRunDepthEffects && shouldDim) 0.4f else 0f
     val dimAlpha by animateFloatAsState(
         targetValue = targetDim,
-        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+        animationSpec = motionScheme.defaultEffectsSpec(),
         label = "dimAlpha"
     )
 

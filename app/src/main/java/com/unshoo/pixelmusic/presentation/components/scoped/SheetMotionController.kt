@@ -78,6 +78,11 @@ internal class SheetMotionController(
         }
     }
 
+    suspend fun snapToDirect(translationYValue: Float, expansionFractionValue: Float) {
+        translationY.snapTo(translationYValue)
+        expansionFraction.snapTo(expansionFractionValue)
+    }
+
     suspend fun snapCollapsed(collapsedY: Float) {
         snapTo(
             translationYValue = collapsedY,

@@ -151,6 +151,18 @@ android {
         }
     }
 
+    flavorDimensions += "services"
+    productFlavors {
+        create("foss") {
+            dimension = "services"
+            // FOSS flavor: zero GMS dependencies, lightweight, privacy-focused
+        }
+        create("gms") {
+            dimension = "services"
+            // GMS flavor: Google Play Services, Chromecast, Play Auth
+        }
+    }
+
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_21
@@ -332,15 +344,15 @@ dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
 
-    // Identity & Background
+    // Identity & Background (GMS flavor only)
     implementation(libs.androidx.work.runtime.ktx)
-    implementation(libs.play.services.wearable)
-    implementation(libs.kotlinx.coroutines.play.services)
-    implementation(libs.credentials)
-    implementation(libs.credentials.play.services.auth)
-    implementation(libs.googleid)
+    gmsImplementation(libs.play.services.wearable)
+    gmsImplementation(libs.kotlinx.coroutines.play.services)
+    gmsImplementation(libs.credentials)
+    gmsImplementation(libs.credentials.play.services.auth)
+    gmsImplementation(libs.googleid)
     implementation(libs.androidx.security.crypto)
-    implementation(libs.google.play.services.cast.framework)
+    gmsImplementation(libs.google.play.services.cast.framework)
     implementation(libs.tdlib)
 
     // UI Utilities & Performance

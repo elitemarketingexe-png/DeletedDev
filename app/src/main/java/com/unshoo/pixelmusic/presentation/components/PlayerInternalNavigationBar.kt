@@ -31,7 +31,10 @@ import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import com.unshoo.pixelmusic.ui.theme.defaultEffects
 import com.unshoo.pixelmusic.ui.theme.defaultSpatial
+import com.unshoo.pixelmusic.ui.theme.fastEffects
+import com.unshoo.pixelmusic.ui.theme.fastSpatial
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -192,7 +195,7 @@ private fun ExpressiveFloatingPillNavigationBar(
 
                     val itemWeight by animateFloatAsState(
                         targetValue = if (isSelected && !shouldHideLabel) 2.2f else 1.0f,
-                        animationSpec = MaterialTheme.motionScheme.defaultSpatial(),
+                        animationSpec = MaterialTheme.motionScheme.fastSpatial(),
                         label = "pill_item_weight_$index"
                     )
 
@@ -239,8 +242,16 @@ private fun ExpressiveFloatingPillNavigationBar(
 
                             AnimatedVisibility(
                                 visible = isSelected && !shouldHideLabel,
-                                enter = fadeIn(animationSpec = tween(200)) + expandHorizontally(expandFrom = Alignment.Start),
-                                exit = fadeOut(animationSpec = tween(150)) + shrinkHorizontally(shrinkTowards = Alignment.Start)
+                                enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffects()) +
+                                    expandHorizontally(
+                                        expandFrom = Alignment.Start,
+                                        animationSpec = MaterialTheme.motionScheme.defaultSpatial()
+                                    ),
+                                exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffects()) +
+                                    shrinkHorizontally(
+                                        shrinkTowards = Alignment.Start,
+                                        animationSpec = MaterialTheme.motionScheme.defaultSpatial()
+                                    )
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Spacer(modifier = Modifier.width(6.dp))
