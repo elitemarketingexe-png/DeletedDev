@@ -261,6 +261,9 @@ class MainActivity : ComponentActivity() {
             val dynamicColorEnabled = colorPalette == "DYNAMIC" || playerThemePreference == ThemePreference.DYNAMIC
             val isSetupComplete by mainViewModel.isSetupComplete.collectAsStateWithLifecycle()
             
+            // Keep system splash screen on screen until initial setup state resolves
+            splashScreen.setKeepOnScreenCondition { isSetupComplete == null }
+            
             // Crash report dialog state
             var showCrashReportDialog by remember { mutableStateOf(false) }
             var crashLogData by remember { mutableStateOf<CrashLogData?>(null) }
@@ -292,20 +295,13 @@ class MainActivity : ComponentActivity() {
             // committed — and start the sync immediately, off the main thread.
             LaunchedEffect(showSetupScreen) {
                 if (showSetupScreen == false) {
-                    // Wait for the first frame to be committed before kicking
-                    // off sync I/O. This is event-driven, not a fixed timer.
-                    com.unshoo.pixelmusic.utils.AppReadinessSignal.awaitReady()
                     LogUtils.i(this, "Setup complete/skipped and permissions valid. Starting sync.")
                     mainViewModel.startSync()
                 }
             }
 
             // Check for crash log when app starts.
-            // BUGFIX (lag — was: delay(300L)): wait for first frame instead
-            // of a fixed timer. The crash log is read from disk; pushing it
-            // off the first-frame path is what this guard is for.
             LaunchedEffect(Unit) {
-                com.unshoo.pixelmusic.utils.AppReadinessSignal.awaitReady()
                 if (!isBenchmarkMode && CrashHandler.hasCrashLog()) {
                     crashLogData = CrashHandler.getCrashLog()
                     showCrashReportDialog = true
@@ -337,7 +333,7 @@ class MainActivity : ComponentActivity() {
                 var contentVisible by remember { mutableStateOf(false) }
                 val contentAlpha by animateFloatAsState(
                     targetValue = if (contentVisible) 1f else 0f,
-                    animationSpec = tween(600, easing = LinearOutSlowInEasing),
+                    animationSpec = tween(150, easing = LinearOutSlowInEasing),
                     label = "AppContentAlpha"
                 )
 

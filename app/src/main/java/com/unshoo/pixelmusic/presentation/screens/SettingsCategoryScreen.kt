@@ -92,10 +92,10 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Public
-import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.automirrored.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Explicit
 import androidx.compose.material.icons.outlined.VideoLibrary
-import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Speed
@@ -406,9 +406,24 @@ fun SettingsCategoryScreen(
         }
     }
 
+    val isCategoryRouteActive = navController.currentDestination?.route?.startsWith("settings_category") == true
+
     Box(
-        modifier =
-            Modifier.nestedScroll(nestedScrollConnection).fillMaxSize()
+        modifier = Modifier
+            .nestedScroll(nestedScrollConnection)
+            .fillMaxSize()
+            .then(
+                if (!isCategoryRouteActive) {
+                    Modifier.pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                } else Modifier
+            )
     ) {
         val currentTopBarHeightDp = with(density) { topBarHeight.value.toDp() }
         
@@ -464,7 +479,7 @@ fun SettingsCategoryScreen(
                                             com.unshoo.pixelmusic.data.preferences.PlaylistSuggestionSource.valueOf(key)
                                         )
                                     },
-                                    leadingIcon = { Icon(Icons.Outlined.QueueMusic, null, tint = MaterialTheme.colorScheme.secondary) }
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.QueueMusic, null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
                                 SwitchSettingItem(
                                     title = stringResource(R.string.settings_hide_explicit_title),
@@ -492,7 +507,7 @@ fun SettingsCategoryScreen(
                                     onSelectionChanged = { key ->
                                         settingsViewModel.setTopSize(key)
                                     },
-                                    leadingIcon = { Icon(Icons.Outlined.TrendingUp, null, tint = MaterialTheme.colorScheme.secondary) }
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.TrendingUp, null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
                                 ThemeSelectorItem(
                                     label = stringResource(R.string.settings_set_quick_picks_title),
@@ -1723,7 +1738,7 @@ fun SettingsCategoryScreen(
                                     subtitle = "Display or hide Last.fm/AI-generated Smart Mix playlists on the Library playlists page.",
                                     checked = uiState.showSmartMixPlaylists,
                                     onCheckedChange = { settingsViewModel.setShowSmartMixPlaylists(it) },
-                                    leadingIcon = { Icon(Icons.Outlined.QueueMusic, null, tint = MaterialTheme.colorScheme.secondary) }
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.QueueMusic, null, tint = MaterialTheme.colorScheme.secondary) }
                                 )
                                 SwitchSettingItem(
                                     title = "Sync local playlists to YouTube Music",

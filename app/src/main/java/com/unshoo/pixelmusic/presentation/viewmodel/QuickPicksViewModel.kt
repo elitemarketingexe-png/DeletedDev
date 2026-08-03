@@ -67,13 +67,8 @@ class QuickPicksViewModel @Inject constructor(
 
     init {
         // Immediately populate from cache so the UI shows something on relaunch.
-        // This runs synchronously on the VM thread before the first frame.
         loadFromCache()
         viewModelScope.launch {
-            // Suspend until MainActivity signals the UI is ready (contentVisible = true).
-            // This is more precise than delay(1_500L): it fires as soon as the first
-            // frame is committed regardless of device speed — no wasted time, no races.
-            AppReadinessSignal.awaitReady()
             loadQuickPicks(_selectedCategory.value, forceRefresh = isCacheExpired())
             userPreferencesRepository.discoverFlow.collect { _ ->
                 if (_selectedCategory.value == "All") {

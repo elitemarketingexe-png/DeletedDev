@@ -677,13 +677,8 @@ private enum class MainRootDirection {
 // Material 3 Expressive soothing, calm cross-fade for bottom nav tab page transitions.
 // Pure 300ms fade + subtle scale prevents spatial horizontal sliding, ensuring tab switching feels completely calm and smooth.
 private val MAIN_ROOT_FADE_TWEEN = tween<Float>(
-    durationMillis = 300,
-    easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
-)
-
-private val MAIN_ROOT_SCALE_TWEEN = tween<Float>(
-    durationMillis = 300,
-    easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
+    durationMillis = 200,
+    easing = androidx.compose.animation.core.FastOutSlowInEasing
 )
 
 private fun mainRootDirection(
@@ -702,11 +697,7 @@ private fun mainRootEnterTransition(
     fallback: EnterTransition
 ): EnterTransition = when (mainRootDirection(fromRoute, toRoute)) {
     MainRootDirection.FORWARD, MainRootDirection.BACKWARD -> {
-        fadeIn(animationSpec = MAIN_ROOT_FADE_TWEEN) +
-        scaleIn(
-            animationSpec = MAIN_ROOT_SCALE_TWEEN,
-            initialScale = 0.98f
-        )
+        fadeIn(animationSpec = MAIN_ROOT_FADE_TWEEN)
     }
     null -> fallback
 }
@@ -717,11 +708,7 @@ private fun mainRootExitTransition(
     fallback: ExitTransition
 ): ExitTransition = when (mainRootDirection(fromRoute, toRoute)) {
     MainRootDirection.FORWARD, MainRootDirection.BACKWARD -> {
-        fadeOut(animationSpec = MAIN_ROOT_FADE_TWEEN) +
-        scaleOut(
-            animationSpec = MAIN_ROOT_SCALE_TWEEN,
-            targetScale = 0.98f
-        )
+        fadeOut(animationSpec = MAIN_ROOT_FADE_TWEEN)
     }
     null -> fallback
 }

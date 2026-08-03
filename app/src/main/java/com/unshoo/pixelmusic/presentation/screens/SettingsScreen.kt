@@ -1,6 +1,7 @@
 package com.unshoo.pixelmusic.presentation.screens
 
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
+import androidx.lifecycle.Lifecycle
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -39,7 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Logout
+import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -262,7 +263,9 @@ fun SettingsScreen(
                             category = category,
                             customColors = colors,
                             onClick = {
-                                if (navController.currentDestination?.route == Screen.Settings.route) {
+                                val isResumed = navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED
+                                val isSettingsRoute = navController.currentDestination?.route == Screen.Settings.route
+                                if (isResumed && isSettingsRoute) {
                                     if (category == SettingsCategory.EQUALIZER) {
                                         navController.navigateSafely(Screen.Equalizer.route)
                                     } else {
@@ -475,7 +478,7 @@ fun SettingsScreen(
                                     .padding(vertical = 8.dp, horizontal = 4.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Logout,
+                                    imageVector = Icons.AutoMirrored.Rounded.Logout,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.size(24.dp)
