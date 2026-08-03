@@ -21,6 +21,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.runtime.Immutable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -469,6 +470,14 @@ private data class FoldersTabSlice(
     val isFoldersPlaylistView: Boolean = false,
     val currentFolderSortOption: SortOption = SortOption.FolderNameAZ,
     val isLoadingLibraryCategories: Boolean = true
+)
+
+@Immutable
+data class FolderPlayerProjection(
+    val currentSongId: String? = null,
+    val currentSongPath: String? = null,
+    val currentSong: Song? = null,
+    val isPlaying: Boolean = false
 )
 
 @RequiresApi(Build.VERSION_CODES.R)
@@ -1789,7 +1798,21 @@ fun LibraryScreen(
                                         val folders = foldersTabSlice.musicFolders
                                         val currentFolder = foldersTabSlice.currentFolder
                                         val isLoading = foldersTabSlice.isLoadingLibraryCategories
-                                        val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
+                                        // PERF: FoldersTab only reads currentSong?.id, currentSong?.path,
+                                        // and isPlaying. Narrow the collection to avoid recomposing the
+                                        // entire tab on every player tick (position, queue change, etc.).
+                                        val folderPlayerState by remember(playerViewModel) {
+                                            playerViewModel.stablePlayerState
+                                                .map { state ->
+                                                    FolderPlayerProjection(
+                                                        currentSongId = state.currentSong?.id,
+                                                        currentSongPath = state.currentSong?.path,
+                                                        currentSong = state.currentSong,
+                                                        isPlaying = state.isPlaying
+                                                    )
+                                                }
+                                                .distinctUntilChanged()
+                                        }.collectAsStateWithLifecycle(initialValue = FolderPlayerProjection())
                                         val defaultFolderName = stringResource(R.string.presentation_batch_d_folder_name_fallback)
 
                                         LibraryFoldersTab(
@@ -1798,7 +1821,7 @@ fun LibraryScreen(
                                             isLoading = isLoading,
                                             folderArtworkPreference = folderArtworkPreference,
                                             bottomBarHeight = bottomBarHeightDp,
-                                            stablePlayerState = stablePlayerState,
+                                            folderPlayerState = folderPlayerState,
                                             onNavigateBack = { playerViewModel.navigateBackFolder() },
                                             onFolderClick = { folderPath -> playerViewModel.navigateToFolder(folderPath) },
                                             onFolderAsPlaylistClick = { folder ->
@@ -3496,7 +3519,7 @@ fun LibraryFoldersTab(
     onFolderClick: (String) -> Unit,
     onFolderAsPlaylistClick: (MusicFolder) -> Unit,
     onPlaySong: (Song, List<Song>) -> Unit,
-    stablePlayerState: StablePlayerState,
+    folderPlayerState: FolderPlayerProjection,
     bottomBarHeight: Dp,
     onMoreOptionsClick: (Song) -> Unit,
     isPlaylistView: Boolean = false,
@@ -3563,7 +3586,7 @@ fun LibraryFoldersTab(
         val songsToShow = remember(activeFolder, currentSortOption) {
             sortSongsForFolderView(activeFolder?.songs ?: emptyList(), currentSortOption)
         }.toImmutableList()
-        val currentSong = stablePlayerState.currentSong
+        val currentSong = folderPlayerState.currentSong
         val currentSongId = currentSong?.id
         val currentSongIndexInSongs = remember(songsToShow, currentSongId) {
             currentSongId?.let { songId -> songsToShow.indexOfFirst { it.id == songId } } ?: -1
@@ -3744,8 +3767,8 @@ fun LibraryFoldersTab(
                                 itemsIndexed(songsToShow, key = { index, song -> "${song.id}_$index" }, contentType = { _, _ -> "song" }) { _, song ->
                                     EnhancedSongListItem(
                                         song = song,
-                                        isPlaying = stablePlayerState.currentSong?.id == song.id && stablePlayerState.isPlaying,
-                                        isCurrentSong = stablePlayerState.currentSong?.id == song.id,
+                                        isPlaying = folderPlayerState.currentSongId == song.id && folderPlayerState.isPlaying,
+                                        isCurrentSong = folderPlayerState.currentSongId == song.id,
                                         onMoreOptionsClick = { onMoreOptionsClick(song) },
                                         isSelected = selectedSongIds.contains(song.id),
                                         selectionIndex = if (isSelectionMode) getSelectionIndex(song.id) else null,
@@ -3763,7 +3786,7 @@ fun LibraryFoldersTab(
                             }
 
                             // ScrollBar Overlay
-                            val bottomPadding = if (stablePlayerState.currentSong != null && stablePlayerState.currentSong != Song.emptySong())
+                            val bottomPadding = if (folderPlayerState.currentSongId != null)
                                 bottomBarHeight + MiniPlayerHeight + 16.dp
                             else
                                 bottomBarHeight + 16.dp

@@ -3703,6 +3703,7 @@ class MusicService : MediaLibraryService() {
                 } ?: Timber.tag(TAG).w("Playback snapshot write timed out during unload")
             }
         }.onFailure { e ->
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Timber.tag(TAG).w(e, "Failed to persist playback snapshot during unload")
         }
     }

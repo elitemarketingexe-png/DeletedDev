@@ -1532,16 +1532,21 @@ private fun CastDeviceRow(
     val scallopShape = RoundedStarShape(sides = 8, curve = 0.10, rotation = 0f)
 
     // Animaciones
-    val infiniteRotation = rememberInfiniteTransition(label = "activeDeviceRotation")
-    val rotation by infiniteRotation.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 9000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "deviceRotation"
-    )
+    val rotation = if (isActiveDevice) {
+        val infiniteRotation = rememberInfiniteTransition(label = "activeDeviceRotation")
+        val animatedRotation by infiniteRotation.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 9000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "deviceRotation"
+        )
+        animatedRotation
+    } else {
+        0f
+    }
     val backgroundScale by animateFloatAsState(
         targetValue = if (isActiveDevice) 1.16f else 1f,
         animationSpec = tween(durationMillis = 450, easing = FastOutSlowInEasing),
@@ -1892,13 +1897,18 @@ private fun ScanningPlaceholderList() {
 
 @Composable
 private fun ScanningIndicator(isActive: Boolean) {
-    val infinite = rememberInfiniteTransition(label = "scanPulse")
-    val pulse by infinite.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 1.2f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = 900, easing = FastOutSlowInEasing)),
-        label = "pulse"
-    )
+    val pulse = if (isActive) {
+        val infinite = rememberInfiniteTransition(label = "scanPulse")
+        val animatedPulse by infinite.animateFloat(
+            initialValue = 0.6f,
+            targetValue = 1.2f,
+            animationSpec = infiniteRepeatable(tween(durationMillis = 900, easing = FastOutSlowInEasing)),
+            label = "pulse"
+        )
+        animatedPulse
+    } else {
+        1f
+    }
     val prim = MaterialTheme.colorScheme.primary
     Box(
         modifier = Modifier

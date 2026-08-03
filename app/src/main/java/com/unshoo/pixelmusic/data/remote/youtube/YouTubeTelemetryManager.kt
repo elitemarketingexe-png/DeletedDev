@@ -226,9 +226,9 @@ class YouTubeTelemetryManager {
      * One retry after a short delay absorbs momentary hiccups; only a failure that survives the
      * retry gets recorded as a genuine failure.
      */
-    private fun sendTelemetryPingWithRetry(url: String): Boolean {
+    private suspend fun sendTelemetryPingWithRetry(url: String): Boolean {
         if (YouTube.sendTelemetryPing(url)) return true
-        Thread.sleep(400L)
+        kotlinx.coroutines.delay(400L)
         return YouTube.sendTelemetryPing(url)
     }
 
@@ -274,8 +274,10 @@ class YouTubeTelemetryManager {
         if (!fullUrl.contains("c=")) fullUrl += "&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER"
         if (!fullUrl.contains("afmt=")) fullUrl += "&afmt=251&muted=0&volume=100"
 
-        val success = sendTelemetryPingWithRetry(fullUrl)
-        recordPingResult(success, videoId)
+        coroutineScope.launch(Dispatchers.IO) {
+            val success = sendTelemetryPingWithRetry(fullUrl)
+            recordPingResult(success, videoId)
+        }
     }
 
     fun stopTelemetry() {

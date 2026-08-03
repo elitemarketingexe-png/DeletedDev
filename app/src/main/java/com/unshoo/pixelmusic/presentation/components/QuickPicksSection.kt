@@ -535,17 +535,21 @@ private fun QuickPickPortraitCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val transition = rememberInfiniteTransition(label = "pulse")
-    val badgeAlphaAnimated by transition.animateFloat(
-        initialValue = 0.75f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "badgePulse"
-    )
-    val badgeAlpha = if (isPlaying) badgeAlphaAnimated else 1f
+    val badgeAlpha = if (isPlaying) {
+        val transition = rememberInfiniteTransition(label = "pulse")
+        val animatedAlpha by transition.animateFloat(
+            initialValue = 0.75f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "badgePulse"
+        )
+        animatedAlpha
+    } else {
+        1f
+    }
 
     ElevatedCard(
         onClick = onClick,

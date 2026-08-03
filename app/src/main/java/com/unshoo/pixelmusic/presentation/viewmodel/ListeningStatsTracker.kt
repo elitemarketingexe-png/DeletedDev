@@ -634,7 +634,7 @@ class ListeningStatsTracker @Inject constructor(
             // cleared from recents": swiping away doesn't actually kill a hung foreground-service
             // process. withTimeoutOrNull() guarantees this can never block longer than
             // FORCE_PERSIST_TIMEOUT_MS, so the monitor is always released within a bounded time.
-            kotlinx.coroutines.runBlocking {
+            kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
                     kotlinx.coroutines.withTimeoutOrNull(FORCE_PERSIST_TIMEOUT_MS) {
                         persistPlaybackInternal(

@@ -88,7 +88,7 @@ class MainViewModel @Inject constructor(
         .map { it > 0L }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5_000),
             initialValue = true // 乐观策略：默认已同步
         )
 
@@ -99,7 +99,7 @@ class MainViewModel @Inject constructor(
     val isSyncing: StateFlow<Boolean> = syncManager.isSyncing
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5_000),
             initialValue = false
         )
 

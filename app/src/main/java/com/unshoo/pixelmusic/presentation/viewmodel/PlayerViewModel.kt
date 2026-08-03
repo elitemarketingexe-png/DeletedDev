@@ -390,7 +390,7 @@ class PlayerViewModel @Inject constructor(
         .albumArtPaletteStyleFlow
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5_000),
             initialValue = AlbumArtPaletteStyle.default
         )
     /**
@@ -660,14 +660,14 @@ class PlayerViewModel @Inject constructor(
     val navBarStyle: StateFlow<String> = userPreferencesRepository.navBarStyleFlow
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5_000),
             initialValue = NavBarStyle.DEFAULT
         )
 
     val navBarHeightOffset: StateFlow<Int> = userPreferencesRepository.navBarHeightOffsetFlow
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5_000),
             initialValue = 0
         )
 
@@ -1992,7 +1992,9 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
+        // PERF: deferred — foldersSourceFlow reads DataStore; not needed for first frame.
         viewModelScope.launch {
+            AppReadinessSignal.awaitReady()
             userPreferencesRepository.foldersSourceFlow.collect { preferredSource ->
                 val resolved = resolveFolderSourceState(preferredSource)
                 if (resolved.source != preferredSource) {
@@ -2013,7 +2015,9 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
+        // PERF: deferred — both flows read DataStore; not needed for first frame.
         viewModelScope.launch {
+            AppReadinessSignal.awaitReady()
             combine(
                 userPreferencesRepository.folderBackGestureNavigationFlow,
                 userPreferencesRepository.isAlbumsListViewFlow,
@@ -2029,7 +2033,9 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
+        // PERF: deferred — blockedDirectoriesFlow reads DataStore; not needed for first frame.
         viewModelScope.launch {
+            AppReadinessSignal.awaitReady()
             userPreferencesRepository.blockedDirectoriesFlow
                 .distinctUntilChanged()
                 .collect { blocked ->
@@ -2045,7 +2051,9 @@ class PlayerViewModel @Inject constructor(
                 }
         }
 
+        // PERF: deferred — both flows ultimately read DataStore; not needed for first frame.
         viewModelScope.launch {
+            AppReadinessSignal.awaitReady()
             combine(libraryTabsFlow, lastLibraryTabIndexFlow) { tabs, index ->
                 tabs.getOrNull(index)?.toLibraryTabIdOrNull() ?: LibraryTabId.SONGS
             }.collect { tabId ->
@@ -2053,8 +2061,10 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
-        // Load initial sort options ONCE at startup.
+        // PERF: deferred — 5 DataStore .first() reads plus sort re-application;
+        // not needed for first frame (library tab shows skeletons while loading anyway).
         viewModelScope.launch {
+            AppReadinessSignal.awaitReady()
             val initialSongSort = resolveSortOption(
                 userPreferencesRepository.songsSortOptionFlow.first(),
                 SortOption.SONGS,
@@ -2100,7 +2110,10 @@ class PlayerViewModel @Inject constructor(
             sortFavoriteSongs(initialLikedSort, persist = false)
         }
 
+        // PERF: deferred — 2 DataStore .first() reads for shuffle state;
+        // shuffle icon shows default briefly, then snaps to saved value.
         viewModelScope.launch {
+            AppReadinessSignal.awaitReady()
             val isPersistent = userPreferencesRepository.persistentShuffleEnabledFlow.first()
             if (isPersistent) {
                 // If persistent shuffle is on, read the last used shuffle state (On/Off)
@@ -2166,7 +2179,7 @@ class PlayerViewModel @Inject constructor(
             scope = viewModelScope,
             toastEmitter = { msg -> _toastEvents.emit(msg) },
             mediaControllerProvider = { mediaController },
-            currentSongIdProvider = { stablePlayerState.map { it.currentSong?.id }.stateIn(viewModelScope, SharingStarted.Eagerly, null) },
+            currentSongIdProvider = { stablePlayerState.map { it.currentSong?.id }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null) },
             songTitleResolver = { songId -> libraryStateHolder.allSongsById.value[songId]?.title ?: "Unknown" }
         )
 
@@ -2277,7 +2290,9 @@ class PlayerViewModel @Inject constructor(
                 _playerUiState.update { it.copy(currentStorageFilter = filter) }
             }
         }
+        // PERF: deferred — DataStore read; not needed for first frame.
         viewModelScope.launch {
+            AppReadinessSignal.awaitReady()
             userPreferencesRepository.hideLocalMediaFlow.collect { hide ->
                 _playerUiState.update { it.copy(hideLocalMedia = hide) }
             }
