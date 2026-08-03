@@ -68,6 +68,7 @@ android {
             )
         }
         jniLibs {
+            // Enable compressed JNI libraries in APK to maintain compact APK filesize
             useLegacyPackaging = true
         }
     }
@@ -140,18 +141,6 @@ android {
             matchingFallbacks += listOf("release")
             isDebuggable = false
             manifestPlaceholders["adMobAppId"] = "ca-app-pub-6235250458880294~7929621161" // Production App ID
-        }
-    }
-
-    flavorDimensions += "services"
-    productFlavors {
-        create("foss") {
-            dimension = "services"
-            // FOSS flavor: zero GMS dependencies, lightweight, privacy-focused
-        }
-        create("gms") {
-            dimension = "services"
-            // GMS flavor: Google Play Services, Chromecast, Play Auth
         }
     }
 
@@ -336,15 +325,15 @@ dependencies {
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
 
-    // Identity & Background (GMS flavor only)
+    // Identity & Background
     implementation(libs.androidx.work.runtime.ktx)
-    "gmsImplementation"(libs.play.services.wearable)
-    "gmsImplementation"(libs.kotlinx.coroutines.play.services)
-    "gmsImplementation"(libs.credentials)
-    "gmsImplementation"(libs.credentials.play.services.auth)
-    "gmsImplementation"(libs.googleid)
+    implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.credentials)
+    implementation(libs.credentials.play.services.auth)
+    implementation(libs.googleid)
     implementation(libs.androidx.security.crypto)
-    "gmsImplementation"(libs.google.play.services.cast.framework)
+    implementation(libs.google.play.services.cast.framework)
     implementation(libs.tdlib)
 
     // UI Utilities & Performance
