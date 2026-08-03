@@ -675,17 +675,17 @@ private enum class MainRootDirection {
 //  • 350ms fade — finishes before the spatial motion so content is fully opaque while
 //    the slide is still decelerating, giving a "content loads instantly" perception.
 private val MAIN_ROOT_SPATIAL_TWEEN = tween<IntOffset>(
-    durationMillis = 450,
+    durationMillis = 650,
     easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
 )
 
 private val MAIN_ROOT_SCALE_TWEEN = tween<Float>(
-    durationMillis = 450,
+    durationMillis = 650,
     easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
 )
 
 private val MAIN_ROOT_FADE_TWEEN = tween<Float>(
-    durationMillis = 350,
+    durationMillis = 500,
     easing = LinearOutSlowInEasing
 )
 

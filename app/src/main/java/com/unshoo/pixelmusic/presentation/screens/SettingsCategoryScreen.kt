@@ -1931,25 +1931,7 @@ fun SettingsCategoryScreen(
             maxLines = titleMaxLines
         )
 
-        // Block interaction during transition
-        var isTransitioning by remember { mutableStateOf(true) }
-        LaunchedEffect(Unit) {
-            kotlinx.coroutines.delay(com.unshoo.pixelmusic.presentation.navigation.TRANSITION_DURATION.toLong())
-            isTransitioning = false
-        }
-        
-        if (isTransitioning) {
-            Box(modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                   awaitPointerEventScope {
-                        while (true) {
-                            awaitPointerEvent()
-                        }
-                    }
-                }
-            )
-        }
+
     }
 
     BackupTransferProgressDialogHost(progress = dataTransferProgress)

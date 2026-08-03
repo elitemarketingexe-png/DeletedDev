@@ -27,18 +27,18 @@ import com.unshoo.pixelmusic.ui.theme.ExpressiveSprings
 // the "slow spatial" spring for position + scale, and "default effects" for fade — opacity
 // should still settle briskly no matter how large the moving element is.
 private val PUSH_POP_SPATIAL_SPRING = spring<IntOffset>(
-    dampingRatio = ExpressiveSprings.DefaultSpatialDampingRatio,
-    stiffness = ExpressiveSprings.DefaultSpatialStiffness
+    dampingRatio = ExpressiveSprings.SlowSpatialDampingRatio,
+    stiffness = ExpressiveSprings.SlowSpatialStiffness
 )
 
 private val PUSH_POP_SCALE_SPRING = spring<Float>(
-    dampingRatio = ExpressiveSprings.DefaultSpatialDampingRatio,
-    stiffness = ExpressiveSprings.DefaultSpatialStiffness
+    dampingRatio = ExpressiveSprings.SlowSpatialDampingRatio,
+    stiffness = ExpressiveSprings.SlowSpatialStiffness
 )
 
 private val PUSH_POP_FADE_SPRING = spring<Float>(
-    dampingRatio = ExpressiveSprings.FastEffectsDampingRatio,
-    stiffness = ExpressiveSprings.FastEffectsStiffness
+    dampingRatio = ExpressiveSprings.DefaultEffectsDampingRatio,
+    stiffness = ExpressiveSprings.DefaultEffectsStiffness
 )
 
 // Kept as a millisecond value for legacy call sites (SettingsScreen / SettingsCategoryScreen)
