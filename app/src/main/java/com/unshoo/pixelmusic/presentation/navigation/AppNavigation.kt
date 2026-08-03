@@ -67,6 +67,7 @@ import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.PlaylistViewModel
 import kotlinx.coroutines.flow.first
 import com.unshoo.pixelmusic.presentation.components.ScreenWrapper
+import com.unshoo.pixelmusic.ui.theme.ExpressiveSprings
 
 @OptIn(UnstableApi::class)
 @SuppressLint("UnrememberedGetBackStackEntry")
@@ -658,20 +659,29 @@ private enum class MainRootDirection {
     BACKWARD
 }
 
-// Material 3 Expressive Spring Physics for spatial (position/scale) & effects (fade) tab transitions
+// Material 3 Expressive Spring Physics for spatial (position/scale) & effects (fade) tab
+// transitions — sourced from ExpressiveSprings (ui/theme/Motion.kt) instead of local
+// hardcoded values, so tab switches stay in sync with the same tokens used everywhere else
+// (bottom sheets, cards, nav bar) rather than a second, hand-tuned copy that can drift.
+// A tab switch keeps the shell (nav bar, scaffold) in place and only swaps content, so it
+// uses "default spatial" (snappier than the slow-spatial push/pop between hierarchical
+// screens) and "default effects" for the cross-fade. The previous local fade spring
+// (stiffness 450) was slower than every canonical effects tier (all >= 800) — tab content
+// was taking longer to cross-fade than any M3 Expressive effects token calls for, which is
+// exactly the kind of thing that makes a tab switch feel like it's dragging.
 private val MAIN_ROOT_SPATIAL_SPRING = spring<IntOffset>(
-    stiffness = 380f,
-    dampingRatio = 0.82f
+    dampingRatio = ExpressiveSprings.DefaultSpatialDampingRatio,
+    stiffness = ExpressiveSprings.DefaultSpatialStiffness
 )
 
 private val MAIN_ROOT_SCALE_SPRING = spring<Float>(
-    stiffness = 380f,
-    dampingRatio = 0.82f
+    dampingRatio = ExpressiveSprings.DefaultSpatialDampingRatio,
+    stiffness = ExpressiveSprings.DefaultSpatialStiffness
 )
 
 private val MAIN_ROOT_FADE_SPRING = spring<Float>(
-    stiffness = 450f,
-    dampingRatio = 1.0f
+    dampingRatio = ExpressiveSprings.DefaultEffectsDampingRatio,
+    stiffness = ExpressiveSprings.DefaultEffectsStiffness
 )
 
 private fun mainRootDirection(

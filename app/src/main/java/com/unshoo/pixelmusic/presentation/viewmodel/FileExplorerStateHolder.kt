@@ -405,12 +405,12 @@ class FileExplorerStateHolder(
     private suspend fun computeDirectoryEntriesFromMediaStore(
         target: File,
         forceRefresh: Boolean
-    ): List<RawDirectoryEntry> {
+    ): List<RawDirectoryEntry> = withContext(Dispatchers.IO) {
         val index = getOrBuildMediaStoreDirectoryIndex(forceRefresh)
         val targetKey = normalizePath(target)
         val childPaths = index.childrenByParent[targetKey].orEmpty()
 
-        return childPaths
+        childPaths
             .map { childPath ->
                 RawDirectoryEntry(
                     file = File(childPath),

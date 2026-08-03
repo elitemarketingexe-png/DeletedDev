@@ -272,10 +272,18 @@ class PlaylistViewModel @Inject constructor(
                             songIds = songsList.map { it.id }
                         )
 
+                        // PERF FIX: same Main-thread sort issue as the two spots above - a
+                        // folder opened as a "playlist" can contain just as many songs as a
+                        // real playlist, so this pays the same cost. Sort on Default first,
+                        // then publish.
+                        val sortedFolderSongs = withContext(Dispatchers.Default) {
+                            applySortToSongs(songsList, _uiState.value.currentPlaylistSongsSortOption)
+                        }
+
                         _uiState.update {
                             it.copy(
                                 currentPlaylistDetails = pseudoPlaylist,
-                                currentPlaylistSongs = applySortToSongs(songsList, it.currentPlaylistSongsSortOption),
+                                currentPlaylistSongs = sortedFolderSongs,
                                 playlistSongsOrderMode = PlaylistSongsOrderMode.Sorted(it.currentPlaylistSongsSortOption),
                                 isLoading = false,
                                 playlistNotFound = false
@@ -415,8 +423,15 @@ class PlaylistViewModel @Inject constructor(
                             }
                         }
 
+                        // PERF FIX: applySortToSongs was running on the Main dispatcher here
+                        // (the withContext(Dispatchers.IO) above only covered the DB fetch) -
+                        // for a playlist with thousands of songs, sorting on Main is exactly the
+                        // kind of jank a first open of a big playlist would show. Same fix as
+                        // sortPlaylistSongs(): do the comparator sort on Dispatchers.Default.
                         val orderedSongs = when (orderMode) {
-                            is PlaylistSongsOrderMode.Sorted -> applySortToSongs(songsList, orderMode.option)
+                            is PlaylistSongsOrderMode.Sorted -> withContext(Dispatchers.Default) {
+                                applySortToSongs(songsList, orderMode.option)
+                            }
                             PlaylistSongsOrderMode.Manual -> songsList
                         }
 
@@ -1616,20 +1631,31 @@ class PlaylistViewModel @Inject constructor(
         }
 
         val currentSongs = _uiState.value.currentPlaylistSongs
-        val sortedSongs = sortSongsList(currentSongs, sortOption)
 
-        _uiState.update {
-            val updatedModes = if (playlistId != null) {
-                it.playlistOrderModes + (playlistId to PlaylistSongsOrderMode.Sorted(sortOption))
-            } else {
-                it.playlistOrderModes
+        // PERF FIX: sortSongsList runs a compareBy-chain sort over the whole playlist (each
+        // comparison re-lowercases title/artist). sortPlaylistSongs() is called directly from
+        // a Compose onClick, so this used to execute inline on whichever thread called it -
+        // the UI thread - meaning every tap on a sort option blocked a frame for as long as the
+        // sort took. On a playlist of a few thousand songs on a slower device that's a visible
+        // stutter on every single sort change. Dispatchers.Default moves the CPU-bound sort off
+        // the UI thread; StateFlow.update() is safe to call from any thread, so no hop back to
+        // Main is needed before publishing the sorted result.
+        viewModelScope.launch(Dispatchers.Default) {
+            val sortedSongs = sortSongsList(currentSongs, sortOption)
+
+            _uiState.update {
+                val updatedModes = if (playlistId != null) {
+                    it.playlistOrderModes + (playlistId to PlaylistSongsOrderMode.Sorted(sortOption))
+                } else {
+                    it.playlistOrderModes
+                }
+                it.copy(
+                    currentPlaylistSongs = sortedSongs,
+                    currentPlaylistSongsSortOption = sortOption,
+                    playlistSongsOrderMode = PlaylistSongsOrderMode.Sorted(sortOption),
+                    playlistOrderModes = updatedModes
+                )
             }
-            it.copy(
-                currentPlaylistSongs = sortedSongs,
-                currentPlaylistSongsSortOption = sortOption,
-                playlistSongsOrderMode = PlaylistSongsOrderMode.Sorted(sortOption),
-                playlistOrderModes = updatedModes
-            )
         }
 
         if (playlistId != null) {
