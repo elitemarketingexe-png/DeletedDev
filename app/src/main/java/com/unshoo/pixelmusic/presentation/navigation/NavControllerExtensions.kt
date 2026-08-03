@@ -7,11 +7,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavOptionsBuilder
 import com.unshoo.pixelmusic.data.ads.AdManager
 
-private var lastNavigationTime = 0L
-
 private fun NavController.isReadyForNavigation(targetRoute: String? = null): Boolean {
-    val now = System.currentTimeMillis()
-    if (now - lastNavigationTime < 120L) return false
     if (targetRoute != null && currentDestination?.route == targetRoute) return false
     return runCatching {
         currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) == true
@@ -20,7 +16,6 @@ private fun NavController.isReadyForNavigation(targetRoute: String? = null): Boo
 
 fun NavController.navigateSafely(route: String): Boolean {
     if (!isReadyForNavigation(route)) return false
-    lastNavigationTime = System.currentTimeMillis()
     val activity = context as? Activity
     try {
         if (activity != null && route.contains("settings_category/ai")) {
@@ -54,7 +49,6 @@ fun NavController.navigateSafely(
     builder: NavOptionsBuilder.() -> Unit
 ): Boolean {
     if (!isReadyForNavigation(route)) return false
-    lastNavigationTime = System.currentTimeMillis()
     val activity = context as? Activity
     try {
         if (activity != null && route.contains("settings_category/ai")) {

@@ -115,17 +115,15 @@ fun SettingsScreen(
 
     val transition = rememberTransition(transitionState, label = "SettingsAppearTransition")
 
-    val contentAlpha by
-            transition.animateFloat(
-                    label = "ContentAlpha",
-                    transitionSpec = { tween(durationMillis = 500) }
-            ) { if (it) 1f else 0f }
+    val contentAlpha by transition.animateFloat(
+        label = "ContentAlpha",
+        transitionSpec = { spring(dampingRatio = com.unshoo.pixelmusic.ui.theme.ExpressiveSprings.DefaultEffectsDampingRatio, stiffness = com.unshoo.pixelmusic.ui.theme.ExpressiveSprings.DefaultEffectsStiffness) }
+    ) { if (it) 1f else 0f }
 
-    val contentOffset by
-            transition.animateDp(
-                    label = "ContentOffset",
-                    transitionSpec = { tween(durationMillis = 400, easing = FastOutSlowInEasing) }
-            ) { if (it) 0.dp else 40.dp }
+    val contentOffset by transition.animateDp(
+        label = "ContentOffset",
+        transitionSpec = { spring(dampingRatio = com.unshoo.pixelmusic.ui.theme.ExpressiveSprings.SlowSpatialDampingRatio, stiffness = com.unshoo.pixelmusic.ui.theme.ExpressiveSprings.SlowSpatialStiffness) }
+    ) { if (it) 0.dp else 24.dp }
 
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
@@ -203,11 +201,13 @@ fun SettingsScreen(
     }
 
     Box(
-            modifier =
-                    Modifier.nestedScroll(nestedScrollConnection).fillMaxSize().graphicsLayer {
-                        alpha = contentAlpha
-                        translationY = contentOffset.toPx()
-                    }
+        modifier = Modifier
+            .nestedScroll(nestedScrollConnection)
+            .fillMaxSize()
+            .graphicsLayer {
+                alpha = contentAlpha
+                translationY = contentOffset.toPx()
+            }
     ) {
         val currentTopBarHeightDp = with(density) { topBarHeight.value.toDp() }
         LazyColumn(
@@ -263,14 +263,10 @@ fun SettingsScreen(
                             category = category,
                             customColors = colors,
                             onClick = {
-                                val isResumed = navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED
-                                val isSettingsRoute = navController.currentDestination?.route == Screen.Settings.route
-                                if (isResumed && isSettingsRoute) {
-                                    if (category == SettingsCategory.EQUALIZER) {
-                                        navController.navigateSafely(Screen.Equalizer.route)
-                                    } else {
-                                        navController.navigateSafely(Screen.SettingsCategory.createRoute(category.id))
-                                    }
+                                if (category == SettingsCategory.EQUALIZER) {
+                                    navController.navigateSafely(Screen.Equalizer.route)
+                                } else {
+                                    navController.navigateSafely(Screen.SettingsCategory.createRoute(category.id))
                                 }
                             },
                             shape = shapeFor(itemIndex)

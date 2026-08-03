@@ -1,6 +1,8 @@
 package com.unshoo.pixelmusic.presentation.screens
 
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
 import com.unshoo.pixelmusic.presentation.components.BackupModuleSelectionDialog
 import com.unshoo.pixelmusic.data.preferences.AiPreferencesRepository
 import com.unshoo.pixelmusic.data.preferences.StreamingAudioQuality
@@ -406,24 +408,25 @@ fun SettingsCategoryScreen(
         }
     }
 
-    val isCategoryRouteActive = navController.currentDestination?.route?.startsWith("settings_category") == true
+    // Force-reset all dialogs, bottom sheets, and overlays immediately on unmount / navigation exit
+    DisposableEffect(Unit) {
+        onDispose {
+            showExplorerSheet = false
+            showClearLyricsDialog = false
+            showRebuildDatabaseWarning = false
+            showRegenerateDailyMixDialog = false
+            showRegenerateStatsDialog = false
+            showRegenerateAllPalettesDialog = false
+            showExportDataDialog = false
+            showImportFlow = false
+            showPaletteRegenerateSheet = false
+        }
+    }
 
     Box(
         modifier = Modifier
             .nestedScroll(nestedScrollConnection)
             .fillMaxSize()
-            .then(
-                if (!isCategoryRouteActive) {
-                    Modifier.pointerInput(Unit) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { it.consume() }
-                            }
-                        }
-                    }
-                } else Modifier
-            )
     ) {
         val currentTopBarHeightDp = with(density) { topBarHeight.value.toDp() }
         
