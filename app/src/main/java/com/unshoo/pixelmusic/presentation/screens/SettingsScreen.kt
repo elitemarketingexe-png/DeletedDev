@@ -115,15 +115,17 @@ fun SettingsScreen(
 
     val transition = rememberTransition(transitionState, label = "SettingsAppearTransition")
 
-    val contentAlpha by transition.animateFloat(
-        label = "ContentAlpha",
-        transitionSpec = { spring(dampingRatio = com.unshoo.pixelmusic.ui.theme.ExpressiveSprings.DefaultEffectsDampingRatio, stiffness = com.unshoo.pixelmusic.ui.theme.ExpressiveSprings.DefaultEffectsStiffness) }
-    ) { if (it) 1f else 0f }
+    val contentAlpha by
+            transition.animateFloat(
+                    label = "ContentAlpha",
+                    transitionSpec = { tween(durationMillis = 500) }
+            ) { if (it) 1f else 0f }
 
-    val contentOffset by transition.animateDp(
-        label = "ContentOffset",
-        transitionSpec = { spring(dampingRatio = com.unshoo.pixelmusic.ui.theme.ExpressiveSprings.SlowSpatialDampingRatio, stiffness = com.unshoo.pixelmusic.ui.theme.ExpressiveSprings.SlowSpatialStiffness) }
-    ) { if (it) 0.dp else 24.dp }
+    val contentOffset by
+            transition.animateDp(
+                    label = "ContentOffset",
+                    transitionSpec = { tween(durationMillis = 400, easing = FastOutSlowInEasing) }
+            ) { if (it) 0.dp else 40.dp }
 
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
@@ -237,6 +239,10 @@ fun SettingsScreen(
                 )
             }
             item {
+                // Rapid-click throttle: prevent freeze / stack from tapping category cards too fast
+                val lastCategoryClickTime = remember { mutableStateOf(0L) }
+                val throttleMs = 250L
+
                 val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                 ExpressiveSettingsGroup {
                     val mainCategories = SettingsCategory.entries.filter {
@@ -263,10 +269,14 @@ fun SettingsScreen(
                             category = category,
                             customColors = colors,
                             onClick = {
-                                if (category == SettingsCategory.EQUALIZER) {
-                                    navController.navigateSafely(Screen.Equalizer.route)
-                                } else {
-                                    navController.navigateSafely(Screen.SettingsCategory.createRoute(category.id))
+                                val now = System.currentTimeMillis()
+                                if (now - lastCategoryClickTime.value >= throttleMs) {
+                                    lastCategoryClickTime.value = now
+                                    if (category == SettingsCategory.EQUALIZER) {
+                                        navController.navigateSafely(Screen.Equalizer.route)
+                                    } else {
+                                        navController.navigateSafely(Screen.SettingsCategory.createRoute(category.id))
+                                    }
                                 }
                             },
                             shape = shapeFor(itemIndex)
@@ -280,7 +290,13 @@ fun SettingsScreen(
                     ExpressiveCategoryItem(
                         category = SettingsCategory.DEVICE_CAPABILITIES,
                         customColors = getCategoryColors(SettingsCategory.DEVICE_CAPABILITIES, isDark),
-                        onClick = { navController.navigateSafely(Screen.DeviceCapabilities.route) },
+                        onClick = {
+                            val now = System.currentTimeMillis()
+                            if (now - lastCategoryClickTime.value >= throttleMs) {
+                                lastCategoryClickTime.value = now
+                                navController.navigateSafely(Screen.DeviceCapabilities.route)
+                            }
+                        },
                         shape = shapeFor(itemIndex)
                     )
                     if (itemIndex < totalItems - 1) {
@@ -293,7 +309,13 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_accounts_row_subtitle),
                         icon = Icons.Rounded.AccountCircle,
                         colors = getAccountsColors(isDark),
-                        onClick = { navController.navigateSafely(Screen.Accounts.route) },
+                        onClick = {
+                            val now = System.currentTimeMillis()
+                            if (now - lastCategoryClickTime.value >= throttleMs) {
+                                lastCategoryClickTime.value = now
+                                navController.navigateSafely(Screen.Accounts.route)
+                            }
+                        },
                         shape = shapeFor(itemIndex)
                     )
                     if (itemIndex < totalItems - 1) {
@@ -304,7 +326,13 @@ fun SettingsScreen(
                     ExpressiveCategoryItem(
                         category = SettingsCategory.ABOUT,
                         customColors = getCategoryColors(SettingsCategory.ABOUT, isDark),
-                        onClick = { navController.navigateSafely("about") },
+                        onClick = {
+                            val now = System.currentTimeMillis()
+                            if (now - lastCategoryClickTime.value >= throttleMs) {
+                                lastCategoryClickTime.value = now
+                                navController.navigateSafely("about")
+                            }
+                        },
                         shape = shapeFor(itemIndex)
                     )
                 }

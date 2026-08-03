@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.res.stringResource
 import com.unshoo.pixelmusic.R
 import androidx.compose.ui.unit.IntOffset
@@ -674,11 +675,27 @@ private enum class MainRootDirection {
 //    tween, unlike springs which block until 100% settled).
 //  • 350ms fade — finishes before the spatial motion so content is fully opaque while
 //    the slide is still decelerating, giving a "content loads instantly" perception.
-// Material 3 Expressive soothing, calm cross-fade for bottom nav tab page transitions.
-// Pure 300ms fade + subtle scale prevents spatial horizontal sliding, ensuring tab switching feels completely calm and smooth.
-private val MAIN_ROOT_FADE_TWEEN = tween<Float>(
-    durationMillis = 200,
-    easing = androidx.compose.animation.core.FastOutSlowInEasing
+// Material 3 Expressive immersive blend transitions for top-level navigation (Home / Explore / Library).
+// Combines a soothing 500ms decelerate fade with a soft 12% micro-slide and subtle scale blend (0.98f -> 1.0f).
+// This gives top-level tab switches a rich, deeply integrated, and fluid Material 3 Expressive feel.
+private val MAIN_ROOT_FADE_IN_TWEEN = tween<Float>(
+    durationMillis = 500,
+    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+)
+
+private val MAIN_ROOT_FADE_OUT_TWEEN = tween<Float>(
+    durationMillis = 380,
+    easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 1.0f)
+)
+
+private val MAIN_ROOT_SPATIAL_TWEEN = tween<IntOffset>(
+    durationMillis = 500,
+    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+)
+
+private val MAIN_ROOT_SCALE_TWEEN = tween<Float>(
+    durationMillis = 500,
+    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
 )
 
 private fun mainRootDirection(
@@ -696,8 +713,29 @@ private fun mainRootEnterTransition(
     toRoute: String?,
     fallback: EnterTransition
 ): EnterTransition = when (mainRootDirection(fromRoute, toRoute)) {
-    MainRootDirection.FORWARD, MainRootDirection.BACKWARD -> {
-        fadeIn(animationSpec = MAIN_ROOT_FADE_TWEEN)
+    MainRootDirection.FORWARD -> {
+        fadeIn(animationSpec = MAIN_ROOT_FADE_IN_TWEEN) +
+            slideInHorizontally(
+                animationSpec = MAIN_ROOT_SPATIAL_TWEEN,
+                initialOffsetX = { (it * 0.12f).toInt() }
+            ) +
+            scaleIn(
+                animationSpec = MAIN_ROOT_SCALE_TWEEN,
+                initialScale = 0.98f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            )
+    }
+    MainRootDirection.BACKWARD -> {
+        fadeIn(animationSpec = MAIN_ROOT_FADE_IN_TWEEN) +
+            slideInHorizontally(
+                animationSpec = MAIN_ROOT_SPATIAL_TWEEN,
+                initialOffsetX = { -(it * 0.12f).toInt() }
+            ) +
+            scaleIn(
+                animationSpec = MAIN_ROOT_SCALE_TWEEN,
+                initialScale = 0.98f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            )
     }
     null -> fallback
 }
@@ -707,8 +745,29 @@ private fun mainRootExitTransition(
     toRoute: String?,
     fallback: ExitTransition
 ): ExitTransition = when (mainRootDirection(fromRoute, toRoute)) {
-    MainRootDirection.FORWARD, MainRootDirection.BACKWARD -> {
-        fadeOut(animationSpec = MAIN_ROOT_FADE_TWEEN)
+    MainRootDirection.FORWARD -> {
+        fadeOut(animationSpec = MAIN_ROOT_FADE_OUT_TWEEN) +
+            slideOutHorizontally(
+                animationSpec = MAIN_ROOT_SPATIAL_TWEEN,
+                targetOffsetX = { -(it * 0.08f).toInt() }
+            ) +
+            scaleOut(
+                animationSpec = MAIN_ROOT_SCALE_TWEEN,
+                targetScale = 0.99f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            )
+    }
+    MainRootDirection.BACKWARD -> {
+        fadeOut(animationSpec = MAIN_ROOT_FADE_OUT_TWEEN) +
+            slideOutHorizontally(
+                animationSpec = MAIN_ROOT_SPATIAL_TWEEN,
+                targetOffsetX = { (it * 0.08f).toInt() }
+            ) +
+            scaleOut(
+                animationSpec = MAIN_ROOT_SCALE_TWEEN,
+                targetScale = 0.99f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            )
     }
     null -> fallback
 }

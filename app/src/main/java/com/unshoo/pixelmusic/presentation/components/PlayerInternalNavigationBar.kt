@@ -167,6 +167,8 @@ private fun ExpressiveFloatingPillNavigationBar(
 
     val selectedIndex = mainItems.indexOfFirst { it.screen.route == latestCurrentRoute }
 
+    val motionScheme = MaterialTheme.motionScheme
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -174,97 +176,87 @@ private fun ExpressiveFloatingPillNavigationBar(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Main navigation floating toolbar — M3 Expressive floating capsule container
-        Surface(
-            modifier = Modifier
-                .weight(1f)
-                .height(58.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            tonalElevation = 2.dp,
-            shadowElevation = 6.dp
+        // Official Material 3 Expressive HorizontalFloatingToolbar container
+        HorizontalFloatingToolbar(
+            expanded = true,
+            modifier = Modifier.weight(1f),
+            colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
+                toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            ),
+            contentPadding = FloatingToolbarDefaults.ContentPadding
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                mainItems.forEachIndexed { index, item ->
-                    val isSelected = selectedIndex == index
+            mainItems.forEachIndexed { index, item ->
+                val isSelected = selectedIndex == index
 
-                    val itemWeight by animateFloatAsState(
-                        targetValue = if (isSelected && !shouldHideLabel) 2.2f else 1.0f,
-                        animationSpec = tween(durationMillis = 240, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
-                        label = "pill_item_weight_$index"
-                    )
+                val itemWeight by animateFloatAsState(
+                    targetValue = if (isSelected && !shouldHideLabel) 2.2f else 1.0f,
+                    animationSpec = motionScheme.fastSpatialSpec(),
+                    label = "pill_item_weight_$index"
+                )
 
-                    Surface(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            if (latestNavigationEnabled && latestCurrentRoute != item.screen.route) {
-                                navController.navigateToTopLevelSafely(item.screen.route)
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(itemWeight)
-                            .height(48.dp),
-                        shape = CircleShape,
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        } else {
-                            Color.Transparent
-                        },
-                        contentColor = if (isSelected) {
-                            MaterialTheme.colorScheme.onSecondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                Surface(
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (latestNavigationEnabled && latestCurrentRoute != item.screen.route) {
+                            navController.navigateToTopLevelSafely(item.screen.route)
                         }
+                    },
+                    modifier = Modifier
+                        .weight(itemWeight)
+                        .height(48.dp),
+                    shape = CircleShape,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    } else {
+                        Color.Transparent
+                    },
+                    contentColor = if (isSelected) {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 8.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 8.dp)
+                        val iconRes = if (isSelected && item.selectedIconResId != null && item.selectedIconResId != 0) {
+                            item.selectedIconResId
+                        } else {
+                            item.iconResId
+                        }
+
+                        Icon(
+                            painter = painterResource(id = iconRes),
+                            contentDescription = item.label,
+                            modifier = Modifier.size(22.dp)
+                        )
+
+                        AnimatedVisibility(
+                            visible = isSelected && !shouldHideLabel,
+                            enter = fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
+                                expandHorizontally(
+                                    expandFrom = Alignment.Start,
+                                    animationSpec = motionScheme.fastSpatialSpec()
+                                ),
+                            exit = fadeOut(animationSpec = motionScheme.defaultEffectsSpec()) +
+                                shrinkHorizontally(
+                                    shrinkTowards = Alignment.Start,
+                                    animationSpec = motionScheme.fastSpatialSpec()
+                                )
                         ) {
-                            val iconRes = if (isSelected && item.selectedIconResId != null && item.selectedIconResId != 0) {
-                                item.selectedIconResId
-                            } else {
-                                item.iconResId
-                            }
-
-                            Icon(
-                                painter = painterResource(id = iconRes),
-                                contentDescription = item.label,
-                                modifier = Modifier.size(22.dp)
-                            )
-
-                            AnimatedVisibility(
-                                visible = isSelected && !shouldHideLabel,
-                                enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffects()) +
-                                    expandHorizontally(
-                                        expandFrom = Alignment.Start,
-                                        animationSpec = tween(durationMillis = 200, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
-                                    ),
-                                exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffects()) +
-                                    shrinkHorizontally(
-                                        shrinkTowards = Alignment.Start,
-                                        animationSpec = tween(durationMillis = 180, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
-                                    )
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = item.label,
-                                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.5.sp),
-                                        maxLines = 1,
-                                        fontWeight = FontWeight.SemiBold,
-                                        softWrap = false
-                                    )
-                                }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = item.label,
+                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
+                                    maxLines = 1,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    softWrap = false
+                                )
                             }
                         }
                     }

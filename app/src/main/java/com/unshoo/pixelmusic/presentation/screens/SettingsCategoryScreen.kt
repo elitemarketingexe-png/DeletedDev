@@ -58,6 +58,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -257,6 +258,23 @@ fun SettingsCategoryScreen(
         mutableStateOf(uiState.storageLimitMb.toFloat())
     }
 
+    // Reset all overlays / dialogs immediately when category changes or screen enters
+    LaunchedEffect(categoryId) {
+        showExplorerSheet = false
+        refreshRequested = false
+        syncRequestObservedRunning = false
+        syncIndicatorLabel = null
+        showClearLyricsDialog = false
+        showRebuildDatabaseWarning = false
+        showRegenerateDailyMixDialog = false
+        showRegenerateStatsDialog = false
+        showRegenerateAllPalettesDialog = false
+        showExportDataDialog = false
+        showImportFlow = false
+        exportSections = BackupSection.defaultSelection
+        importFileUri = null
+    }
+
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
@@ -337,7 +355,7 @@ fun SettingsCategoryScreen(
     // TopBar Animations (identical to SettingsScreen)
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
-    val lazyListState = rememberLazyListState()
+    val lazyListState = remember(categoryId) { LazyListState() }
     
     val categoryTitle = stringResource(category.titleRes)
     val isLongTitle = categoryTitle.length > 13
@@ -408,8 +426,8 @@ fun SettingsCategoryScreen(
         }
     }
 
-    // Force-reset all dialogs, bottom sheets, and overlays immediately on unmount / navigation exit
-    DisposableEffect(Unit) {
+    // Force-reset all dialogs, bottom sheets, and overlays on category change / unmount
+    DisposableEffect(categoryId) {
         onDispose {
             showExplorerSheet = false
             showClearLyricsDialog = false
@@ -419,7 +437,6 @@ fun SettingsCategoryScreen(
             showRegenerateAllPalettesDialog = false
             showExportDataDialog = false
             showImportFlow = false
-            showPaletteRegenerateSheet = false
         }
     }
 
