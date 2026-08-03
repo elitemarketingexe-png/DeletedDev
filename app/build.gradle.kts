@@ -338,13 +338,13 @@ dependencies {
 
     // Identity & Background (GMS flavor only)
     implementation(libs.androidx.work.runtime.ktx)
-    gmsImplementation(libs.play.services.wearable)
-    gmsImplementation(libs.kotlinx.coroutines.play.services)
-    gmsImplementation(libs.credentials)
-    gmsImplementation(libs.credentials.play.services.auth)
-    gmsImplementation(libs.googleid)
+    "gmsImplementation"(libs.play.services.wearable)
+    "gmsImplementation"(libs.kotlinx.coroutines.play.services)
+    "gmsImplementation"(libs.credentials)
+    "gmsImplementation"(libs.credentials.play.services.auth)
+    "gmsImplementation"(libs.googleid)
     implementation(libs.androidx.security.crypto)
-    gmsImplementation(libs.google.play.services.cast.framework)
+    "gmsImplementation"(libs.google.play.services.cast.framework)
     implementation(libs.tdlib)
 
     // UI Utilities & Performance
