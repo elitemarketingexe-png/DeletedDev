@@ -966,11 +966,11 @@ class MainActivity : ComponentActivity() {
                         // subscribe to the fraction as State, and use it as a key
                         // for the `remember` so the shape is only rebuilt when the
                         // fraction changes by a meaningful amount.
-                        val expansionFraction = playerViewModel.playerContentExpansionFraction.value
+                        val expansionFraction by remember(playerViewModel) {
+                            androidx.compose.runtime.snapshotFlow { playerViewModel.playerContentExpansionFraction.value }
+                        }.collectAsStateWithLifecycle(initialValue = 0f)
                         val quantizedFraction = remember(expansionFraction) {
-                            // Quantize to 4 buckets to skip recompositions for tiny
-                            // intermediate values during the swipe.
-                            (expansionFraction.coerceIn(0f, 1f) * 4f).toInt() / 4f
+                            (expansionFraction.coerceIn(0f, 1f) * 100f).toInt() / 100f
                         }
 
 
