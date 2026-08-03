@@ -317,7 +317,9 @@ dependencies {
     implementation(libs.google.play.services.cast.framework)
     implementation(libs.tdlib)
 
-    // UI Utilities & Extra
+    // UI Utilities & Performance
+    implementation("androidx.metrics:metrics-performance:1.0.0-beta01")
+
     implementation(libs.timber)
     // Gemini uses our lightweight REST client. Avoid the deprecated official SDK because
     // it depends on Ktor 2.x and crashes when the app's Ktor 3.x stack is present.

@@ -19,6 +19,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.metrics.performance.JankStats
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
@@ -212,6 +213,17 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         super.onCreate(savedInstanceState)
+
+        // Performance Monitoring: JankStats tracks dropped frames and UI jank in real time.
+        JankStats.createAndTrack(window) { frameData ->
+            if (frameData.isJank) {
+                val durationMs = frameData.frameDurationUiNanos / 1_000_000
+                Log.w(
+                    "JankStats",
+                    "Jank detected! Frame duration: ${durationMs}ms (states: ${frameData.states})"
+                )
+            }
+        }
 
         // MD3 Optimization: Release Splash Screen immediately to render UI skeleton.
         // Data loading is handled via optimistic UI and smooth transitions.
