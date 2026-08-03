@@ -7,16 +7,19 @@ import androidx.navigation.NavController
 import androidx.navigation.NavOptionsBuilder
 import com.unshoo.pixelmusic.data.ads.AdManager
 
+private var lastNavigationTime = 0L
+
 private fun NavController.isReadyForNavigation(): Boolean {
+    val now = System.currentTimeMillis()
+    if (now - lastNavigationTime < 400L) return false
     return runCatching {
-        // We allow navigation if the current entry is at least STARTED.
-        // This is safer than strictly RESUMED as transitions can sometimes delay RESUMED state.
         currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) == true
     }.getOrDefault(false)
 }
 
 fun NavController.navigateSafely(route: String): Boolean {
     if (!isReadyForNavigation()) return false
+    lastNavigationTime = System.currentTimeMillis()
     val activity = context as? Activity
     try {
         if (activity != null && route.contains("settings_category/ai")) {

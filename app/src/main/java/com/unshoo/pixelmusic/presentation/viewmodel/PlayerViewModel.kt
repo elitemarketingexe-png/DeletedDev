@@ -5605,14 +5605,28 @@ class PlayerViewModel @Inject constructor(
                             dualPlayerEngine.cancelNext()
                             val player = dualPlayerEngine.masterPlayer
                             player.setMediaItems(items, startIndex, 0L)
-                            player.shuffleModeEnabled =
-                                playbackStateHolder.stablePlayerState.value.isShuffleEnabled
-                            (player as? androidx.media3.exoplayer.ExoPlayer)?.setShuffleOrder(
-                                androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(
-                                    IntArray(items.size) { it },
-                                    System.currentTimeMillis()
+                            val isShuffle = playbackStateHolder.stablePlayerState.value.isShuffleEnabled
+                            player.shuffleModeEnabled = isShuffle
+                            if (isShuffle && items.isNotEmpty()) {
+                                val shuffledIndices = IntArray(items.size) { it }
+                                if (startIndex in items.indices) {
+                                    shuffledIndices[startIndex] = 0
+                                    shuffledIndices[0] = startIndex
+                                }
+                                val rng = java.util.Random(System.currentTimeMillis())
+                                for (i in (items.size - 1) downTo 2) {
+                                    val j = 1 + rng.nextInt(i)
+                                    val tmp = shuffledIndices[i]
+                                    shuffledIndices[i] = shuffledIndices[j]
+                                    shuffledIndices[j] = tmp
+                                }
+                                (player as? androidx.media3.exoplayer.ExoPlayer)?.setShuffleOrder(
+                                    androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder(
+                                        shuffledIndices,
+                                        System.currentTimeMillis()
+                                    )
                                 )
-                            )
+                            }
                             player.prepare()
                             player.playWhenReady = true
                             player.play()

@@ -262,10 +262,12 @@ fun SettingsScreen(
                             category = category,
                             customColors = colors,
                             onClick = {
-                                if (category == SettingsCategory.EQUALIZER) {
-                                    navController.navigateSafely(Screen.Equalizer.route)
-                                } else {
-                                    navController.navigateSafely(Screen.SettingsCategory.createRoute(category.id))
+                                if (navController.currentDestination?.route == Screen.Settings.route) {
+                                    if (category == SettingsCategory.EQUALIZER) {
+                                        navController.navigateSafely(Screen.Equalizer.route)
+                                    } else {
+                                        navController.navigateSafely(Screen.SettingsCategory.createRoute(category.id))
+                                    }
                                 }
                             },
                             shape = shapeFor(itemIndex)
