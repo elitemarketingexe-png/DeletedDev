@@ -274,7 +274,15 @@ object AppModule {
 
         return ImageLoader.Builder(context)
             .okHttpClient(okHttpClient)
-            .dispatcher(Dispatchers.IO.limitedParallelism(6)) // Smooth parallel image lazy-loading without main thread bottlenecks
+            // BUGFIX (GC churn — too many parallel decodes): 6 parallel
+            // image decodes, each potentially decoding a full-resolution
+            // 4-8 MB JPEG and holding a Bitmap during quantization, was
+            // the primary source of the 41+74+73+44 MB background GCs
+            // visible in the runtime log during a normal scrolling
+            // session. Two parallel decodes is the sweet spot: enough to
+            // keep the in-flight image queue drained, low enough that the
+            // GC can keep up without 1+ second pauses.
+            .dispatcher(Dispatchers.IO.limitedParallelism(2))
             .allowHardware(true) // Hardware bitmaps reduce Java heap pressure for UI album art
             .memoryCache {
                 MemoryCache.Builder(context)

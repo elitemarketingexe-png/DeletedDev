@@ -77,7 +77,13 @@ fun SmartImage(
     errorResId: Int = R.drawable.ic_music_placeholder,
     shape: Shape = RectangleShape,
     contentScale: ContentScale = ContentScale.Crop,
-    crossfadeDurationMillis: Int = 300,
+    // BUGFIX (was: 300ms crossfade everywhere): the previous default
+    // of 300ms applied to every thumbnail in every LazyColumn, which
+    // meant scrolling the library fired 6-8 crossfade animations per
+    // second, each forcing a recomposition of the surrounding card.
+    // 120ms is long enough to look polished on the full-player cover,
+    // and short enough that scrolling lists don't visibly queue.
+    crossfadeDurationMillis: Int = 120,
     useDiskCache: Boolean = true,
     useMemoryCache: Boolean = true,
     allowHardware: Boolean = true,

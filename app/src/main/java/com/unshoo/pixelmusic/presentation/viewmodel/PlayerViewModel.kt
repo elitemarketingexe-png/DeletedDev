@@ -95,6 +95,7 @@ import com.unshoo.pixelmusic.data.service.http.MediaFileHttpServerService
 import com.unshoo.pixelmusic.data.service.player.DualPlayerEngine
 import com.unshoo.pixelmusic.data.worker.SyncManager
 import com.unshoo.pixelmusic.data.worker.YouTubeLibrarySyncManager
+import com.unshoo.pixelmusic.utils.AppReadinessSignal
 import com.unshoo.pixelmusic.utils.AppShortcutManager
 import com.unshoo.pixelmusic.utils.ValidatedLyricsImport
 import com.unshoo.pixelmusic.utils.QueueUtils
@@ -1168,10 +1169,21 @@ class PlayerViewModel @Inject constructor(
         playbackStateHolder.initialize(viewModelScope)
         themeStateHolder.initialize(viewModelScope)
 
-        // On cold start, the MediaController connects asynchronously, leaving stablePlayerState.currentSong
-        // null until that happens. Pre-load the palette from the persisted snapshot so the mini player
-        // has the correct colors immediately on first render, before the controller is ready.
+        // BUGFIX (lag — first-frame jank): the cold-start work below used to
+        // run as soon as the ViewModel was constructed (which happens the
+        // moment `MainActivity.setContent { … by viewModels<PlayerViewModel>() }`
+        // runs), i.e. before the first frame is on screen. The DataStore
+        // read, the cloud-URI pre-fetch, and the palette quantization all
+        // competed with the first frame; the runtime log shows a 51-frame
+        // Choreographer skip during the very first interaction. We now
+        // suspend on AppReadinessSignal so the work runs after the first
+        // frame is committed (the signal is raised by MainActivity at
+        // line ~296 right after the contentVisible transition starts).
         viewModelScope.launch {
+            AppReadinessSignal.awaitReady()
+            // On cold start, the MediaController connects asynchronously, leaving stablePlayerState.currentSong
+            // null until that happens. Pre-load the palette from the persisted snapshot so the mini player
+            // has the correct colors immediately on first render, before the controller is ready.
             val snapshot = runCatching {
                 userPreferencesRepository.getPlaybackQueueSnapshotOnce()
             }.getOrNull() ?: return@launch
@@ -1938,17 +1950,26 @@ class PlayerViewModel @Inject constructor(
             castStateHolder.setRemotePlaybackActive(true)
         }
 
+        // BUGFIX (lag — DataStore / Room / network all on main): every
+        // viewModelScope.launch below used to start the moment this
+        // ViewModel was constructed (i.e. on the main thread), each one
+        // hitting DataStore or Room synchronously. That's pure main-thread
+        // I/O before the first frame. We now suspend on AppReadinessSignal
+        // (raised by MainActivity after contentVisible = true) and run on
+        // Dispatchers.IO so the UI thread is free to draw.
 
-
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
+            AppReadinessSignal.awaitReady()
             userPreferencesRepository.migrateTabOrder()
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
+            AppReadinessSignal.awaitReady()
             userPreferencesRepository.ensureLibrarySortDefaults()
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
+            AppReadinessSignal.awaitReady()
             val legacyFavoriteIds = userPreferencesRepository.favoriteSongIdsFlow.first()
             if (legacyFavoriteIds.isNotEmpty()) {
                 val roomFavoriteIds = musicRepository.getFavoriteSongIdsOnce()
@@ -1962,6 +1983,7 @@ class PlayerViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            AppReadinessSignal.awaitReady()
             userPreferencesRepository.isFoldersPlaylistViewFlow.collect { isPlaylistView ->
                 folderNavigationStateHolder.setFoldersPlaylistViewState(
                     isPlaylistView = isPlaylistView,

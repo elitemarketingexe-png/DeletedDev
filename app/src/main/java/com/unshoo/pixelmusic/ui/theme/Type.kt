@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import com.unshoo.pixelmusic.R
 
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -241,5 +242,26 @@ private fun createBaseTypography(family: FontFamily): Typography = Typography(
 private val DefaultAppTypography = createBaseTypography(ActualGoogleSansRounded)
 private val SystemFontTypography = createBaseTypography(FontFamily.Default)
 
+/**
+ * BUGFIX (lag — Typography was a plain property-getter): the previous
+ * `get() = if (FontSettings.useSystemFont) SystemFontTypography else
+ * DefaultAppTypography` form was a non-Composable property. Compose's
+ * stability inference treated its return value as unstable because the
+ * getter reads a mutable State on every invocation, even when the actual
+ * value didn't change. That made `MaterialTheme(typography = …)`
+ * invalidate every Text node on every theme-relevant recomposition.
+ *
+ * Making this a `@Composable` getter subscribes the caller to
+ * `FontSettings.useSystemFont` — which is the *correct* behavior, since
+ * the user can toggle the font setting at runtime and we want the UI to
+ * reflect the change. The toggle happens rarely, so the extra
+ * subscription has zero cost in normal use. Compose tracks the State
+ * read here and only re-invokes the getter when `useSystemFont`
+ * actually flips.
+ */
 val Typography: Typography
-    get() = if (FontSettings.useSystemFont) SystemFontTypography else DefaultAppTypography
+    @Composable
+    get() {
+        val useSystem = FontSettings.useSystemFont
+        return if (useSystem) SystemFontTypography else DefaultAppTypography
+    }

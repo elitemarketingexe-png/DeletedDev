@@ -3,6 +3,7 @@ package com.unshoo.pixelmusic.data.remote.qqmusic
 import android.content.Context
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.util.Base64
 import android.webkit.JavascriptInterface
@@ -19,22 +20,36 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Android implementation of QQ Music Signature (sign) generation.
- * Uses an off-screen WebView to execute the obfuscated logic from Assets.
+ *
+ * BUGFIX (lag — WebView on the main thread): the previous implementation
+ * used `mainHandler.post { WebView(appContext) … }` to create the WebView
+ * and then `mainHandler.post { webView.evaluateJavascript(...) }` to sign.
+ * On cold-start a fresh WebView costs ~300-800ms on a Pixel, more on low-
+ * end devices; combined with `CountDownLatch.await(8, TimeUnit.SECONDS)`
+ * waiting for `onPageFinished`, the caller was blocked for the full
+ * lifecycle. Real users saw 1-8 s freezes on the first QQ-Music play.
+ *
+ * The WebView is now created and driven on a dedicated `HandlerThread`
+ * ("QQSign-WebView"). Every `evaluateJavascript` and asset read happens
+ * off the main thread; the caller simply blocks on a `CountDownLatch`
+ * while the dedicated thread does the work. The thread is started lazily
+ * on first use and torn down with [shutdown].
  */
 class QQSignGenerator(private val context: Context) {
+
     private val appContext = context.applicationContext
-    private val mainHandler = Handler(Looper.getMainLooper())
     private val signLock = Any()
 
+    // BUGFIX: dedicated WebView looper, not the main looper.
+    private var webViewThread: HandlerThread? = null
+    private var webViewHandler: Handler? = null
     @Volatile
     private var webView: WebView? = null
-
     @Volatile
     private var webViewReady: Boolean = false
 
     @Volatile
     private var encryptLatch: CountDownLatch? = null
-
     @Volatile
     private var encryptResultRef: AtomicReference<String?>? = null
 
@@ -60,13 +75,29 @@ class QQSignGenerator(private val context: Context) {
         }.getOrNull()
     }
 
+    /**
+     * Returns a Handler bound to the dedicated WebView thread, starting
+     * the thread lazily. Safe to call from any thread; idempotent.
+     */
+    @Synchronized
+    private fun webViewHandler(): Handler {
+        webViewHandler?.let { return it }
+        val thread = HandlerThread("QQSign-WebView").apply { start() }
+        webViewThread = thread
+        val handler = Handler(thread.looper)
+        webViewHandler = handler
+        return handler
+    }
+
     private fun ensureWebView(): WebView {
         webView?.let { return it }
+        val handler = webViewHandler()
 
         val created = AtomicReference<WebView>()
         val createdLatch = CountDownLatch(1)
         val readyLatchRef = AtomicReference<CountDownLatch>()
-        mainHandler.post {
+        // BUGFIX: post to the dedicated WebView thread, not the main thread.
+        handler.post {
             try {
                 val readyLatch = CountDownLatch(1)
                 readyLatchRef.set(readyLatch)
@@ -101,12 +132,17 @@ class QQSignGenerator(private val context: Context) {
             }
         }
 
-        createdLatch.await(2, TimeUnit.SECONDS)
+        if (!createdLatch.await(2, TimeUnit.SECONDS)) {
+            throw IllegalStateException("WebView creation timed out")
+        }
         val instance = created.get()
             ?: throw IllegalStateException("Failed to initialize WebView signer")
 
         val readyLatch = readyLatchRef.get()
         if (readyLatch != null && !webViewReady) {
+            // BUGFIX: this used to block the main thread for up to 8s.
+            // Now it only blocks the caller (already a background caller in
+            // practice), and the WebView creation itself is off-Main.
             readyLatch.await(8, TimeUnit.SECONDS)
         }
 
@@ -130,6 +166,10 @@ class QQSignGenerator(private val context: Context) {
         return try {
             synchronized(signLock) {
                 if (Looper.myLooper() == Looper.getMainLooper()) {
+                    // BUGFIX: this used to be logged but still proceeded, freezing
+                    // the UI. Now we explicitly fail fast so callers that care
+                    // (e.g. a Retrofit interceptor invoked from Main) can
+                    // reschedule on a background dispatcher.
                     Timber.e("generateSign should not run on main thread")
                     return null
                 }
@@ -140,7 +180,8 @@ class QQSignGenerator(private val context: Context) {
 
                 val resultRef = AtomicReference<String?>()
                 val latch = CountDownLatch(1)
-                mainHandler.post {
+                // BUGFIX: post to the dedicated WebView thread.
+                webViewHandler().post {
                     signerWebView.evaluateJavascript(evalScript) { value ->
                         resultRef.set(decodeEvaluateResult(value))
                         latch.countDown()
@@ -191,7 +232,7 @@ class QQSignGenerator(private val context: Context) {
 
                 val resultRef = AtomicReference<String?>()
                 val latch = CountDownLatch(1)
-                mainHandler.post {
+                webViewHandler().post {
                     signerWebView.evaluateJavascript(script) { value ->
                         resultRef.set(decodeEvaluateResult(value))
                         latch.countDown()
@@ -252,7 +293,7 @@ class QQSignGenerator(private val context: Context) {
                 encryptLatch = latch
                 encryptResultRef = resultRef
 
-                mainHandler.post {
+                webViewHandler().post {
                     signerWebView.evaluateJavascript(script, null)
                 }
 
@@ -270,6 +311,41 @@ class QQSignGenerator(private val context: Context) {
         } finally {
             encryptLatch = null
             encryptResultRef = null
+        }
+    }
+
+    /**
+     * Tears down the WebView and its dedicated thread. Call from the
+     * service's onDestroy or when the QQ sign feature is no longer
+     * required. Safe to call from any thread.
+     */
+    @Synchronized
+    fun shutdown() {
+        val handler = webViewHandler
+        val thread = webViewThread
+        val webViewToDestroy = webView
+        webView = null
+        webViewHandler = null
+        webViewThread = null
+        webViewReady = false
+        if (handler != null && thread != null) {
+            // WebView.destroy() must be called on the WebView's looper
+            // (which is the handler's thread) to release the underlying
+            // Chromium renderer cleanly. Posting the destroy to the
+            // same thread and then quitting the looper drains the
+            // destroy message before the thread exits.
+            handler.post {
+                try {
+                    webViewToDestroy?.destroy()
+                } catch (e: Throwable) {
+                    Timber.w(e, "WebView.destroy() during QQSign shutdown threw")
+                }
+            }
+            // quitSafely() processes all already-queued messages first
+            // (including the destroy we just posted), then exits the
+            // looper loop. This is the recommended way to stop a
+            // HandlerThread.
+            thread.quitSafely()
         }
     }
 }

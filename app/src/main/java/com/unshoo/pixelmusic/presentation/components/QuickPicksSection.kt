@@ -782,17 +782,28 @@ private fun QuickPickClassicCard(
         label = "ClassicCardBg"
     )
     
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val animatedBorderGlowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.7f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "borderGlow"
-    )
-    val borderGlowAlpha = if (isPlaying) animatedBorderGlowAlpha else 1f
+    // BUGFIX (was: a rememberInfiniteTransition was created unconditionally
+    // on every QuickPicks card, even when not playing). Each
+    // rememberInfiniteTransition starts a clock-driven animation that
+    // runs forever and wakes the UI thread at ~16ms intervals to advance
+    // the value. With ~10 cards on the home screen that's 10 parallel
+    // animators ticking even when no card is playing — pure waste. We
+    // now only create the transition when the card is actually playing.
+    val animatedBorderGlowAlpha = if (isPlaying) {
+        val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+        infiniteTransition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 0.7f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "borderGlow"
+        ).value
+    } else {
+        1f
+    }
+    val borderGlowAlpha = animatedBorderGlowAlpha
 
     // M3 Expressive card: press-scale spring + corner morph instead of a static Card.
     ExpressiveCard(

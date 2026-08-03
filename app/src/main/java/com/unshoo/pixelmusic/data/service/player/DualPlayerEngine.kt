@@ -547,14 +547,26 @@ class DualPlayerEngine @Inject constructor(
     }
 
     init {
-        initialize()
+        // BUGFIX (was: initialize() called eagerly in init on the calling
+        // thread, which is the main thread for the service path):
+        // DualPlayerEngine is a Hilt @Singleton constructed by Hilt the
+        // first time anything injects it. For MusicService that's the
+        // main thread of `onCreate`, and `initialize()` builds two
+        // ExoPlayer instances — each of which loads extractors,
+        // decoders, audio sinks, and the LRU cache. Combined with the
+        // rest of MusicService.onCreate, this pushed the foreground
+        // service over its 5s start-up budget on slower devices.
+        // We now defer the actual ExoPlayer build to the first
+        // `initialize()` call from MusicService.onCreate, which itself
+        // has been moved to run as the last step. The audioOffload
+        // preferences collector stays since it doesn't allocate.
         scope.launch {
             userPreferencesRepository.audioOffloadEnabledFlow.collect { enabled ->
                 if (audioOffloadEnabled != enabled) {
                     audioOffloadEnabled = enabled
                     // ArchiveTune-style: apply offload preferences in-place. Rebuilding players
                     // on every toggle causes audible gaps and UI churn on low-end devices.
-                    applyAudioOffloadToActivePlayers()
+                    if (::playerA.isInitialized) applyAudioOffloadToActivePlayers()
                 }
             }
         }

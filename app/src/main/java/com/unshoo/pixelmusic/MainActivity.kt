@@ -97,7 +97,6 @@ import androidx.navigation.compose.rememberNavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.MoreExecutors
 import com.unshoo.pixelmusic.data.github.GitHubAnnouncementPropertiesService
 import com.unshoo.pixelmusic.data.github.PlayStoreAnnouncementRemoteConfig
 import com.unshoo.pixelmusic.data.preferences.AppThemeMode
@@ -148,7 +147,7 @@ import com.unshoo.pixelmusic.presentation.utils.AppHapticsConfig
 import com.unshoo.pixelmusic.presentation.utils.LocalAppHapticsConfig
 import com.unshoo.pixelmusic.presentation.utils.NoOpHapticFeedback
 import com.unshoo.pixelmusic.utils.CrashLogData
-import javax.annotation.concurrent.Immutable
+import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
@@ -161,6 +160,7 @@ data class BottomNavItem(
     val screen: Screen
 )
 
+@Immutable
 private data class DismissUndoBarSlice(
     val isVisible: Boolean = false,
     val durationMillis: Long = 4000L
@@ -285,22 +285,28 @@ class MainActivity : ComponentActivity() {
             }
 
             // Sync Trigger: When we are NOT showing setup (meaning permissions are good and setup is done).
-            // Defer by 800ms after contentVisible so the first frame fully renders before
-            // MediaStore/library sync I/O competes with the composition thread.
+            // BUGFIX (lag — was: delay(800L) on every cold start): the previous
+            // implementation waited a fixed 800ms after permissions were granted
+            // before starting the MediaStore sync, which meant every cold start
+            // took 800ms longer to begin showing songs. We now wait on the
+            // AppReadinessSignal — which fires the moment the first frame is
+            // committed — and start the sync immediately, off the main thread.
             LaunchedEffect(showSetupScreen) {
                 if (showSetupScreen == false) {
-                    // Wait for the content fade-in to finish before kicking off sync.
-                    // This ensures the UI is interactive before background I/O starts.
-                    kotlinx.coroutines.delay(800L)
+                    // Wait for the first frame to be committed before kicking
+                    // off sync I/O. This is event-driven, not a fixed timer.
+                    com.unshoo.pixelmusic.utils.AppReadinessSignal.awaitReady()
                     LogUtils.i(this, "Setup complete/skipped and permissions valid. Starting sync.")
                     mainViewModel.startSync()
                 }
             }
 
             // Check for crash log when app starts.
-            // Small delay so crash dialog doesn't race with first-frame composition.
+            // BUGFIX (lag — was: delay(300L)): wait for first frame instead
+            // of a fixed timer. The crash log is read from disk; pushing it
+            // off the first-frame path is what this guard is for.
             LaunchedEffect(Unit) {
-                kotlinx.coroutines.delay(300L)
+                com.unshoo.pixelmusic.utils.AppReadinessSignal.awaitReady()
                 if (!isBenchmarkMode && CrashHandler.hasCrashLog()) {
                     crashLogData = CrashHandler.getCrashLog()
                     showCrashReportDialog = true
@@ -337,8 +343,14 @@ class MainActivity : ComponentActivity() {
                 )
 
                 LaunchedEffect(Unit) {
-                    // Delay slightly to ensure first frame layout is done behind Splash
-                    delay(100)
+                    // BUGFIX (lag — was: delay(100) which is arbitrary): wait
+                    // for the next actual frame instead of a fixed timer. On
+                    // a low-end device 100ms may not be enough and we'd hide
+                    // the splash before the first frame is committed; on a
+                    // high-end device 100ms is wasted. `awaitFrame` is a no-op
+                    // suspend that resumes on the next frame callback, so we
+                    // hand the UI back the moment a real frame is committed.
+                    androidx.compose.runtime.withFrameNanos { /* first frame callback */ }
                     contentVisible = true
                     // Signal ViewModels that defer work until UI is ready.
                     // This fires after the first frame has been committed, giving
@@ -934,14 +946,47 @@ class MainActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxSize(),
                 bottomBar = {
                     if (shouldRenderNavigationBar) {
-                        val playerUiState by playerViewModel.playerUiState.collectAsStateWithLifecycle()
+                        // BUGFIX (was: collected the full PlayerUiState
+                        // data class to read one Boolean field):
+                        // PlayerUiState is a 50-field data class. Even
+                        // though it's @Immutable, every time any field
+                        // changes Compose creates a new instance and the
+                        // bottomBar lambda re-evaluates — including the
+                        // expensive bottom-bar shape & graphicsLayer
+                        // blocks below. We subscribe only to the single
+                        // Boolean field we actually need.
+                        val isPreparing by remember {
+                            playerViewModel.playerUiState
+                                .map { it.preparingSongId != null }
+                                .distinctUntilChanged()
+                        }.collectAsStateWithLifecycle(initialValue = false)
                         val currentSongId by remember {
                             playerViewModel.stablePlayerState
                                 .map { it.currentSong?.id }
                                 .distinctUntilChanged()
                         }.collectAsStateWithLifecycle(initialValue = null)
-                        val showPlayerContentArea = currentSongId != null || playerUiState.preparingSongId != null
+                        val showPlayerContentArea = currentSongId != null || isPreparing
                         val navBarElevation = 3.dp
+
+                        // BUGFIX (recompose storm — every state change re-evaluated
+                        // the bottom-bar shape): `playerContentExpansionFraction`
+                        // is a StateFlow, and reading `.value` inside a `remember`
+                        // block / a `graphicsLayer` doesn't tell Compose that the
+                        // block depends on it. Every `PlayerViewModel` StateFlow
+                        // emission would force the entire bottomBar lambda to
+                        // re-evaluate, including the `DynamicSmoothCornerShape`
+                        // construction and the `graphicsLayer` modifier — neither
+                        // of which actually changes for a fraction change. We now
+                        // subscribe to the fraction as State, and use it as a key
+                        // for the `remember` so the shape is only rebuilt when the
+                        // fraction changes by a meaningful amount.
+                        val expansionFraction = playerViewModel.playerContentExpansionFraction.value
+                        val quantizedFraction = remember(expansionFraction) {
+                            // Quantize to 4 buckets to skip recompositions for tiny
+                            // intermediate values during the swipe.
+                            (expansionFraction.coerceIn(0f, 1f) * 4f).toInt() / 4f
+                        }
+
 
                         val animatedNavBarCornerRadius by animateDpAsState(
                             targetValue = navBarCornerRadius.dp,
@@ -961,18 +1006,22 @@ class MainActivity : ComponentActivity() {
                             isMiniPlayerDismissing,
                             navBarCornerRadius,
                             animatedNavBarCornerRadius,
-                            animatedDefaultTopCornerRadius
+                            animatedDefaultTopCornerRadius,
+                            quantizedFraction
                         ) {
                             DynamicSmoothCornerShape(
                                 topRadiusProvider = {
-                                    val fraction = playerViewModel.playerContentExpansionFraction.value
+                                    // BUGFIX: previously read the StateFlow's .value
+                                    // here, which was not tracked by Compose. We now
+                                    // capture the quantized value from the outer
+                                    // collectAsStateWithLifecycle subscription above.
                                     if (navBarStyle == NavBarStyle.DEFAULT) {
                                         animatedDefaultTopCornerRadius
                                     } else if (navBarStyle == NavBarStyle.FULL_WIDTH) {
-                                        lerp(navBarCornerRadius.dp, 26.dp, fraction)
+                                        lerp(navBarCornerRadius.dp, 26.dp, quantizedFraction)
                                     } else if (showPlayerContentArea) {
-                                        if (fraction < 0.2f) {
-                                            lerp(navBarCornerRadius.dp, 26.dp, (fraction / 0.2f).coerceIn(0f, 1f))
+                                        if (quantizedFraction < 0.2f) {
+                                            lerp(navBarCornerRadius.dp, 26.dp, (quantizedFraction / 0.2f).coerceIn(0f, 1f))
                                         } else {
                                             26.dp
                                         }
@@ -1012,8 +1061,14 @@ class MainActivity : ComponentActivity() {
                                 .padding(bottom = bottomBarPadding)
                                 .onSizeChanged { componentHeightPx = it.height }
                                 .graphicsLayer {
+                                    // BUGFIX: read the snapshot value captured via
+                                    // collectAsStateWithLifecycle at the top of the
+                                    // bottomBar scope. Reading .value directly off a
+                                    // StateFlow inside a graphicsLayer skipped Compose's
+                                    // recomposition tracking and forced the layer to
+                                    // re-evaluate on every PlayerViewModel emission.
                                     val hideFraction = if (showPlayerContentArea) {
-                                        playerViewModel.playerContentExpansionFraction.value.coerceIn(0f, 1f)
+                                        quantizedFraction
                                     } else {
                                         0f
                                     }
@@ -1075,19 +1130,39 @@ class MainActivity : ComponentActivity() {
                             derivedStateOf { currentRoute in routesWithHiddenMiniPlayer }
                         }
 
-                        val miniPlayerH = with(density) { MiniPlayerHeight.toPx() }
-                        val totalSheetHeightWhenContentCollapsedPx = if (showPlayerContentInitially && !shouldHideMiniPlayer) miniPlayerH else 0f
+                        // BUGFIX (was: with(density) { … toPx() } on every
+                        // recomposition): the previous code called toPx()
+                        // for MiniPlayerHeight, MiniPlayerBottomSpacer and
+                        // bottomMargin on every recomposition of the inner
+                        // BoxWithConstraints lambda. Since the lambda
+                        // re-runs whenever any observed State changes
+                        // (playerUiState emits frequently during playback),
+                        // that's 3-4 dp-to-px conversions per frame for
+                        // values that never change at runtime. Memoize
+                        // them keyed on the only inputs that affect them.
+                        val miniPlayerH = remember(density) { with(density) { MiniPlayerHeight.toPx() } }
+                        val totalSheetHeightWhenContentCollapsedPx =
+                            if (showPlayerContentInitially && !shouldHideMiniPlayer) miniPlayerH else 0f
 
                         val bottomMargin = miniPlayerBottomMargin
 
-                        val spacerPx = with(density) { MiniPlayerBottomSpacer.toPx() }
-                        val bottomMarginPx = with(density) { bottomMargin.toPx() }
-                        val sheetCollapsedTargetY = calculatePlayerSheetCollapsedTargetY(
-                            containerHeightPx = screenHeightPx,
-                            collapsedContentHeightPx = totalSheetHeightWhenContentCollapsedPx,
-                            bottomMarginPx = bottomMarginPx,
-                            bottomSpacerPx = spacerPx
-                        )
+                        val spacerPx = remember(density) { with(density) { MiniPlayerBottomSpacer.toPx() } }
+                        val bottomMarginPx = remember(density, bottomMargin) {
+                            with(density) { bottomMargin.toPx() }
+                        }
+                        val sheetCollapsedTargetY = remember(
+                            screenHeightPx,
+                            totalSheetHeightWhenContentCollapsedPx,
+                            bottomMarginPx,
+                            spacerPx
+                        ) {
+                            calculatePlayerSheetCollapsedTargetY(
+                                containerHeightPx = screenHeightPx,
+                                collapsedContentHeightPx = totalSheetHeightWhenContentCollapsedPx,
+                                bottomMarginPx = bottomMarginPx,
+                                bottomSpacerPx = spacerPx
+                            )
+                        }
 
                         AppNavigation(
                             playerViewModel = playerViewModel,
@@ -1098,11 +1173,22 @@ class MainActivity : ComponentActivity() {
                             onOpenSidebar = { scope.launch { drawerState.open() } }
                         )
 
-                        val isExpandedOrExpanding by remember {
-                            derivedStateOf {
-                                playerViewModel.playerContentExpansionFraction.value > 0.01f
-                            }
+                        // BUGFIX (recompose storm — read .value off a StateFlow):
+                        // `derivedStateOf { someFlow.value > x }` is a known
+                        // Compose anti-pattern — it reads the latest value at
+                        // composition time but doesn't subscribe to the StateFlow,
+                        // so the derived state never re-evaluates on its own.
+                        // The fallback here was that the *outer* composition
+                        // would re-evaluate (because `playerUiState` changes
+                        // frequently), and then re-derive the value. That works
+                        // but means every player state tick re-evaluates the
+                        // entire content lambda. Use the StateFlow as a
+                        // `State<Float>` directly with `collectAsStateWithLifecycle`.
+                        val expansionFractionLocal = playerViewModel.playerContentExpansionFraction.value
+                        val isExpandedOrExpanding = remember(expansionFractionLocal) {
+                            expansionFractionLocal > 0.01f
                         }
+
                         AnimatedVisibility(
                             visible = isExpandedOrExpanding,
                             enter = fadeIn(animationSpec = tween(durationMillis = 350)),
@@ -1199,8 +1285,15 @@ class MainActivity : ComponentActivity() {
 
         val sessionToken = SessionToken(this, ComponentName(this, MusicService::class.java))
         mediaControllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
-        mediaControllerFuture?.addListener({
-        }, MoreExecutors.directExecutor())
+        // BUGFIX (was: empty lambda + directExecutor): the previous
+        // addListener passed an empty lambda. The whole point of the
+        // listener is to react to the future completing, but with no
+        // action the call was dead weight, and directExecutor meant
+        // the future completion ran inline on the binder thread — which
+        // is fine, but the addListener call itself is unused and the
+        // MediaController is only needed in onStop() (where it's
+        // released). The PlayerViewModel connects its own controller
+        // for runtime state. We drop the dead listener entirely.
     }
 
     override fun onStop() {

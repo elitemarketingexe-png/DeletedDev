@@ -15,6 +15,8 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -68,6 +70,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -184,7 +187,26 @@ class MusicService : MediaLibraryService() {
     private var favoriteSongIds = emptySet<String>()
     private var mediaSession: MediaLibrarySession? = null
     private val controllerLastBrowsedParent = mutableMapOf<String, String>()
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // BUGFIX (lag — service was serialised with the UI): the previous
+    // `Dispatchers.Main` made every coroutine this service spawned compete
+    // with the main thread for the very same looper the foreground
+    // notification, the Media3 session callbacks, and the Compose UI all
+    // run on. A single song tap that triggered a listener -> serviceScope
+    // coroutine would therefore block the next frame; the runtime log
+    // shows a 51-frame Choreographer skip during playback, plus repeated
+    // BUFFERING -> READY transitions stacking up on the same thread.
+    //
+    // We now use a dedicated 4-thread dispatcher with daemon threads that
+    // live as long as the service. Audio-engine mutations still hop to
+    // Main with explicit `withContext(Dispatchers.Main)` at the call site
+    // (see e.g. the auto-queue re-seed path), but the *bulk* of the
+    // service's work — snapshot writes, queue re-seeds, MediaLibrary
+    // callbacks, telemetry — now runs off the UI thread.
+    private val serviceDispatcher = java.util.concurrent.Executors
+        .newFixedThreadPool(4) { runnable ->
+            Thread(runnable, "PixelMusic-Service").apply { isDaemon = true }
+        }.asCoroutineDispatcher()
+    private val serviceScope = CoroutineScope(SupervisorJob() + serviceDispatcher)
     private var keepPlayingInBackground = true
     private var isManualShuffleEnabled = false
     private var persistentShuffleEnabled = false
@@ -448,8 +470,11 @@ class MusicService : MediaLibraryService() {
 
         listeningStatsTracker.initialize(appScope)
         scrobbleManager = com.unshoo.pixelmusic.data.lastfm.ScrobbleManager(scope = serviceScope)
-        
+
         // Ensure engine is ready (re-initialize if service was restarted)
+        // ExoPlayer must be created on the thread that owns its Looper,
+        // which is the main thread for a foreground service, so this has
+        // to stay here.
         engine.initialize()
         engine.setOnPlayerAboutToBeReleasedListener { oldPlayer ->
             oldPlayer.removeListener(playerListener)
@@ -468,13 +493,55 @@ class MusicService : MediaLibraryService() {
         engine.addTransitionDisplayPlayerListener(transitionDisplayPlayerListener)
         engine.addTransitionFinishedListener(transitionFinishedListener)
 
-        // Attach YouTube radio-mode auto-queue and stream-URL preloader
-        AutoQueueManager.attach(engine.masterPlayer, this, youtubeDatastoreRepository, serviceScope, musicDao, engagementDao, engine::forceRefreshQueueSnapshot)
-        QueuePreloadManager.attach(engine.masterPlayer, this, youtubeDatastoreRepository, serviceScope, exoCache, engine)
+        // BUGFIX (was: all on main thread, in onCreate): the calls below
+        // — `AutoQueueManager.attach`, `QueuePreloadManager.attach`,
+        // `controller.initialize()`, `initializeCastWearSync()`,
+        // `registerHeadsetReconnectMonitor()` — used to run synchronously
+        // here, eating into the foreground-service startup budget.
+        // The runtime log shows the service takes 500-1500ms to start
+        // before the foreground promotion is acknowledged, which is
+        // enough to trigger ForegroundServiceStartNotAllowedException
+        // on some OEM ROMs. We now hand them off to the background
+        // serviceDispatcher (see the field declaration at the top of
+        // this class) so the main thread is free to return from onCreate
+        // as quickly as possible.
+        //
+        // BUGFIX (was: ALL of these in a single serviceScope.launch):
+        // the Cast SDK and AudioManager both require their setup calls
+        // (CastContext.getSharedInstance, addSessionManagerListener,
+        // audioManager.registerAudioDeviceCallback) to run on the main
+        // thread — running them on a background dispatcher will throw
+        // IllegalStateException. The safe split is:
+        //   - on the background dispatcher: AutoQueueManager.attach,
+        //     QueuePreloadManager.attach, controller.initialize() (all
+        //     pure network/DB work).
+        //   - on the main thread: initializeCastWearSync() and
+        //     registerHeadsetReconnectMonitor() (must be Main, but
+        //     each is fast — they just register callbacks).
 
-        controller.initialize()
-        initializeCastWearSync()
-        registerHeadsetReconnectMonitor()
+        serviceScope.launch {
+            // Attach YouTube radio-mode auto-queue and stream-URL preloader
+            AutoQueueManager.attach(engine.masterPlayer, this@MusicService, youtubeDatastoreRepository, serviceScope, musicDao, engagementDao, engine::forceRefreshQueueSnapshot)
+            QueuePreloadManager.attach(engine.masterPlayer, this@MusicService, youtubeDatastoreRepository, serviceScope, exoCache, engine)
+
+            controller.initialize()
+        }
+
+        // The Cast and AudioManager setup must run on Main, but we kick
+        // them off via a post so onCreate can return immediately. Posting
+        // to the main looper is effectively "as soon as possible on Main",
+        // which is still much faster than running synchronously in the
+        // foreground-service startup window because the rest of onCreate
+        // (the MediaLibrarySession build, the widget update, the
+        // notification update) has already been queued.
+        android.os.Handler(Looper.getMainLooper()).post {
+            try {
+                initializeCastWearSync()
+                registerHeadsetReconnectMonitor()
+            } catch (e: Exception) {
+                Timber.tag(TAG).w(e, "Cast/audio setup failed during deferred init")
+            }
+        }
 
         serviceScope.launch {
             musicRepository.telegramRepository.downloadCompleted.collect {
@@ -2342,6 +2409,9 @@ class MusicService : MediaLibraryService() {
         engine.release()
         controller.release()
         serviceScope.cancel()
+        // Tear down the dedicated service dispatcher created in onCreate so
+        // its 4 daemon threads don't outlive the service.
+        serviceDispatcher.close()
         Thread.currentThread().setUncaughtExceptionHandler(previousMainThreadExceptionHandler)
         previousMainThreadExceptionHandler = null
         super.onDestroy()

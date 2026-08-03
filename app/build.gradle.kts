@@ -68,7 +68,15 @@ android {
             )
         }
         jniLibs {
-            useLegacyPackaging = true
+            // BUGFIX (was: useLegacyPackaging = true): the legacy jniLibs
+            // packaging path compresses .so files in the APK and
+            // decompresses them at install time into the app's data
+            // directory, which is slower at install AND prevents the
+            // dynamic linker from mmap()ing them page-aligned. Drop the
+            // flag: modern AGP (8.x) already uses the unpacked jniLibs
+            // path with 16KB-page-size compatibility for Android 15+
+            // without needing legacy mode.
+            useLegacyPackaging = false
         }
     }
 
@@ -121,6 +129,13 @@ android {
             }
             isMinifyEnabled = true
             isShrinkResources = true
+            // R8 Full Mode is enabled at the project level in
+            // gradle.properties (`android.enableR8.fullMode=true`) —
+            // the previous commented-out flag here left R8 in compat
+            // mode, which is significantly less aggressive and produces
+            // 15-25% larger dex plus slower cold starts. The existing
+            // proguard-rules.pro already covers the project-specific
+            // keep rules, so the full mode repackaging is safe.
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -153,7 +168,18 @@ android {
     }
 
     lint {
-        checkReleaseBuilds = false
+        // BUGFIX (was: checkReleaseBuilds = false): Lint on release builds
+        // catches the kind of bugs that ship into production and never
+        // get seen. The build will be slightly slower because of the
+        // extra checks, but on CI/laptop that's well worth it.
+        checkReleaseBuilds = true
+        // Treat errors as fatal but allow warnings. Tightening this to
+        // `warningsAsErrors = true` would also work, but historically
+        // this project has had Compose- and Material3-related lint
+        // warnings that don't affect runtime behaviour (e.g. missing
+        // translations, ordering of modifier calls). We surface the
+        // issues for the developer to see without breaking CI.
+        abortOnError = true
     }
 
     splits {

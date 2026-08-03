@@ -35,3 +35,4 @@ markdown.xml
 .vscode/
 .agents/
 .git-rewrite/
+*.log

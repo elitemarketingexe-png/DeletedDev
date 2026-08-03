@@ -474,41 +474,67 @@ fun PixelMusicTheme(
     pitchBlack: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    FontSettings.useSystemFont = useSystemFont
-    val context = LocalContext.current
-    val baseColorScheme = when {
-        colorSchemePairOverride != null -> {
-            if (darkTheme) colorSchemePairOverride.dark else colorSchemePairOverride.light
+    // BUGFIX (was: side-effect on every recomposition): the previous code
+    // unconditionally wrote `FontSettings.useSystemFont = useSystemFont`
+    // at the top of the function. Since this Composable is called on every
+    // activity composition, that's a State mutation in the render path —
+    // it forces recomposition of every consumer of `FontSettings`. We now
+    // do it inside a LaunchedEffect keyed on `useSystemFont` so it only
+    // runs when the value actually changes.
+    androidx.compose.runtime.LaunchedEffect(useSystemFont) {
+        if (FontSettings.useSystemFont != useSystemFont) {
+            FontSettings.useSystemFont = useSystemFont
         }
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            try {
-                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            } catch (e: Exception) {
+    }
+    val context = LocalContext.current
+    // BUGFIX (recompose on every call): `getStaticColorScheme` and
+    // `dynamicLight/DarkColorScheme` allocate a new ColorScheme (which
+    // contains ~30+ Color values) on every call. We memoize the result
+    // keyed on the inputs that actually affect the colors, so a
+    // recomposition that doesn't change palette/darkTheme/dynamicColor
+    // reuses the same ColorScheme instance — Compose then skips the
+    // re-invalidation of all theme consumers.
+    val baseColorScheme = androidx.compose.runtime.remember(
+        colorSchemePairOverride, darkTheme, dynamicColor, colorPalette
+    ) {
+        when {
+            colorSchemePairOverride != null -> {
+                if (darkTheme) colorSchemePairOverride.dark else colorSchemePairOverride.light
+            }
+            dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                try {
+                    if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+                } catch (e: Exception) {
+                    getStaticColorScheme(colorPalette, darkTheme)
+                }
+            }
+            else -> {
                 getStaticColorScheme(colorPalette, darkTheme)
             }
         }
-        else -> {
-            getStaticColorScheme(colorPalette, darkTheme)
-        }
     }
 
-    val finalColorScheme = if (darkTheme && pitchBlack) {
-        baseColorScheme.copy(
-            background = Color.Black,
-            surface = Color(0xFF121212),
-            surfaceVariant = Color(0xFF1A1A1A),
-            surfaceContainer = Color(0xFF121212),
-            surfaceContainerHigh = Color(0xFF161616),
-            surfaceContainerHighest = Color(0xFF1E1E1E),
-            surfaceContainerLow = Color(0xFF0F0F0F),
-            surfaceContainerLowest = Color(0xFF0A0A0A),
-            surfaceDim = Color(0xFF0A0A0A),
-            surfaceBright = Color(0xFF181818),
-            outlineVariant = Color(0xFF2C2C2E),
-            outline = Color(0xFF4A4A4A)
-        )
-    } else {
-        baseColorScheme
+    val finalColorScheme = androidx.compose.runtime.remember(
+        baseColorScheme, darkTheme, pitchBlack
+    ) {
+        if (darkTheme && pitchBlack) {
+            baseColorScheme.copy(
+                background = Color.Black,
+                surface = Color(0xFF121212),
+                surfaceVariant = Color(0xFF1A1A1A),
+                surfaceContainer = Color(0xFF121212),
+                surfaceContainerHigh = Color(0xFF161616),
+                surfaceContainerHighest = Color(0xFF1E1E1E),
+                surfaceContainerLow = Color(0xFF0F0F0F),
+                surfaceContainerLowest = Color(0xFF0A0A0A),
+                surfaceDim = Color(0xFF0A0A0A),
+                surfaceBright = Color(0xFF181818),
+                outlineVariant = Color(0xFF2C2C2E),
+                outline = Color(0xFF4A4A4A)
+            )
+        } else {
+            baseColorScheme
+        }
     }
 
     PixelMusicStatusBarStyle(

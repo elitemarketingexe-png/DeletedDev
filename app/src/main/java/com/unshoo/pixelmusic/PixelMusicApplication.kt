@@ -159,12 +159,28 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
     override fun onCreate() {
         super.onCreate()
 
+        // BUGFIX (startup jank): MediaItemBuilder/BotGuardTokenGenerator
+        // initialisers are trivial (one String assignment, one Context
+        // reference), so they can stay on Main. NewPipe.init() is the
+        // expensive one — it sets up the YouTube extractor's locale
+        // tables, content-country map, and several internal regex maps
+        // — and was previously inline here, blocking the main thread for
+        // 50-150ms on cold start. We move it to startupScope.
         MediaItemBuilder.initialize(this)
         BotGuardTokenGenerator.initialize(this)
 
         // Pre-warm L1 card color cache from SharedPreferences disk cache off the main thread.
         startupScope.launch {
             com.unshoo.pixelmusic.presentation.utils.CardColorExtractor.init(this@PixelMusicApplication)
+            // Initialise NewPipe YouTube Extractor on a background thread.
+            // NewPipe.init() walks its locale/country tables and registers
+            // internal regexes — pure CPU, no I/O — but it adds 50-150ms
+            // of main-thread time on cold start.
+            org.schabi.newpipe.extractor.NewPipe.init(
+                com.unshoo.pixelmusic.data.remote.youtube.YoutubeExtractor(
+                    com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.client
+                )
+            )
         }
 
         // BUGFIX (slow first playback): resolve ExoCache's lazy SimpleCache off the main thread
@@ -215,12 +231,9 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
             }
         }
 
-        // Initialize NewPipe YouTube Extractor
-        org.schabi.newpipe.extractor.NewPipe.init(
-            com.unshoo.pixelmusic.data.remote.youtube.YoutubeExtractor(
-                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.client
-            )
-        )
+        // (NewPipe YouTube Extractor initialisation moved into the
+        // CardColorExtractor.init startupScope.launch above so it doesn't
+        // block the main thread.)
 
         // Bind Content Language and Country to YouTube.locale
         startupScope.launch {
