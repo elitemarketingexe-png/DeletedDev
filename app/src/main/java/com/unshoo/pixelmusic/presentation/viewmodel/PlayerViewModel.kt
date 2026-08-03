@@ -2773,6 +2773,7 @@ class PlayerViewModel @Inject constructor(
                 controller != null &&
                 controller.isConnected &&
                 !dualPlayerEngine.isTransitionRunning() &&
+                queueName != "Quick Picks" &&
                 songIndexInQueue != -1 &&
                 queueMatchesContext
             ) {
@@ -5463,7 +5464,7 @@ class PlayerViewModel @Inject constructor(
             playbackStateHolder.updateStablePlayerState {
                 it.copy(
                     currentSong = effectiveStartSong,
-                    isPlaying = true,
+                    isPlaying = false,
                     playWhenReady = true,
                     totalDuration = effectiveStartSong.duration.coerceAtLeast(0L)
                 )
