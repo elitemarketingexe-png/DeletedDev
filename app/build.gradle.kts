@@ -68,15 +68,7 @@ android {
             )
         }
         jniLibs {
-            // BUGFIX (was: useLegacyPackaging = true): the legacy jniLibs
-            // packaging path compresses .so files in the APK and
-            // decompresses them at install time into the app's data
-            // directory, which is slower at install AND prevents the
-            // dynamic linker from mmap()ing them page-aligned. Drop the
-            // flag: modern AGP (8.x) already uses the unpacked jniLibs
-            // path with 16KB-page-size compatibility for Android 15+
-            // without needing legacy mode.
-            useLegacyPackaging = false
+            useLegacyPackaging = true
         }
     }
 
