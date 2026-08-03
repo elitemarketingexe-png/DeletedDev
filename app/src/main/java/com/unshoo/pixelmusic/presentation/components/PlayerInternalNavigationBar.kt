@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -195,7 +196,7 @@ private fun ExpressiveFloatingPillNavigationBar(
 
                     val itemWeight by animateFloatAsState(
                         targetValue = if (isSelected && !shouldHideLabel) 2.2f else 1.0f,
-                        animationSpec = MaterialTheme.motionScheme.fastSpatial(),
+                        animationSpec = tween(durationMillis = 220, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)),
                         label = "pill_item_weight_$index"
                     )
 
@@ -245,12 +246,12 @@ private fun ExpressiveFloatingPillNavigationBar(
                                 enter = fadeIn(animationSpec = MaterialTheme.motionScheme.defaultEffects()) +
                                     expandHorizontally(
                                         expandFrom = Alignment.Start,
-                                        animationSpec = MaterialTheme.motionScheme.defaultSpatial()
+                                        animationSpec = tween(durationMillis = 200, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
                                     ),
                                 exit = fadeOut(animationSpec = MaterialTheme.motionScheme.defaultEffects()) +
                                     shrinkHorizontally(
                                         shrinkTowards = Alignment.Start,
-                                        animationSpec = MaterialTheme.motionScheme.defaultSpatial()
+                                        animationSpec = tween(durationMillis = 180, easing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f))
                                     )
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
