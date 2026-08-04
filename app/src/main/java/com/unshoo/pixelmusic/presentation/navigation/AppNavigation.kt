@@ -683,23 +683,23 @@ private enum class MainRootDirection {
 // Paired with a soft 4% micro-slide and gentle 0.995f scale blend, this eliminates stutter and flickering
 // even during rapid navigation between bottom tabs.
 private val MAIN_ROOT_FADE_IN_TWEEN = tween<Float>(
-    durationMillis = 320,
-    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+    durationMillis = 420,
+    easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
 )
 
 private val MAIN_ROOT_FADE_OUT_TWEEN = tween<Float>(
-    durationMillis = 320,
-    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+    durationMillis = 420,
+    easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
 )
 
 private val MAIN_ROOT_SPATIAL_TWEEN = tween<IntOffset>(
-    durationMillis = 320,
-    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+    durationMillis = 420,
+    easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
 )
 
 private val MAIN_ROOT_SCALE_TWEEN = tween<Float>(
-    durationMillis = 320,
-    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+    durationMillis = 420,
+    easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
 )
 
 private fun mainRootDirection(

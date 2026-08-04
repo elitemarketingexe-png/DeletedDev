@@ -39,14 +39,13 @@ import androidx.compose.ui.graphics.TransformOrigin
 // proven AOSP/PixelPlayer timings: 350ms spatial motion with fades finishing in
 // ~200-225ms, i.e. content is fully opaque/invisible well before the slide lands.
 // ────────────────────────────────────────────────────────────────────────────────
-private const val PUSH_POP_TOTAL_MS = 350
-private const val PUSH_POP_FADE_MS = 225
-private const val POP_FADE_MS = 200
+private const val PUSH_POP_TOTAL_MS = 420
+private const val PUSH_POP_FADE_MS = 300
+private const val POP_FADE_MS = 280
 
-// MD3 Expressive — Emphasized easing family (matches Material Motion spec).
-// Decelerate for things arriving on screen, accelerate for things leaving.
-private val EmphasizedDecelerateEasing = CubicBezierEasing(0.2f, 0.85f, 0.7f, 1f)
-private val EmphasizedAccelerateEasing = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
+// MD3 Expressive — Emphasized decelerate/accelerate curves tuned for 120Hz displays.
+private val EmphasizedDecelerateEasing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
+private val EmphasizedAccelerateEasing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
 
 // Kept as a millisecond value for legacy call sites that used to `delay()` roughly
 // as long as a push/pop transition takes before acting.

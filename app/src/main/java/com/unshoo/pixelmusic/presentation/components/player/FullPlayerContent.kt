@@ -3147,15 +3147,15 @@ private data class TransportButtonColors(
 
 private fun expressivePlayPauseButtonColors(colorScheme: ColorScheme): TransportButtonColors {
     return TransportButtonColors(
-        container = colorScheme.tertiaryFixedDim,
-        content = colorScheme.onTertiaryFixed
+        container = colorScheme.primary,
+        content = colorScheme.onPrimary
     )
 }
 
 private fun expressiveSkipButtonColors(colorScheme: ColorScheme): TransportButtonColors {
     return TransportButtonColors(
-        container = colorScheme.secondaryFixedDim,
-        content = colorScheme.onSecondaryFixed
+        container = colorScheme.primaryContainer,
+        content = colorScheme.onPrimaryContainer
     )
 }
 

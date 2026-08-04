@@ -2,6 +2,7 @@ package com.unshoo.pixelmusic.presentation.components
 
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.CubicBezierEasing
@@ -174,6 +175,17 @@ private fun ExpressiveFloatingPillNavigationBar(
 
     val motionScheme = MaterialTheme.motionScheme
 
+    val baseContainerColor = MaterialTheme.colorScheme.primaryContainer
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val solidTintedColor = remember(baseContainerColor, surfaceColor) {
+        Color(
+            red = (baseContainerColor.red * 0.45f) + (surfaceColor.red * 0.55f),
+            green = (baseContainerColor.green * 0.45f) + (surfaceColor.green * 0.55f),
+            blue = (baseContainerColor.blue * 0.45f) + (surfaceColor.blue * 0.55f),
+            alpha = 1f
+        )
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -188,7 +200,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                 .weight(1f)
                 .shadow(elevation = 6.dp, shape = CircleShape),
             colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
-                toolbarContainerColor = MaterialTheme.colorScheme.primaryContainer
+                toolbarContainerColor = solidTintedColor
             ),
             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
         ) {
@@ -197,8 +209,23 @@ private fun ExpressiveFloatingPillNavigationBar(
 
                 val itemWeight by animateFloatAsState(
                     targetValue = if (isSelected && !shouldHideLabel) 2.4f else 1.0f,
-                    animationSpec = motionScheme.fastSpatialSpec(),
+                    animationSpec = androidx.compose.animation.core.spring(
+                        dampingRatio = 0.82f,
+                        stiffness = 320f
+                    ),
                     label = "pill_item_weight_$index"
+                )
+
+                val animColor by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)),
+                    label = "pill_bg_$index"
+                )
+
+                val animContentColor by animateColorAsState(
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)),
+                    label = "pill_content_$index"
                 )
 
                 Surface(
@@ -212,16 +239,8 @@ private fun ExpressiveFloatingPillNavigationBar(
                         .weight(itemWeight)
                         .height(52.dp),
                     shape = CircleShape,
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        Color.Transparent
-                    },
-                    contentColor = if (isSelected) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
-                    }
+                    color = animColor,
+                    contentColor = animContentColor
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -302,10 +321,10 @@ private fun ExpressiveFloatingPillNavigationBar(
                 color = if (isSearchSelected) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    MaterialTheme.colorScheme.primaryContainer
+                    solidTintedColor
                 },
                 contentColor = if (isSearchSelected) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
+                    MaterialTheme.colorScheme.onPrimary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                 },
@@ -363,7 +382,17 @@ private fun PlayerInternalNavigationItemsRow(
             val isSelected = currentRoute != null && currentRoute == item.screen.route
             val selectedColor = MaterialTheme.colorScheme.primary
             val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
-            val indicatorColorFromTheme = MaterialTheme.colorScheme.secondaryContainer
+            val baseContainerColor = MaterialTheme.colorScheme.primaryContainer
+            val surfaceColor = MaterialTheme.colorScheme.surface
+            val solidTintedColor = remember(baseContainerColor, surfaceColor) {
+                Color(
+                    red = (baseContainerColor.red * 0.45f) + (surfaceColor.red * 0.55f),
+                    green = (baseContainerColor.green * 0.45f) + (surfaceColor.green * 0.55f),
+                    blue = (baseContainerColor.blue * 0.45f) + (surfaceColor.blue * 0.55f),
+                    alpha = 1f
+                )
+            }
+            val indicatorColorFromTheme = solidTintedColor
 
             val iconPainterResId = if (isSelected && item.selectedIconResId != null && item.selectedIconResId != 0) {
                 item.selectedIconResId
