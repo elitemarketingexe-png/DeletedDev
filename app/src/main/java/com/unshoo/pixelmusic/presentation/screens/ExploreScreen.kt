@@ -542,6 +542,25 @@ fun ExploreScreen(
 
 
 
+                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") &&
+                            quickPicks.isNotEmpty()
+                        ) {
+                            item(key = "quick_picks_section") {
+                                QuickPicksSection(
+                                    songs = quickPicks,
+                                    onSongClick = { song ->
+                                        playerViewModel.showAndPlaySong(song, quickPicks, "Quick Picks")
+                                    },
+                                    onSeeAllClick = {
+                                        navController.navigateSafely(Screen.QuickPicksAll.route)
+                                    },
+                                    currentSongId = currentSongId,
+                                    displayMode = quickPicksDisplayMode,
+                                    cardSize = 140.dp
+                                )
+                            }
+                        }
+
                         if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "Smart Mix" || uiState.selectedFilter == "For You") &&
                             uiState.recentMixes.isNotEmpty()
                         ) {
@@ -692,51 +711,19 @@ fun ExploreScreen(
                                 val titleLower = section.title.lowercase()
                                 if (titleLower.contains("trending") || 
                                     titleLower.contains("long listens") ||
-                                    titleLower.contains("local")
+                                    titleLower.contains("local") ||
+                                    titleLower.contains("new music videos") ||
+                                    titleLower.contains("quick picks") ||
+                                    titleLower.contains("quickpicks")
                                 ) return@forEachIndexed
 
-                                val isShelf = (section.title.contains("recently played", ignoreCase = true) ||
-                                              section.title.contains("most played", ignoreCase = true) ||
-                                              section.title.contains("heavy rotation", ignoreCase = true) ||
-                                              section.title.contains("liked", ignoreCase = true) ||
-                                              section.title.contains("cached", ignoreCase = true) ||
-                                              section.title.contains("you might like", ignoreCase = true) ||
-                                              section.title.contains("for you", ignoreCase = true) ||
-                                              section.title.contains("mix", ignoreCase = true) ||
-                                              section.title.contains("listen again", ignoreCase = true) ||
-                                              section.title.contains("favorites", ignoreCase = true) ||
-                                              section.title.contains("suggest", ignoreCase = true) ||
-                                              section.title.contains("recommend", ignoreCase = true) ||
-                                              section.title.contains("radio", ignoreCase = true) ||
-                                              section.title.contains("recently", ignoreCase = true)) &&
-                                              section.items.any { it is SongItem }
+                                val isSimilar = section.title.startsWith("Similar to", ignoreCase = true) || 
+                                                section.title.contains("Fans also like", ignoreCase = true) ||
+                                                section.title.contains("Similar", ignoreCase = true)
 
-                                val isSimilar = !isShelf && 
-                                                (section.title.startsWith("Similar to", ignoreCase = true) || 
-                                                 section.title.contains("Fans also like", ignoreCase = true) ||
-                                                 section.title.contains("Similar", ignoreCase = true))
+                                val isBento = !isSimilar && isBentoSection(section.title, section.items.size)
 
-                                val isBento = !isShelf && !isSimilar && 
-                                              isBentoSection(section.title, section.items.size)
-
-                                if (isShelf && section.items.isNotEmpty()) {
-                                    item(
-                                        key = "shelf_${section.title}_$index",
-                                        contentType = "mixed_for_you_card"
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 20.dp, vertical = 4.dp)
-                                        ) {
-                                            MixedForYouCard(
-                                                section = section,
-                                                playerViewModel = playerViewModel,
-                                                navController = navController
-                                            )
-                                        }
-                                    }
-                                } else if (isBento) {
+                                if (isBento) {
                                     item(
                                         key = "bento_${section.title}_$index",
                                         contentType = "swipeable_carousel"
@@ -748,23 +735,7 @@ fun ExploreScreen(
                                         key = "home_section_${section.title}_${index}_header",
                                         contentType = "section_header"
                                     ) {
-                                        val isSectionQuickPicks = section.title.contains("quick picks", ignoreCase = true)
-                                        val quickPicksSongs = remember(section.items) {
-                                            section.items.filterIsInstance<SongItem>().map { it.toNativeSong() }
-                                        }
-                                        SectionHeader(
-                                            title = section.title,
-                                            onActionClick = if (isSectionQuickPicks && quickPicksSongs.isNotEmpty()) {
-                                                {
-                                                    playerViewModel.playSongs(
-                                                        quickPicksSongs,
-                                                        quickPicksSongs.first(),
-                                                        section.title
-                                                    )
-                                                }
-                                            } else null,
-                                            actionLabel = if (isSectionQuickPicks && quickPicksSongs.isNotEmpty()) "Play All" else null
-                                        )
+                                        SectionHeader(title = section.title)
                                     }
                                     item(
                                         key = "home_section_${section.title}_${index}_carousel",
@@ -1913,235 +1884,7 @@ fun SmartMixStudioHeroCard(
 
 
 
-@Composable
-fun MixedForYouCard(
-    section: HomePage.Section,
-    playerViewModel: PlayerViewModel,
-    navController: NavController,
-    localSongs: Map<String, Song> = emptyMap()
-) {
-    val cardThumbnail = remember(section) {
-        section.thumbnail.takeIf { !it.isNullOrBlank() }
-            ?: section.items.filterIsInstance<SongItem>().firstOrNull()?.thumbnail
-    }
-    val context = LocalContext.current
-    val colors = MaterialTheme.colorScheme
-    val isDarkTheme = isSystemInDarkTheme()
-    val animatedBackground = rememberDominantCardColor(
-        imageUrl = cardThumbnail,
-        baseColor = colors.surfaceContainerHigh,
-        isDarkTheme = isDarkTheme,
-        darkBlendFraction = 0.28f,
-        lightBlendFraction = 0.45f
-    )
 
-    val shape = remember { AbsoluteSmoothCornerShape(24.dp, 60) }
-
-    Card(
-        modifier = Modifier
-            .width(320.dp)
-            .wrapContentHeight(),
-        shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = animatedBackground
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Column {
-                Text(
-                    text = section.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (!section.label.isNullOrBlank()) {
-                    Text(
-                        text = section.label,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (!cardThumbnail.isNullOrBlank()) {
-                    SmartImage(
-                        model = cardThumbnail,
-                        contentDescription = section.title,
-                        modifier = Modifier
-                            .size(90.dp)
-                            .clip(RoundedCornerShape(16.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                val songs = section.items.filterIsInstance<SongItem>().take(3)
-                if (songs.isNotEmpty()) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        val nativeSongs = remember(songs, localSongs) { songs.map { localSongs[it.id] ?: it.toNativeSong() } }
-                        songs.forEachIndexed { index, songItem ->
-                            val nativeSong = nativeSongs[index]
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable {
-                                        playerViewModel.showAndPlaySong(
-                                            song = nativeSong,
-                                            contextSongs = nativeSongs,
-                                            queueName = section.title
-                                        )
-                                    }
-                                    .padding(vertical = 2.dp, horizontal = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "${index + 1}",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = colors.onSurfaceVariant
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = songItem.title,
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = colors.onSurface
-                                    )
-                                    Text(
-                                        text = songItem.artists.joinToString { it.name },
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = colors.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Fallback for sections containing non-song items (e.g. Albums, Playlists)
-                    LazyRow(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(items = section.items.take(4), key = { item -> item.id }) { item ->
-                            val itemThumb = when (item) {
-                                is AlbumItem -> item.thumbnail
-                                is PlaylistItem -> item.thumbnail
-                                is ArtistItem -> item.thumbnail
-                                else -> null
-                            }
-                            val itemTitle = when (item) {
-                                is AlbumItem -> item.title
-                                is PlaylistItem -> item.title
-                                is ArtistItem -> item.title
-                                else -> ""
-                            }
-                            if (!itemThumb.isNullOrBlank()) {
-                                SmartImage(
-                                    model = itemThumb,
-                                    contentDescription = itemTitle,
-                                    modifier = Modifier
-                                        .size(64.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable {
-                                            when (item) {
-                                                is AlbumItem -> navController.navigateSafely(Screen.AlbumDetail.createRoute(item.browseId))
-                                                is PlaylistItem -> navController.navigateSafely(Screen.PlaylistDetail.createRoute(item.id))
-                                                is ArtistItem -> navController.navigateSafely(Screen.ArtistDetail.createRoute(item.id))
-                                                else -> {}
-                                            }
-                                        },
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val songs = section.items.filterIsInstance<SongItem>()
-                val nativeSongs = remember(songs, localSongs) { songs.map { localSongs[it.id] ?: it.toNativeSong() } }
-                if (nativeSongs.isNotEmpty()) {
-                    Button(
-                        onClick = {
-                            playerViewModel.showAndPlaySong(
-                                song = nativeSongs.first(),
-                                contextSongs = nativeSongs,
-                                queueName = section.title
-                            )
-                        },
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.primary,
-                            contentColor = colors.onPrimary
-                        ),
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.PlayArrow,
-                            contentDescription = "Play",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Play", style = MaterialTheme.typography.labelLarge)
-                    }
-
-                    FilledTonalButton(
-                        onClick = {
-                            playerViewModel.playSongs(
-                                nativeSongs.shuffled(),
-                                nativeSongs.random(),
-                                section.title
-                            )
-                        },
-                        shape = CircleShape,
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = colors.secondaryContainer,
-                            contentColor = colors.onSecondaryContainer
-                        ),
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Shuffle,
-                            contentDescription = "Radio",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Radio", style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-            }
-        }
-    }
-}
 
 
 

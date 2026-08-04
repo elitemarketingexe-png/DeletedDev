@@ -200,7 +200,9 @@ class ExploreViewModel @Inject constructor(
                     !title.contains("new music videos") &&
                     !title.contains("trending") &&
                     !title.contains("long listens") &&
-                    !title.contains("local")
+                    !title.contains("local") &&
+                    !title.contains("quick picks") &&
+                    !title.contains("quickpicks")
                 }
 
                 // Extract personalized new releases directly from user's YouTube Home feed
