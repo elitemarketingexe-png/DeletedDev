@@ -110,8 +110,6 @@ fun SettingsScreen(
         settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
 
-    // Animation effects
-    val lastCategoryClickTime = remember { mutableStateOf(0L) }
     // Navigation handles screen transition natively without double-offset delay
 
     val density = LocalDensity.current
@@ -218,9 +216,6 @@ fun SettingsScreen(
                 )
             }
             item {
-                // Rapid-click throttle: prevent double-navigation / ghost touches when switching category pages
-                val throttleMs = 350L
-
                 val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                 ExpressiveSettingsGroup {
                     val mainCategories = SettingsCategory.entries.filter {
@@ -265,11 +260,7 @@ fun SettingsScreen(
                         category = SettingsCategory.DEVICE_CAPABILITIES,
                         customColors = getCategoryColors(SettingsCategory.DEVICE_CAPABILITIES, isDark),
                         onClick = {
-                            val now = System.currentTimeMillis()
-                            if (now - lastCategoryClickTime.value >= throttleMs) {
-                                lastCategoryClickTime.value = now
-                                navController.navigateSafely(Screen.DeviceCapabilities.route)
-                            }
+                            navController.navigateSafely(Screen.DeviceCapabilities.route)
                         },
                         shape = shapeFor(itemIndex)
                     )
@@ -284,11 +275,7 @@ fun SettingsScreen(
                         icon = Icons.Rounded.AccountCircle,
                         colors = getAccountsColors(isDark),
                         onClick = {
-                            val now = System.currentTimeMillis()
-                            if (now - lastCategoryClickTime.value >= throttleMs) {
-                                lastCategoryClickTime.value = now
-                                navController.navigateSafely(Screen.Accounts.route)
-                            }
+                            navController.navigateSafely(Screen.Accounts.route)
                         },
                         shape = shapeFor(itemIndex)
                     )
@@ -301,11 +288,7 @@ fun SettingsScreen(
                         category = SettingsCategory.ABOUT,
                         customColors = getCategoryColors(SettingsCategory.ABOUT, isDark),
                         onClick = {
-                            val now = System.currentTimeMillis()
-                            if (now - lastCategoryClickTime.value >= throttleMs) {
-                                lastCategoryClickTime.value = now
-                                navController.navigateSafely("about")
-                            }
+                            navController.navigateSafely("about")
                         },
                         shape = shapeFor(itemIndex)
                     )
