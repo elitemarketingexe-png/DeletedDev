@@ -787,17 +787,16 @@ class ListeningStatsTracker @Inject constructor(
         lastPositionMs: Long,
         durationMs: Long
     ): Boolean {
-        if (durationMs <= 0L || durationMs == C.TIME_UNSET) return false
-        val requiredListeningMs = durationMs - (durationMs / COMPLETION_MISSING_DIVISOR)
-        val requiredPositionMs = (durationMs - COMPLETION_POSITION_TOLERANCE_MS)
-            .coerceAtLeast(requiredListeningMs)
-        return listenedMs >= requiredListeningMs && lastPositionMs >= requiredPositionMs
+        if (durationMs <= 0L || durationMs == C.TIME_UNSET) {
+            return listenedMs >= MIN_PLAYBACK_LISTEN_MS
+        }
+        val minRequiredListeningMs = (durationMs * 0.30f).toLong().coerceAtMost(MIN_PLAYBACK_LISTEN_MS)
+        return listenedMs >= minRequiredListeningMs
     }
 
     companion object {
-        /** At most 1/20 (5%) of a track may be missed and still count as completed. */
-        private const val COMPLETION_MISSING_DIVISOR = 20L
-        private const val COMPLETION_POSITION_TOLERANCE_MS = 5_000L
+        /** Minimum elapsed listening duration (15 seconds) to count a track play in history. */
+        private const val MIN_PLAYBACK_LISTEN_MS = 15_000L
         private const val MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS = 500
         /** Number of plays before a YouTube song is auto-downloaded for offline use. */
         private const val AUTO_CACHE_PLAY_COUNT_THRESHOLD = 3
@@ -822,11 +821,7 @@ class ListeningStatsTracker @Inject constructor(
         // BUGFIX (freeze after long idle): upper bound for the synchronous, monitor-holding
         // persistence path in persistPlayback(forceSynchronous = true). See the call site for
         // the full explanation.
-        // BUGFIX (task-specific timeouts): shortened from 4s. A healthy DB/DataStore write
-        // completes in milliseconds; a DB timeout should be the shortest of the three timeout
-        // categories in this app (DB < network < Chromecast), since there's no legitimate reason
-        // for a local write to take seconds unless something is genuinely stuck.
-        private const val FORCE_PERSIST_TIMEOUT_MS = 2_000L
+        private const val FORCE_PERSIST_TIMEOUT_MS = 5_000L
     }
 }
 

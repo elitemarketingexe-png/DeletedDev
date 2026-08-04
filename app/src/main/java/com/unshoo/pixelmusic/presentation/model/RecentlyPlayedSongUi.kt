@@ -60,19 +60,15 @@ fun mapRecentlyPlayedSongs(
         val song = songById[entry.songId]
             ?: songByYoutubeId[cleanYoutubeId]
             ?: run {
-                val title = entry.title
-                if (!title.isNullOrBlank()) {
-                    Song.emptySong().copy(
-                        id = entry.songId,
-                        title = title,
-                        artist = entry.artist.orEmpty(),
-                        albumArtUriString = entry.thumbnail,
-                        youtubeId = cleanYoutubeId
-                    )
-                } else {
-                    null
-                }
-            } ?: continue
+                val displayTitle = entry.title?.takeIf { it.isNotBlank() } ?: "Track"
+                Song.emptySong().copy(
+                    id = entry.songId,
+                    title = displayTitle,
+                    artist = entry.artist.orEmpty(),
+                    albumArtUriString = entry.thumbnail,
+                    youtubeId = cleanYoutubeId
+                )
+            }
 
         deduped += RecentlyPlayedSongUiModel(
             song = song,

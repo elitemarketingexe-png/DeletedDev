@@ -41,12 +41,25 @@ private val PUSH_POP_FADE_SPRING = spring<Float>(
     stiffness = ExpressiveSprings.DefaultEffectsStiffness
 )
 
+// Soft, calm & smooth POP back gesture / button transition specs (Settings & screen pop)
+private val POP_SPATIAL_SPRING = spring<IntOffset>(
+    dampingRatio = 0.92f,
+    stiffness = 110f
+)
+
+private val POP_SCALE_SPRING = spring<Float>(
+    dampingRatio = 0.92f,
+    stiffness = 110f
+)
+
+private val POP_FADE_SPRING = spring<Float>(
+    dampingRatio = 0.95f,
+    stiffness = 150f
+)
+
 // Kept as a millisecond value for legacy call sites (SettingsScreen / SettingsCategoryScreen)
-// that `delay()` roughly as long as a push/pop transition takes before acting. Springs don't
-// have an exact duration the way tween() did, so this is an approximate visual-settle time for
-// PUSH_POP_SPATIAL_SPRING (slow spatial, dampingRatio 0.8 / stiffness 200) — not the literal
-// animation spec any more, just a "wait roughly this long" heuristic for those two call sites.
-const val TRANSITION_DURATION = 450
+// that `delay()` roughly as long as a push/pop transition takes before acting.
+const val TRANSITION_DURATION = 500
 
 // Push: Enter from Right — slides in 50% of screen width + slight scale up (mirrors popExit's weight)
 fun enterTransition() = slideInHorizontally(
@@ -68,25 +81,25 @@ fun exitTransition() = slideOutHorizontally(
     animationSpec = PUSH_POP_FADE_SPRING
 )
 
-// Pop: Enter from Left — parallax slide-in 25% + subtle scale up.
+// Pop: Enter from Left — parallax slide-in 25% + subtle scale up (softer, calmer deceleration)
 fun popEnterTransition() = slideInHorizontally(
-    animationSpec = PUSH_POP_SPATIAL_SPRING,
-    initialOffsetX = { -(it * 0.25f).toInt() }
+    animationSpec = POP_SPATIAL_SPRING,
+    initialOffsetX = { -(it * 0.20f).toInt() }
 ) + scaleIn(
-    animationSpec = PUSH_POP_SCALE_SPRING,
-    initialScale = 0.95f
+    animationSpec = POP_SCALE_SPRING,
+    initialScale = 0.96f
 ) + fadeIn(
-    animationSpec = PUSH_POP_FADE_SPRING
+    animationSpec = POP_FADE_SPRING
 )
 
-// Pop: Exit to Right — slides out 50% + slight scale down.
+// Pop: Exit to Right — slides out 50% + smooth, calm scale down
 fun popExitTransition() = slideOutHorizontally(
-    animationSpec = PUSH_POP_SPATIAL_SPRING,
+    animationSpec = POP_SPATIAL_SPRING,
     targetOffsetX = { (it * 0.5f).toInt() }
 ) + scaleOut(
-    animationSpec = PUSH_POP_SCALE_SPRING,
-    targetScale = 0.92f,
+    animationSpec = POP_SCALE_SPRING,
+    targetScale = 0.94f,
     transformOrigin = TransformOrigin(0.5f, 0.5f)
 ) + fadeOut(
-    animationSpec = PUSH_POP_FADE_SPRING
+    animationSpec = POP_FADE_SPRING
 )
