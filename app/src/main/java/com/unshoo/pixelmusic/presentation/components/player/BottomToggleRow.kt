@@ -31,8 +31,8 @@ fun BottomToggleRow(
     onActiveColorMain: Color = MaterialTheme.colorScheme.onPrimary,
     onActiveColorSecondary: Color = MaterialTheme.colorScheme.onSecondary,
     onActiveColorTertiary: Color = MaterialTheme.colorScheme.onTertiary,
-    inactiveColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
-    inactiveContentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    inactiveColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+    inactiveContentColor: Color = MaterialTheme.colorScheme.primary,
     containerColor: Color? = null
 ) {
     val isFavorite = isFavoriteProvider()
@@ -41,7 +41,7 @@ fun BottomToggleRow(
     val resolvedContainerColor = containerColor ?: if (isDark) {
         MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f)
     } else {
-        Color.White.copy(alpha = 0.9f)
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
     }
 
     Box(

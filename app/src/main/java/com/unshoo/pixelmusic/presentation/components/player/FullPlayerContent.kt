@@ -3154,8 +3154,8 @@ private fun expressivePlayPauseButtonColors(colorScheme: ColorScheme): Transport
 
 private fun expressiveSkipButtonColors(colorScheme: ColorScheme): TransportButtonColors {
     return TransportButtonColors(
-        container = colorScheme.primaryContainer,
-        content = colorScheme.onPrimaryContainer
+        container = colorScheme.primary.copy(alpha = 0.15f),
+        content = colorScheme.primary
     )
 }
 
@@ -3172,13 +3172,13 @@ private fun BottomToggleRow(
 ) {
     val isFavorite = isFavoriteProvider()
     val rowCorners = 60.dp
-    val inactiveBg = LocalMaterialTheme.current.onSurface.copy(alpha = 0.07f)
-    val inactiveContentColor = LocalMaterialTheme.current.onSurface
+    val inactiveBg = LocalMaterialTheme.current.primary.copy(alpha = 0.08f)
+    val inactiveContentColor = LocalMaterialTheme.current.primary
     val isDark = LocalPixelMusicDarkTheme.current
     val containerBg = if (isDark) {
         LocalMaterialTheme.current.surfaceContainer.copy(alpha = 0.5f)
     } else {
-        Color.White.copy(alpha = 0.9f)
+        LocalMaterialTheme.current.primary.copy(alpha = 0.12f)
     }
 
 
