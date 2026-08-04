@@ -305,8 +305,7 @@ fun ExploreScreen(
                     } else {
                         uiState.homePageSections
                     }
-                    val (cardShelfSections, fromYourLibraryAlbums, remainingSections) = remember(homeSectionsRaw) {
-                        val cardShelf = mutableListOf<HomePage.Section>()
+                    val (fromYourLibraryAlbums, remainingSections) = remember(homeSectionsRaw) {
                         var libraryAlbums = emptyList<AlbumItem>()
                         val remaining = mutableListOf<HomePage.Section>()
 
@@ -316,24 +315,12 @@ fun ExploreScreen(
                                 libraryAlbums = section.items.filterIsInstance<AlbumItem>()
                                 continue
                             }
-                            val isBento = isBentoSection(section.title, section.items.size)
                             val isLocalDuplicate = title.contains("local")
-                            val isSug = !isBento && !isLocalDuplicate &&
-                                        (title.contains("mix") || title.contains("listen again") || 
-                                        title.contains("favorites") || title.contains("suggest") || 
-                                        title.contains("recommend") || title.contains("radio") || 
-                                        title.contains("played") ||
-                                        title.contains("liked") || title.contains("cached") ||
-                                        title.contains("you might like") || title.contains("recently") ||
-                                        title.contains("most"))
-                            val hasSongs = section.items.any { it is SongItem }
-                            if (isSug && hasSongs) {
-                                cardShelf.add(section)
-                            } else {
+                            if (!isLocalDuplicate && section.items.isNotEmpty()) {
                                 remaining.add(section)
                             }
                         }
-                        Triple(cardShelf, libraryAlbums, remaining)
+                        Pair(libraryAlbums, remaining)
                     }
                     val bottomPadding = if (currentSongId != null) MiniPlayerHeight else 0.dp
                     LazyColumn(
@@ -553,24 +540,7 @@ fun ExploreScreen(
 
 
 
-                        if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") &&
-                            quickPicks.isNotEmpty()
-                        ) {
-                            item(key = "quick_picks_section") {
-                                QuickPicksSection(
-                                    songs = quickPicks,
-                                    onSongClick = { song ->
-                                        playerViewModel.showAndPlaySong(song, quickPicks, "Quick Picks")
-                                    },
-                                    onSeeAllClick = {
-                                        navController.navigateSafely(Screen.QuickPicksAll.route)
-                                    },
-                                    currentSongId = currentSongId,
-                                    displayMode = quickPicksDisplayMode,
-                                    cardSize = 140.dp
-                                )
-                            }
-                        }
+
 
                         if ((uiState.selectedFilter == "All" || uiState.selectedFilter == "Smart Mix" || uiState.selectedFilter == "For You") &&
                             uiState.recentMixes.isNotEmpty()

@@ -189,7 +189,7 @@ class ExploreViewModel @Inject constructor(
         }
 
         try {
-            // Stage 1: Single fast fetch for YouTube Home
+            // Stage 1: Single fast fetch for YouTube Home (personalized by user session)
             val home = withContext(Dispatchers.IO) {
                 runCatching { YouTube.home().getOrNull() }.getOrNull()
             }
@@ -202,6 +202,12 @@ class ExploreViewModel @Inject constructor(
                     !title.contains("long listens") &&
                     !title.contains("local")
                 }
+
+                // Extract personalized new releases directly from user's YouTube Home feed
+                val personalizedNewReleases = home.sections.filter {
+                    val t = it.title.lowercase()
+                    t.contains("new release") || t.contains("new releases")
+                }.flatMap { it.items }.filterIsInstance<AlbumItem>()
 
                 // Progressive streaming: map to domain UI models once
                 val uiSections = rawSections.map { it.toUiModel() }
@@ -218,6 +224,7 @@ class ExploreViewModel @Inject constructor(
                         isLoading = false,
                         isRefreshing = false,
                         homePageSections = rawSections,
+                        newReleaseAlbums = personalizedNewReleases,
                         moodChips = rawChips
                     )
                 }
