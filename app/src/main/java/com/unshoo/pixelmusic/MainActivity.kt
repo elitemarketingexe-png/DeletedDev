@@ -213,16 +213,6 @@ class MainActivity : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
 
-        // Performance Monitoring: JankStats tracks dropped frames and UI jank in real time.
-        JankStats.createAndTrack(window) { frameData ->
-            if (frameData.isJank) {
-                val durationMs = frameData.frameDurationUiNanos / 1_000_000
-                Log.w(
-                    "JankStats",
-                    "Jank detected! Frame duration: ${durationMs}ms (states: ${frameData.states})"
-                )
-            }
-        }
 
         // MD3 Optimization: Release Splash Screen immediately to render UI skeleton.
         // Data loading is handled via optimistic UI and smooth transitions.
@@ -816,13 +806,8 @@ class MainActivity : ComponentActivity() {
         }
 
         val horizontalPadding = when (navBarStyle) {
-            NavBarStyle.DEFAULT -> {
-                if (systemNavBarInset > 0.dp) {
-                    if (systemNavBarInset > 30.dp) 14.dp else systemNavBarInset
-                } else {
-                    14.dp
-                }
-            }
+            NavBarStyle.DEFAULT -> 12.dp
+            NavBarStyle.FLOATING_PILL -> 16.dp
             else -> 0.dp
         }
         val targetBottomBarPadding = if (navBarStyle == NavBarStyle.FULL_WIDTH) {

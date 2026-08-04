@@ -428,6 +428,15 @@ fun SettingsCategoryScreen(
 
     // Force-reset all dialogs, bottom sheets, and overlays on category change / unmount
     DisposableEffect(categoryId) {
+        showExplorerSheet = false
+        showClearLyricsDialog = false
+        showRebuildDatabaseWarning = false
+        showRegenerateDailyMixDialog = false
+        showRegenerateStatsDialog = false
+        showRegenerateAllPalettesDialog = false
+        showExportDataDialog = false
+        showImportFlow = false
+        showPaletteRegenerateSheet = false
         onDispose {
             showExplorerSheet = false
             showClearLyricsDialog = false
@@ -437,6 +446,7 @@ fun SettingsCategoryScreen(
             showRegenerateAllPalettesDialog = false
             showExportDataDialog = false
             showImportFlow = false
+            showPaletteRegenerateSheet = false
         }
     }
 

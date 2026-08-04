@@ -184,6 +184,12 @@ fun ExploreScreen(
     var isManualRefreshing by remember { mutableStateOf(false) }
     val isRefreshing = uiState.isRefreshing || isManualRefreshing
 
+    LaunchedEffect(uiState.selectedFilter) {
+        if (uiState.selectedFilter == "Charts" || uiState.selectedFilter == "All") {
+            exploreViewModel.loadChartsIfNeeded()
+        }
+    }
+
     val quickPicks by quickPicksViewModel.quickPicks.collectAsStateWithLifecycle()
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
     val isPlaying by remember { derivedStateOf { stablePlayerState.isPlaying } }

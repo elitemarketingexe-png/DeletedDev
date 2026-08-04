@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -176,10 +177,12 @@ private fun ExpressiveFloatingPillNavigationBar(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Official Material 3 Expressive HorizontalFloatingToolbar container
+        // Official Material 3 Expressive HorizontalFloatingToolbar container with drop shadow
         HorizontalFloatingToolbar(
             expanded = true,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .shadow(elevation = 6.dp, shape = CircleShape),
             colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
                 toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
             ),

@@ -534,11 +534,8 @@ class ListeningStatsTracker @Inject constructor(
             lastPositionMs = session.lastKnownPositionMs,
             durationMs = trackDuration
         )
-        // A completed play contributes at most one track duration.  Previously the wall-clock
-        // accumulator was persisted without a bound, so a stale/paused YouTube or Cast session
-        // could add hours (or days) to one song and inflate every aggregate built from history.
         val countedDuration = if (completedPlayback) {
-            listened.coerceAtMost(trackDuration)
+            if (trackDuration > 0) listened.coerceAtMost(trackDuration) else listened
         } else {
             0L
         }
@@ -787,11 +784,12 @@ class ListeningStatsTracker @Inject constructor(
         lastPositionMs: Long,
         durationMs: Long
     ): Boolean {
-        if (durationMs <= 0L || durationMs == C.TIME_UNSET) {
-            return listenedMs >= MIN_PLAYBACK_LISTEN_MS
+        if (listenedMs >= MIN_PLAYBACK_LISTEN_MS) return true
+        if (durationMs > 0L && durationMs != C.TIME_UNSET) {
+            val minRequiredListeningMs = (durationMs * 0.30f).toLong().coerceAtMost(MIN_PLAYBACK_LISTEN_MS)
+            return listenedMs >= minRequiredListeningMs || lastPositionMs >= minRequiredListeningMs
         }
-        val minRequiredListeningMs = (durationMs * 0.30f).toLong().coerceAtMost(MIN_PLAYBACK_LISTEN_MS)
-        return listenedMs >= minRequiredListeningMs
+        return false
     }
 
     companion object {

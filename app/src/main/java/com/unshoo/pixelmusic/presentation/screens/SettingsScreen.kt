@@ -110,6 +110,7 @@ fun SettingsScreen(
 ) {
 
     // Animation effects
+    val lastCategoryClickTime = remember { mutableStateOf(0L) }
     val transitionState = remember { MutableTransitionState(false) }
     LaunchedEffect(true) { transitionState.targetState = true }
 
@@ -240,8 +241,7 @@ fun SettingsScreen(
             }
             item {
                 // Rapid-click throttle: prevent freeze / stack from tapping category cards too fast
-                val lastCategoryClickTime = remember { mutableStateOf(0L) }
-                val throttleMs = 250L
+                val throttleMs = 50L
 
                 val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                 ExpressiveSettingsGroup {

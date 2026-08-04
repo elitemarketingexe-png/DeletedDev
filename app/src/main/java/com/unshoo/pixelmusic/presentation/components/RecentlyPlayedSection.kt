@@ -55,7 +55,7 @@ private val HomeRecentlyPlayedPillHeight = 58.dp
 private val HomeRecentlyPlayedPillSpacing = 8.dp
 private const val HomeRecentlyPlayedPillsLimit = 10
 private const val HomeRecentlyPlayedPillsPerColumn = 3
-internal const val RecentlyPlayedSectionMinSongsToShow = 1
+internal const val RecentlyPlayedSectionMinSongsToShow = 4
 private val HomeRecentlyPlayedPillArtSize = 38.dp
 private val HomeRecentlyPlayedWidthSteps = listOf(148.dp, 166.dp, 184.dp, 202.dp, 220.dp)
 private val HomeRecentlyPlayedDefaultContentPadding = PaddingValues(horizontal = 8.dp)

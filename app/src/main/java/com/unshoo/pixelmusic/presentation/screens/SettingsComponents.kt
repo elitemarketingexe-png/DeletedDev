@@ -238,7 +238,7 @@ fun ThemeSelectorItem(
         onSelectionChanged: (String) -> Unit,
         leadingIcon: @Composable () -> Unit
 ) {
-    var showSheet by remember { mutableStateOf(false) }
+    var showSheet by remember(label) { mutableStateOf(false) }
     val selectedOption = options[selectedKey] ?: selectedKey
 
     Surface(

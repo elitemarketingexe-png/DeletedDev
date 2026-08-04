@@ -10,7 +10,7 @@ import com.unshoo.pixelmusic.data.ads.AdManager
 private fun NavController.isReadyForNavigation(targetRoute: String? = null): Boolean {
     if (targetRoute != null && currentDestination?.route == targetRoute) return false
     return runCatching {
-        currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.CREATED) == true
+        currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) == true
     }.getOrDefault(false)
 }
 

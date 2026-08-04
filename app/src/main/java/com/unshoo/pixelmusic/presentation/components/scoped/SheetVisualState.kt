@@ -179,7 +179,7 @@ internal fun rememberSheetVisualState(
     }
 
     val actualCollapsedStateHorizontalPadding = when (navBarStyle) {
-        NavBarStyle.FULL_WIDTH -> 0.dp
+        NavBarStyle.FULL_WIDTH -> 14.dp
         NavBarStyle.FLOATING_PILL -> 16.dp
         else -> collapsedStateHorizontalPadding
     }
