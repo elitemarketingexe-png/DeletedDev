@@ -247,14 +247,10 @@ fun SettingsScreen(
                             category = category,
                             customColors = colors,
                             onClick = {
-                                val now = System.currentTimeMillis()
-                                if (now - lastCategoryClickTime.value >= throttleMs) {
-                                    lastCategoryClickTime.value = now
-                                    if (category == SettingsCategory.EQUALIZER) {
-                                        navController.navigateSafely(Screen.Equalizer.route)
-                                    } else {
-                                        navController.navigateSafely(Screen.SettingsCategory.createRoute(category.id))
-                                    }
+                                if (category == SettingsCategory.EQUALIZER) {
+                                    navController.navigateSafely(Screen.Equalizer.route)
+                                } else {
+                                    navController.navigateSafely(Screen.SettingsCategory.createRoute(category.id))
                                 }
                             },
                             shape = shapeFor(itemIndex)

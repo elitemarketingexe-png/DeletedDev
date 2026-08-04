@@ -9,9 +9,8 @@ import com.unshoo.pixelmusic.data.ads.AdManager
 
 private fun NavController.isReadyForNavigation(targetRoute: String? = null): Boolean {
     if (targetRoute != null && currentDestination?.route == targetRoute) return false
-    return runCatching {
-        currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) == true
-    }.getOrDefault(false)
+    val state = currentBackStackEntry?.lifecycle?.currentState ?: return true
+    return state.isAtLeast(Lifecycle.State.RESUMED)
 }
 
 fun NavController.navigateSafely(route: String): Boolean {
