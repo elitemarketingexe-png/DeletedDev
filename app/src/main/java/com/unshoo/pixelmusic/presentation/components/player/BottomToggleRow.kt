@@ -25,19 +25,24 @@ fun BottomToggleRow(
     onShuffleToggle: () -> Unit,
     onRepeatToggle: () -> Unit,
     onFavoriteToggle: () -> Unit,
-    activeColorMain: Color = MaterialTheme.colorScheme.primaryFixed,
-    activeColorSecondary: Color = MaterialTheme.colorScheme.secondaryFixed,
-    activeColorTertiary: Color = MaterialTheme.colorScheme.tertiaryFixed,
-    onActiveColorMain: Color = MaterialTheme.colorScheme.onPrimaryFixed,
-    onActiveColorSecondary: Color = MaterialTheme.colorScheme.onSecondaryFixed,
-    onActiveColorTertiary: Color = MaterialTheme.colorScheme.onTertiaryFixed,
+    activeColorMain: Color = MaterialTheme.colorScheme.primary,
+    activeColorSecondary: Color = MaterialTheme.colorScheme.secondary,
+    activeColorTertiary: Color = MaterialTheme.colorScheme.tertiary,
+    onActiveColorMain: Color = MaterialTheme.colorScheme.onPrimary,
+    onActiveColorSecondary: Color = MaterialTheme.colorScheme.onSecondary,
+    onActiveColorTertiary: Color = MaterialTheme.colorScheme.onTertiary,
     inactiveColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     inactiveContentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     containerColor: Color? = null
 ) {
     val isFavorite = isFavoriteProvider()
     val rowCorners = 60.dp
-    val resolvedContainerColor = containerColor ?: MaterialTheme.colorScheme.surfaceContainerHigh
+    val isDark = LocalPixelMusicDarkTheme.current
+    val resolvedContainerColor = containerColor ?: if (isDark) {
+        MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f)
+    } else {
+        Color.White.copy(alpha = 0.9f)
+    }
 
     Box(
         modifier = modifier.background(

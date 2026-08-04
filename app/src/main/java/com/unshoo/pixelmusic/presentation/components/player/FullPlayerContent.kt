@@ -358,7 +358,11 @@ fun FullPlayerContent(
     val playerAccentColor = LocalMaterialTheme.current.primary
     val playerOnAccentColor = LocalMaterialTheme.current.onPrimary
     val transportPlayPauseColors = expressivePlayPauseButtonColors(LocalMaterialTheme.current)
-    val transportSkipButtonColors = expressiveSkipButtonColors(LocalMaterialTheme.current)
+    val transportSkipColors = expressiveSkipButtonColors(LocalMaterialTheme.current)
+    val transportSkipButtonColors = TransportButtonColors(
+        container = playerAccentColor,
+        content = playerOnAccentColor
+    )
     val progressActiveColor = playerOnBaseColor
 
     val placeholderColor = playerOnBaseColor.copy(alpha = 0.1f)
@@ -3172,9 +3176,14 @@ private fun BottomToggleRow(
 ) {
     val isFavorite = isFavoriteProvider()
     val rowCorners = 60.dp
-    val inactiveBg = LocalMaterialTheme.current.surfaceContainerHighest
-    val inactiveContentColor = LocalMaterialTheme.current.onSurfaceVariant
-    val containerBg = LocalMaterialTheme.current.surfaceContainerHigh
+    val inactiveBg = LocalMaterialTheme.current.onSurface.copy(alpha = 0.07f)
+    val inactiveContentColor = LocalMaterialTheme.current.onSurface
+    val isDark = LocalPixelMusicDarkTheme.current
+    val containerBg = if (isDark) {
+        LocalMaterialTheme.current.surfaceContainer.copy(alpha = 0.5f)
+    } else {
+        Color.White.copy(alpha = 0.9f)
+    }
 
 
     Box(
@@ -3218,9 +3227,9 @@ private fun BottomToggleRow(
                 modifier = commonModifier,
                 active = isShuffleEnabled,
                 enabled = !isShuffleTransitionInProgress,
-                activeColor = LocalMaterialTheme.current.primaryFixed,
+                activeColor = LocalMaterialTheme.current.primary,
                 activeCornerRadius = rowCorners,
-                activeContentColor = LocalMaterialTheme.current.onPrimaryFixed,
+                activeContentColor = LocalMaterialTheme.current.onPrimary,
                 inactiveColor = inactiveBg,
                 inactiveContentColor = inactiveContentColor,
                 onClick = onShuffleToggle,
@@ -3236,9 +3245,9 @@ private fun BottomToggleRow(
             ToggleSegmentButton(
                 modifier = commonModifier,
                 active = repeatActive,
-                activeColor = LocalMaterialTheme.current.secondaryFixed,
+                activeColor = LocalMaterialTheme.current.secondary,
                 activeCornerRadius = rowCorners,
-                activeContentColor = LocalMaterialTheme.current.onSecondaryFixed,
+                activeContentColor = LocalMaterialTheme.current.onSecondary,
                 inactiveColor = inactiveBg,
                 inactiveContentColor = inactiveContentColor,
                 onClick = onRepeatToggle,
@@ -3248,9 +3257,9 @@ private fun BottomToggleRow(
             ToggleSegmentButton(
                 modifier = commonModifier,
                 active = isFavorite,
-                activeColor = LocalMaterialTheme.current.tertiaryFixed,
+                activeColor = LocalMaterialTheme.current.tertiary,
                 activeCornerRadius = rowCorners,
-                activeContentColor = LocalMaterialTheme.current.onTertiaryFixed,
+                activeContentColor = LocalMaterialTheme.current.onTertiary,
                 inactiveColor = inactiveBg,
                 inactiveContentColor = inactiveContentColor,
                 onClick = onFavoriteToggle,
