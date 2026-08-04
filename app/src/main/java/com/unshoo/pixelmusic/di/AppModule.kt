@@ -274,22 +274,22 @@ object AppModule {
 
         return ImageLoader.Builder(context)
             .okHttpClient(okHttpClient)
-            // BUGFIX (GC churn — too many parallel decodes): 6 parallel
-            // image decodes, each potentially decoding a full-resolution
-            // 4-8 MB JPEG and holding a Bitmap during quantization, was
-            // the primary source of the 41+74+73+44 MB background GCs
-            // visible in the runtime log during a normal scrolling
-            // session. Two parallel decodes is the sweet spot: enough to
-            // keep the in-flight image queue drained, low enough that the
-            // GC can keep up without 1+ second pauses.
+            // PERF: limit parallel decodes to 2 to prevent HWUI image decode
+            // thread saturation. With 6+ concurrent decodes the GPU upload
+            // queue backs up, causing 80+ "Image decoding logging dropped!"
+            // warnings and triggering 31-33 frame skips on Choreographer.
             .dispatcher(Dispatchers.IO.limitedParallelism(2))
             .allowHardware(true) // Hardware bitmaps reduce Java heap pressure for UI album art
+            .crossfade(120) // Smooth image appearance; short enough to not queue during scrolling
             .memoryCache {
                 MemoryCache.Builder(context)
-                    // 20% of a 256 MB heap leaves too little headroom when ExoPlayer,
-                    // widgets, Compose and large queues are active. Keep the cache lean;
-                    // disk cache still prevents network/file re-fetches.
-                    .maxSizePercent(0.08)
+                    // PERF: bumped from 8% → 15%. At 8% the cache evicts album
+                    // thumbnails during tab switches, forcing re-decodes that
+                    // saturate HWUI threads and cause 30+ frame skips. 15% holds
+                    // ~2 screens of thumbnails in memory, drastically reducing
+                    // cache misses on tab return. On a 256 MB heap this is ~38 MB
+                    // — still leaves ample headroom for ExoPlayer and Compose.
+                    .maxSizePercent(0.15)
                     .build()
             }
             .diskCache {

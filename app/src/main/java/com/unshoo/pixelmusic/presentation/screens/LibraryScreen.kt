@@ -22,6 +22,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -635,15 +636,22 @@ fun LibraryScreen(
         { song -> multiSelectionState.toggleSelection(song) }
     }
 
-    val toggleAlbumSelection: (Album) -> Unit = remember(selectedAlbums, playerViewModel, context) {
+    // PERF: use rememberUpdatedState for selectedAlbums so the lambda captures
+    // a stable reference that always reads the latest value, avoiding cascading
+    // re-allocations of toggleAlbumSelection → onAlbumLongPress → onAlbumSelectionToggle
+    // on every selection change. This was causing 4 new lambda objects per tap.
+    val currentSelectedAlbums = rememberUpdatedState(selectedAlbums)
+
+    val toggleAlbumSelection: (Album) -> Unit = remember(playerViewModel, context) {
         { album ->
-            val existingIndex = selectedAlbums.indexOfFirst { it.id == album.id }
+            val albums = currentSelectedAlbums.value
+            val existingIndex = albums.indexOfFirst { it.id == album.id }
             if (existingIndex >= 0) {
-                selectedAlbums = selectedAlbums.toMutableList().also { it.removeAt(existingIndex) }
-            } else if (selectedAlbums.size >= MAX_ALBUM_MULTI_SELECTION) {
+                selectedAlbums = albums.toMutableList().also { it.removeAt(existingIndex) }
+            } else if (albums.size >= MAX_ALBUM_MULTI_SELECTION) {
                 playerViewModel.sendToast(context.getString(R.string.presentation_batch_d_max_albums_selection, MAX_ALBUM_MULTI_SELECTION))
             } else {
-                selectedAlbums = selectedAlbums + album
+                selectedAlbums = albums + album
             }
         }
     }
@@ -659,9 +667,10 @@ fun LibraryScreen(
         { album -> toggleAlbumSelection(album) }
     }
 
-    val getAlbumSelectionIndex: (Long) -> Int? = remember(selectedAlbums) {
+    val getAlbumSelectionIndex: (Long) -> Int? = remember {
         { albumId ->
-            val index = selectedAlbums.indexOfFirst { it.id == albumId }
+            val albums = currentSelectedAlbums.value
+            val index = albums.indexOfFirst { it.id == albumId }
             if (index >= 0) index + 1 else null
         }
     }

@@ -35,6 +35,7 @@ import coil.compose.AsyncImagePainter
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Size // Import Coil's Size
+import coil.memory.MemoryCache
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.unshoo.pixelmusic.R
@@ -161,6 +162,14 @@ fun SmartImage(
 
     // OPTIMIZED: Pre-compiled regex patterns (avoid compiling Regex on every composition)
     // These were previously created inside remember{} on each SmartImage call - now static.
+    val memoryCacheKey = remember(model, requestTargetSize) {
+        if (model is String) {
+            MemoryCache.Key(model)
+        } else {
+            null
+        }
+    }
+
     val request = remember(
         context,
         model,
@@ -168,7 +177,8 @@ fun SmartImage(
         useDiskCache,
         useMemoryCache,
         allowHardware,
-        requestTargetSize
+        requestTargetSize,
+        memoryCacheKey
     ) {
         val optimizedModel = if (model is String && (model.contains("googleusercontent.com") || model.contains("ggpht.com"))) {
             val widthPx = (requestTargetSize.width as? coil.size.Dimension.Pixels)?.px ?: 300
@@ -198,6 +208,15 @@ fun SmartImage(
                 .memoryCachePolicy(if (useMemoryCache) CachePolicy.ENABLED else CachePolicy.DISABLED)
                 .allowHardware(allowHardware)
                 .size(requestTargetSize)
+                // PERF: use the URL as a memory cache key so that returning
+                // to a tab instantly shows the cached bitmap as placeholder
+                // instead of flashing a blank/decode frame.
+                .apply {
+                    if (memoryCacheKey != null) {
+                        memoryCacheKey(memoryCacheKey)
+                        placeholderMemoryCacheKey(memoryCacheKey)
+                    }
+                }
                 .build()
         }
     }
