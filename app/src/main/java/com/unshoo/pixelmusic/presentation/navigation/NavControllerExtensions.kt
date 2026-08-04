@@ -1,45 +1,38 @@
 package com.unshoo.pixelmusic.presentation.navigation
 
-import android.app.Activity
-import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavOptionsBuilder
-import com.unshoo.pixelmusic.data.ads.AdManager
 
 private fun NavController.isReadyForNavigation(targetRoute: String? = null): Boolean {
+    val lifecycle = currentBackStackEntry?.lifecycle
+    if (lifecycle != null && !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return false
     if (targetRoute != null && currentDestination?.route == targetRoute) return false
     return true
 }
 
+fun NavController.popBackStackSafely(): Boolean {
+    val lifecycle = currentBackStackEntry?.lifecycle
+    if (lifecycle != null && !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return false
+    return try {
+        popBackStack()
+    } catch (e: Exception) {
+        android.util.Log.e("NavController", "Safe popBackStack failed", e)
+        false
+    }
+}
+
 fun NavController.navigateSafely(route: String): Boolean {
     if (!isReadyForNavigation(route)) return false
-    val activity = context as? Activity
     try {
-        if (activity != null && route.contains("settings_category/ai")) {
-            if (AdManager.isAdLoaded()) {
-                Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
-                AdManager.showRewardedAd(activity) { success ->
-                    if (success) {
-                        navigate(route) {
-                            launchSingleTop = true
-                        }
-                    } else {
-                        Toast.makeText(activity, "Ad not completed. AI features remain locked.", Toast.LENGTH_LONG).show()
-                    }
-                }
-                return true
-            } else {
-                AdManager.loadRewardedAd(activity.applicationContext)
-            }
+        navigate(route) {
+            launchSingleTop = true
         }
-    } catch (e: Throwable) {
-        android.util.Log.e("NavController", "Ad navigation interception failed, fallback to normal", e)
+        return true
+    } catch (e: Exception) {
+        android.util.Log.e("NavController", "Safe navigation failed for route: $route", e)
+        return false
     }
-    navigate(route) {
-        launchSingleTop = true
-    }
-    return true
 }
 
 fun NavController.navigateSafely(
@@ -47,34 +40,16 @@ fun NavController.navigateSafely(
     builder: NavOptionsBuilder.() -> Unit
 ): Boolean {
     if (!isReadyForNavigation(route)) return false
-    val activity = context as? Activity
     try {
-        if (activity != null && route.contains("settings_category/ai")) {
-            if (AdManager.isAdLoaded()) {
-                Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
-                AdManager.showRewardedAd(activity) { success ->
-                    if (success) {
-                        navigate(route) {
-                            launchSingleTop = true
-                            builder()
-                        }
-                    } else {
-                        Toast.makeText(activity, "Ad not completed. AI features remain locked.", Toast.LENGTH_LONG).show()
-                    }
-                }
-                return true
-            } else {
-                AdManager.loadRewardedAd(activity.applicationContext)
-            }
+        navigate(route) {
+            launchSingleTop = true
+            builder()
         }
-    } catch (e: Throwable) {
-        android.util.Log.e("NavController", "Ad navigation interception failed, fallback to normal", e)
+        return true
+    } catch (e: Exception) {
+        android.util.Log.e("NavController", "Safe navigation failed for route: $route", e)
+        return false
     }
-    navigate(route) {
-        launchSingleTop = true
-        builder()
-    }
-    return true
 }
 
 fun NavController.navigateSafelyReplacing(
@@ -82,51 +57,37 @@ fun NavController.navigateSafelyReplacing(
     patternToPop: String,
     builder: NavOptionsBuilder.() -> Unit = {}
 ): Boolean {
-    if (!isReadyForNavigation()) return false
-    navigate(route) {
-        launchSingleTop = false
-        popUpTo(patternToPop) {
-            inclusive = true
+    if (!isReadyForNavigation(route)) return false
+    try {
+        navigate(route) {
+            launchSingleTop = false
+            popUpTo(patternToPop) {
+                inclusive = true
+            }
+            builder()
         }
-        builder()
+        return true
+    } catch (e: Exception) {
+        android.util.Log.e("NavController", "Safe navigation replacing failed for route: $route", e)
+        return false
     }
-    return true
 }
 
 fun NavController.navigateToTopLevelSafely(route: String): Boolean {
+    if (!isReadyForNavigation(route)) return false
     val startDestinationId = runCatching { graph.startDestinationId }.getOrNull() ?: return false
-    val activity = context as? Activity
     try {
-        if (activity != null && route.contains("settings_category/ai")) {
-            if (AdManager.isAdLoaded()) {
-                Toast.makeText(activity, "Opening support ad...", Toast.LENGTH_SHORT).show()
-                AdManager.showRewardedAd(activity) { success ->
-                    if (success) {
-                        navigate(route) {
-                            popUpTo(startDestinationId) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    } else {
-                        Toast.makeText(activity, "Ad not completed. AI features remain locked.", Toast.LENGTH_LONG).show()
-                    }
-                }
-                return true
-            } else {
-                AdManager.loadRewardedAd(activity.applicationContext)
+        navigate(route) {
+            popUpTo(startDestinationId) {
+                saveState = true
             }
+            launchSingleTop = true
+            restoreState = true
         }
-    } catch (e: Throwable) {
-        android.util.Log.e("NavController", "Ad navigation interception failed, fallback to normal", e)
+        return true
+    } catch (e: Exception) {
+        android.util.Log.e("NavController", "Safe top-level navigation failed for route: $route", e)
+        return false
     }
-    navigate(route) {
-        popUpTo(startDestinationId) {
-            saveState = true
-        }
-        launchSingleTop = true
-        restoreState = true
-    }
-    return true
 }
+

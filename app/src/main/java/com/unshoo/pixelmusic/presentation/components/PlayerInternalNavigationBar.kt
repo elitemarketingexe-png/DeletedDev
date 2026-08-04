@@ -188,7 +188,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                 .weight(1f)
                 .shadow(elevation = 6.dp, shape = CircleShape),
             colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
-                toolbarContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                toolbarContainerColor = MaterialTheme.colorScheme.primaryContainer
             ),
             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
         ) {
@@ -213,12 +213,12 @@ private fun ExpressiveFloatingPillNavigationBar(
                         .height(52.dp),
                     shape = CircleShape,
                     color = if (isSelected) {
-                        MaterialTheme.colorScheme.primaryContainer
+                        MaterialTheme.colorScheme.primary
                     } else {
                         Color.Transparent
                     },
                     contentColor = if (isSelected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
+                        MaterialTheme.colorScheme.onPrimary
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                     }
@@ -300,9 +300,9 @@ private fun ExpressiveFloatingPillNavigationBar(
                 modifier = Modifier.size(58.dp),
                 shape = CircleShape,
                 color = if (isSearchSelected) {
-                    MaterialTheme.colorScheme.primaryContainer
+                    MaterialTheme.colorScheme.primary
                 } else {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    MaterialTheme.colorScheme.primaryContainer
                 },
                 contentColor = if (isSearchSelected) {
                     MaterialTheme.colorScheme.onPrimaryContainer

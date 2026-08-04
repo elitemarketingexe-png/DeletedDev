@@ -358,11 +358,7 @@ fun FullPlayerContent(
     val playerAccentColor = LocalMaterialTheme.current.primary
     val playerOnAccentColor = LocalMaterialTheme.current.onPrimary
     val transportPlayPauseColors = expressivePlayPauseButtonColors(LocalMaterialTheme.current)
-    val transportSkipColors = expressiveSkipButtonColors(LocalMaterialTheme.current)
-    val transportSkipButtonColors = TransportButtonColors(
-        container = playerAccentColor,
-        content = playerOnAccentColor
-    )
+    val transportSkipButtonColors = expressiveSkipButtonColors(LocalMaterialTheme.current)
     val progressActiveColor = playerOnBaseColor
 
     val placeholderColor = playerOnBaseColor.copy(alpha = 0.1f)
@@ -3227,9 +3223,9 @@ private fun BottomToggleRow(
                 modifier = commonModifier,
                 active = isShuffleEnabled,
                 enabled = !isShuffleTransitionInProgress,
-                activeColor = LocalMaterialTheme.current.primary,
+                activeColor = LocalMaterialTheme.current.secondary,
                 activeCornerRadius = rowCorners,
-                activeContentColor = LocalMaterialTheme.current.onPrimary,
+                activeContentColor = LocalMaterialTheme.current.onSecondary,
                 inactiveColor = inactiveBg,
                 inactiveContentColor = inactiveContentColor,
                 onClick = onShuffleToggle,
@@ -3245,9 +3241,9 @@ private fun BottomToggleRow(
             ToggleSegmentButton(
                 modifier = commonModifier,
                 active = repeatActive,
-                activeColor = LocalMaterialTheme.current.secondary,
+                activeColor = LocalMaterialTheme.current.primary,
                 activeCornerRadius = rowCorners,
-                activeContentColor = LocalMaterialTheme.current.onSecondary,
+                activeContentColor = LocalMaterialTheme.current.onPrimary,
                 inactiveColor = inactiveBg,
                 inactiveContentColor = inactiveContentColor,
                 onClick = onRepeatToggle,

@@ -231,30 +231,30 @@ fun SettingsCategoryScreen(
     val paletteRegenerateTargets by playerViewModel.paletteRegenerationTargets.collectAsStateWithLifecycle()
     val explorerRoot = settingsViewModel.explorerRoot()
 
-    // Local State
-    var showExplorerSheet by remember { mutableStateOf(false) }
-    var refreshRequested by remember { mutableStateOf(false) }
-    var syncRequestObservedRunning by remember { mutableStateOf(false) }
-    var syncIndicatorLabel by remember { mutableStateOf<String?>(null) }
-    var showClearLyricsDialog by remember { mutableStateOf(false) }
-    var showRebuildDatabaseWarning by remember { mutableStateOf(false) }
-    var showRegenerateDailyMixDialog by remember { mutableStateOf(false) }
-    var showRegenerateStatsDialog by remember { mutableStateOf(false) }
-    var showRegenerateAllPalettesDialog by remember { mutableStateOf(false) }
-    var showExportDataDialog by remember { mutableStateOf(false) }
-    var showImportFlow by remember { mutableStateOf(false) }
-    var exportSections by remember { mutableStateOf(BackupSection.defaultSelection) }
-    var importFileUri by remember { mutableStateOf<Uri?>(null) }
-    var minSongDurationDraft by remember(uiState.minSongDuration) {
+    // Local State keyed to categoryId to prevent state leaking when switching categories
+    var showExplorerSheet by remember(categoryId) { mutableStateOf(false) }
+    var refreshRequested by remember(categoryId) { mutableStateOf(false) }
+    var syncRequestObservedRunning by remember(categoryId) { mutableStateOf(false) }
+    var syncIndicatorLabel by remember(categoryId) { mutableStateOf<String?>(null) }
+    var showClearLyricsDialog by remember(categoryId) { mutableStateOf(false) }
+    var showRebuildDatabaseWarning by remember(categoryId) { mutableStateOf(false) }
+    var showRegenerateDailyMixDialog by remember(categoryId) { mutableStateOf(false) }
+    var showRegenerateStatsDialog by remember(categoryId) { mutableStateOf(false) }
+    var showRegenerateAllPalettesDialog by remember(categoryId) { mutableStateOf(false) }
+    var showExportDataDialog by remember(categoryId) { mutableStateOf(false) }
+    var showImportFlow by remember(categoryId) { mutableStateOf(false) }
+    var exportSections by remember(categoryId) { mutableStateOf(BackupSection.defaultSelection) }
+    var importFileUri by remember(categoryId) { mutableStateOf<Uri?>(null) }
+    var minSongDurationDraft by remember(categoryId, uiState.minSongDuration) {
         mutableStateOf(uiState.minSongDuration.toFloat())
     }
-    var minTracksPerAlbumDraft by remember(uiState.minTracksPerAlbum) {
+    var minTracksPerAlbumDraft by remember(categoryId, uiState.minTracksPerAlbum) {
         mutableStateOf(uiState.minTracksPerAlbum.toFloat())
     }
-    var albumArtCacheLimitDraft by remember(uiState.albumArtCacheLimitMb) {
+    var albumArtCacheLimitDraft by remember(categoryId, uiState.albumArtCacheLimitMb) {
         mutableStateOf(uiState.albumArtCacheLimitMb.toFloat())
     }
-    var storageLimitDraft by remember(uiState.storageLimitMb) {
+    var storageLimitDraft by remember(categoryId, uiState.storageLimitMb) {
         mutableStateOf(uiState.storageLimitMb.toFloat())
     }
 
@@ -323,12 +323,12 @@ fun SettingsCategoryScreen(
         }
     }
 
-    var showPaletteRegenerateSheet by remember { mutableStateOf(false) }
-    var isPaletteRegenerateRunning by remember { mutableStateOf(false) }
-    var isPaletteBulkRegenerateRunning by remember { mutableStateOf(false) }
-    var paletteBulkCompletedCount by remember { mutableStateOf(0) }
-    var paletteBulkTotalCount by remember { mutableStateOf(0) }
-    var paletteSongSearchQuery by remember { mutableStateOf("") }
+    var showPaletteRegenerateSheet by remember(categoryId) { mutableStateOf(false) }
+    var isPaletteRegenerateRunning by remember(categoryId) { mutableStateOf(false) }
+    var isPaletteBulkRegenerateRunning by remember(categoryId) { mutableStateOf(false) }
+    var paletteBulkCompletedCount by remember(categoryId) { mutableStateOf(0) }
+    var paletteBulkTotalCount by remember(categoryId) { mutableStateOf(0) }
+    var paletteSongSearchQuery by remember(categoryId) { mutableStateOf("") }
     val paletteRegenerateSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isAnyPaletteRegenerateRunning = isPaletteRegenerateRunning || isPaletteBulkRegenerateRunning
     val filteredPaletteSongs = remember(paletteRegenerateTargets, paletteSongSearchQuery) {

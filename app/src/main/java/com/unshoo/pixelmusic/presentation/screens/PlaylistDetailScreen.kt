@@ -369,13 +369,18 @@ fun PlaylistDetailScreen(
     val reorderableState = rememberReorderableLazyListState(
         lazyListState = listState,
         onMove = { from, to ->
-            localReorderableSongs = localReorderableSongs.toMutableList().apply {
-                add(to.index, removeAt(from.index))
+            val fromPos = localReorderableSongs.indexOfFirst { it.id == from.key }.takeIf { it >= 0 } ?: from.index
+            val toPos = localReorderableSongs.indexOfFirst { it.id == to.key }.takeIf { it >= 0 } ?: to.index
+
+            if (fromPos != toPos && fromPos in localReorderableSongs.indices && toPos in localReorderableSongs.indices) {
+                localReorderableSongs = localReorderableSongs.toMutableList().apply {
+                    add(toPos, removeAt(fromPos))
+                }
+                if (lastMovedFrom == null) {
+                    lastMovedFrom = fromPos
+                }
+                lastMovedTo = toPos
             }
-            if (lastMovedFrom == null) {
-                lastMovedFrom = from.index
-            }
-            lastMovedTo = to.index
         }
     )
 
@@ -857,12 +862,12 @@ fun PlaylistDetailScreen(
                         ) {
                             itemsIndexed(
                                 localReorderableSongs,
-                                key = { index, item -> "${item.id}_$index" },
+                                key = { _, item -> item.id },
                                 contentType = { _, _ -> "playlist_song" }
                             ) { index, song ->
                                 ReorderableItem(
                                     state = reorderableState,
-                                    key = "${song.id}_$index",
+                                    key = song.id,
                                 ) { isDragging ->
                                     val scale by animateFloatAsState(
                                         if (isDragging) 1.05f else 1f,
