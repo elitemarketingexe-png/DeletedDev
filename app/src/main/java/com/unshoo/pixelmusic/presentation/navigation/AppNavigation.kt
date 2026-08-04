@@ -662,26 +662,7 @@ private enum class MainRootDirection {
     BACKWARD
 }
 
-// M3 Expressive bottom-tab page transitions.
-//
-// Springs were causing micro-jitter / overshoot on tab switches because FastSpatial
-// (damping 0.6) deliberately overshoots — great for buttons, but for swapping entire
-// pages it makes the incoming content appear to "bounce" by a few pixels, which reads
-// as lag. Tween with a purpose-built decelerate curve (fast exit, slow ease-in) removes
-// any overshoot while keeping the motion buttery-smooth and physically believable.
-//
-// Duration rationale:
-//  • 450ms spatial + scale — slow enough to feel luxurious, fast enough to not block
-//    interaction (Navigation Compose enables touch on the target *immediately* with
-//    tween, unlike springs which block until 100% settled).
-//  • 350ms fade — finishes before the spatial motion so content is fully opaque while
-//    the slide is still decelerating, giving a "content loads instantly" perception.
-// Material 3 Expressive immersive blend transitions for top-level navigation (Home / Explore / Library).
-// Combines a soothing 500ms decelerate fade with a soft 12% micro-slide and subtle scale blend (0.98f -> 1.0f).
-// Material 3 Expressive Transform (Shared Axis Z / Fade-Scale) transitions for top-level navigation (Home / Explore / Library).
-// Uses Material 3 Emphasized Decelerate (enter) & Accelerate (exit) curves.
-// Completely removes horizontal pixel translation during tab switches, guaranteeing 120fps fluid motion
-// with zero stutter, zero jitter, and zero frame drops when navigating between bottom tabs.
+
 private val M3_TRANSFORM_FADE_IN_SPEC = tween<Float>(
     durationMillis = 320,
     easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
