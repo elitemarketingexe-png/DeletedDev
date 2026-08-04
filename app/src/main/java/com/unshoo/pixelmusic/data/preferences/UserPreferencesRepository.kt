@@ -2299,9 +2299,9 @@ constructor(
         dataStore.data.map { preferences ->
             val stored = preferences[PreferencesKeys.QUICK_PICKS_DISPLAY_MODE]
             try {
-                if (stored != null) QuickPicksDisplayMode.valueOf(stored) else QuickPicksDisplayMode.CARD_CLASSIC
+                if (stored != null) QuickPicksDisplayMode.valueOf(stored) else QuickPicksDisplayMode.UNCONTAINED
             } catch (e: Exception) {
-                QuickPicksDisplayMode.CARD_CLASSIC
+                QuickPicksDisplayMode.UNCONTAINED
             }
         }.distinctUntilChanged()
 
