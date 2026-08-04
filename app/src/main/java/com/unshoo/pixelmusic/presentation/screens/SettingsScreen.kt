@@ -58,6 +58,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -157,7 +158,7 @@ fun SettingsScreen(
                 val consumed = newHeight - previousHeight
 
                 if (consumed.roundToInt() != 0) {
-                    topBarHeight.dispatchRawDelta(consumed)
+                    coroutineScope.launch { topBarHeight.snapTo(newHeight) }
                 }
 
                 val canConsumeScroll = !(isScrollingDown && newHeight == minTopBarHeightPx)
