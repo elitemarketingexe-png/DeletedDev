@@ -207,8 +207,9 @@ private fun ExpressiveFloatingPillNavigationBar(
             mainItems.forEachIndexed { index, item ->
                 val isSelected = selectedIndex == index
 
+                val dynamicActiveWeight = 1.4f + (item.label.length * 0.20f)
                 val itemWeight by animateFloatAsState(
-                    targetValue = if (isSelected && !shouldHideLabel) 2.4f else 1.0f,
+                    targetValue = if (isSelected && !shouldHideLabel) dynamicActiveWeight else 1.0f,
                     animationSpec = androidx.compose.animation.core.spring(
                         dampingRatio = 0.82f,
                         stiffness = 320f
@@ -223,7 +224,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                 )
 
                 val animContentColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
                     animationSpec = tween(durationMillis = 300, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)),
                     label = "pill_content_$index"
                 )
@@ -237,7 +238,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                     },
                     modifier = Modifier
                         .weight(itemWeight)
-                        .height(52.dp),
+                        .height(48.dp),
                     shape = CircleShape,
                     color = animColor,
                     contentColor = animContentColor
@@ -258,7 +259,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                         Icon(
                             painter = painterResource(id = iconRes),
                             contentDescription = item.label,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(24.dp)
                         )
 
                         AnimatedVisibility(
@@ -278,7 +279,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = item.label,
-                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
+                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp),
                                     maxLines = 1,
                                     fontWeight = FontWeight.ExtraBold,
                                     softWrap = false
@@ -316,7 +317,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                         onSearchIconDoubleTap()
                     }
                 },
-                modifier = Modifier.size(58.dp),
+                modifier = Modifier.size(56.dp),
                 shape = CircleShape,
                 color = if (isSearchSelected) {
                     MaterialTheme.colorScheme.primary
@@ -326,7 +327,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                 contentColor = if (isSearchSelected) {
                     MaterialTheme.colorScheme.onPrimary
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+                    MaterialTheme.colorScheme.primary
                 },
                 tonalElevation = 2.dp,
                 shadowElevation = 6.dp
@@ -381,7 +382,7 @@ private fun PlayerInternalNavigationItemsRow(
         navItems.forEach { item ->
             val isSelected = currentRoute != null && currentRoute == item.screen.route
             val selectedColor = MaterialTheme.colorScheme.primary
-            val unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+            val unselectedColor = MaterialTheme.colorScheme.primary
             val baseContainerColor = MaterialTheme.colorScheme.primaryContainer
             val surfaceColor = MaterialTheme.colorScheme.surface
             val solidTintedColor = remember(baseContainerColor, surfaceColor) {

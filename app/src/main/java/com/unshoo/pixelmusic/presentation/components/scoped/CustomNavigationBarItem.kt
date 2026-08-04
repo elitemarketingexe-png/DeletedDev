@@ -60,9 +60,9 @@ fun RowScope.CustomNavigationBarItem(
     contentDescription: String? = null,
     alwaysShowLabel: Boolean = true,
     selectedIconColor: Color = MaterialTheme.colorScheme.onSecondaryContainer,
-    unselectedIconColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    unselectedIconColor: Color = MaterialTheme.colorScheme.primary,
     selectedTextColor: Color = MaterialTheme.colorScheme.onSurface,
-    unselectedTextColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    unselectedTextColor: Color = MaterialTheme.colorScheme.primary,
     indicatorColor: Color = MaterialTheme.colorScheme.secondaryContainer,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() }
 ) {

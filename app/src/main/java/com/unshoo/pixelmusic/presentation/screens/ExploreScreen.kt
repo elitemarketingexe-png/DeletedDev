@@ -4,6 +4,8 @@
 )
 package com.unshoo.pixelmusic.presentation.screens
 
+import com.unshoo.pixelmusic.presentation.navigation.navigateToTopLevelSafely
+
 import androidx.compose.material3.IconButton
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.material.icons.rounded.Radio
@@ -176,8 +178,10 @@ fun ExploreScreen(
     exploreViewModel: ExploreViewModel = hiltViewModel(),
     quickPicksViewModel: QuickPicksViewModel = hiltViewModel()
 ) {
-    // OPTIMIZED (adopted from PixelMusic): single uiState subscription instead of
-    // 9 mapped collector slices — one recomposition instead of many.
+    androidx.activity.compose.BackHandler(enabled = true) {
+        navController.navigateToTopLevelSafely(com.unshoo.pixelmusic.presentation.navigation.Screen.Home.route)
+    }
+
     val uiState by exploreViewModel.uiState.collectAsStateWithLifecycle()
 
     val scope = androidx.compose.runtime.rememberCoroutineScope()

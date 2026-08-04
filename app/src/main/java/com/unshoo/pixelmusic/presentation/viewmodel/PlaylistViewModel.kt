@@ -875,18 +875,31 @@ class PlaylistViewModel @Inject constructor(
     ): String? {
         return withContext(Dispatchers.IO) {
             try {
-                // Load original bitmap
-                val originalBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, _, _ ->
-                        // Optimization: Mutable to support software rendering if needed
-                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                        // Use HARWARE if possible but need to copy for Canvas?
-                        // Software is safer for manual Canvas drawing.
+                val originalBitmap: android.graphics.Bitmap? = when {
+                    uri.scheme == "http" || uri.scheme == "https" -> {
+                        val loader = coil.ImageLoader(context)
+                        val request = coil.request.ImageRequest.Builder(context)
+                            .data(uri)
+                            .allowHardware(false)
+                            .build()
+                        val result = loader.execute(request)
+                        (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
                     }
-                } else {
-                    @Suppress("DEPRECATION")
-                    MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                    uri.scheme == "file" || uri.scheme.isNullOrEmpty() -> {
+                        val path = uri.path ?: uri.toString()
+                        android.graphics.BitmapFactory.decodeFile(path)
+                    }
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.P -> {
+                        ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, _, _ ->
+                            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                        }
+                    }
+                    else -> {
+                        @Suppress("DEPRECATION")
+                        MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                    }
                 }
+                if (originalBitmap == null) return@withContext null
 
                 // Target dimensions (Square)
                 val targetSize = 1024
@@ -1205,41 +1218,21 @@ class PlaylistViewModel @Inject constructor(
             // But if the user selected a new image, it will be a content content:// uri.
 
             if (coverImageUri != null && coverImageUri != currentPlaylist.coverImageUri) {
-                // Check if it is a content URI or a file path that is NOT the existing saved path
-                if (coverImageUri.startsWith("content://") || (coverImageUri.startsWith("/") && coverImageUri != currentPlaylist.coverImageUri)) {
-                    val imageId = UUID.randomUUID().toString()
-                    val newPath = saveCoverImageToInternalStorage(
-                        Uri.parse(coverImageUri),
-                        imageId,
-                        cropScale,
-                        cropPanX,
-                        cropPanY
-                    )
-                    if (newPath != null) {
-                        savedCoverPath = newPath
-                    }
+                val imageId = UUID.randomUUID().toString()
+                val parsedUri = Uri.parse(coverImageUri)
+                val newPath = saveCoverImageToInternalStorage(
+                    parsedUri,
+                    imageId,
+                    cropScale,
+                    cropPanX,
+                    cropPanY
+                )
+                if (newPath != null) {
+                    savedCoverPath = newPath
                 }
             } else if (coverImageUri == null) {
-                // If passed null, it might mean remove cover? Or just no change?
-                // For this implementation let's assume if the user cleared it, the UI passes null.
-                // But we need to distinguish "no change" vs "remove".
-                // In CreatePlaylist we have "selectedImageUri".
-                // Let's assume the UI sends the desired final state.
-                // NOTE: If the user didn't change the image, the UI might send the existing coverImageUri (which is a file path).
-                // Or if they removed it, they send null.
-
-                // However, we also have crop parameters. If image is unchanged but crop changed, we should re-save (re-crop)
-                // if we have the original source. But we don't have the original source for the existing cover (we only have the cropped result).
-                // So, we can only re-crop if we have a source URI.
-                // This limitation implies: We can only update crop if we pick an image.
-                // So if coverImageUri is the existing path, we ignore crop params.
-                savedCoverPath = null // If explicit null passed, we remove it.
-            }
-            // Logic correction: 
-            // If the UI passes the EXISTING file path, implies NO CHANGE to image.
-            // If the UI passes a NEW content URI, implies NEW IMAGE (and we use crop params).
-            // If the UI passes NULL, implies REMOVE IMAGE.
-            if (coverImageUri == currentPlaylist.coverImageUri) {
+                savedCoverPath = null
+            } else {
                 savedCoverPath = currentPlaylist.coverImageUri
             }
 

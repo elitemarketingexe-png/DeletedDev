@@ -699,12 +699,32 @@ private fun mainRootEnterTransition(
     fallback: EnterTransition
 ): EnterTransition {
     val dir = mainRootDirection(fromRoute, toRoute) ?: return fallback
-    return fadeIn(animationSpec = M3_TRANSFORM_FADE_IN_SPEC) +
-        scaleIn(
-            animationSpec = M3_TRANSFORM_SCALE_IN_SPEC,
-            initialScale = 0.96f,
-            transformOrigin = TransformOrigin(0.5f, 0.5f)
-        )
+    return when (dir) {
+        MainRootDirection.FORWARD -> {
+            slideInHorizontally(
+                animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                initialOffsetX = { (it * 0.35f).toInt() }
+            ) + scaleIn(
+                animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                initialScale = 0.95f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            ) + fadeIn(
+                animationSpec = tween(durationMillis = 280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+            )
+        }
+        MainRootDirection.BACKWARD -> {
+            slideInHorizontally(
+                animationSpec = tween(durationMillis = 400, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                initialOffsetX = { -(it * 0.25f).toInt() }
+            ) + scaleIn(
+                animationSpec = tween(durationMillis = 400, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
+                initialScale = 0.96f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            ) + fadeIn(
+                animationSpec = tween(durationMillis = 280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+            )
+        }
+    }
 }
 
 private fun mainRootExitTransition(
@@ -713,10 +733,30 @@ private fun mainRootExitTransition(
     fallback: ExitTransition
 ): ExitTransition {
     val dir = mainRootDirection(fromRoute, toRoute) ?: return fallback
-    return fadeOut(animationSpec = M3_TRANSFORM_FADE_OUT_SPEC) +
-        scaleOut(
-            animationSpec = M3_TRANSFORM_SCALE_OUT_SPEC,
-            targetScale = 0.98f,
-            transformOrigin = TransformOrigin(0.5f, 0.5f)
-        )
+    return when (dir) {
+        MainRootDirection.FORWARD -> {
+            slideOutHorizontally(
+                animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)),
+                targetOffsetX = { -(it * 0.25f).toInt() }
+            ) + scaleOut(
+                animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)),
+                targetScale = 0.97f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            ) + fadeOut(
+                animationSpec = tween(durationMillis = 240, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f))
+            )
+        }
+        MainRootDirection.BACKWARD -> {
+            slideOutHorizontally(
+                animationSpec = tween(durationMillis = 400, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)),
+                targetOffsetX = { (it * 0.85f).toInt() }
+            ) + scaleOut(
+                animationSpec = tween(durationMillis = 400, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)),
+                targetScale = 0.95f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            ) + fadeOut(
+                animationSpec = tween(durationMillis = 260, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f))
+            )
+        }
+    }
 }

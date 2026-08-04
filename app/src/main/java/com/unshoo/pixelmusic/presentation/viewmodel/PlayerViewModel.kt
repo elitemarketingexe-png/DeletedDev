@@ -298,6 +298,7 @@ class PlayerViewModel @Inject constructor(
     private val dualPlayerEngine: DualPlayerEngine,
     private val appShortcutManager: AppShortcutManager,
     private val telegramCacheManagerProvider: Lazy<com.unshoo.pixelmusic.data.telegram.TelegramCacheManager>,
+    private val telegramRepositoryProvider: Lazy<com.unshoo.pixelmusic.data.telegram.TelegramRepository>,
     private val listeningStatsTracker: ListeningStatsTracker,
     private val dailyMixStateHolder: DailyMixStateHolder,
     private val lyricsStateHolder: LyricsStateHolder,
@@ -2682,9 +2683,20 @@ class PlayerViewModel @Inject constructor(
 
     fun toggleStorageFilter() {
         val current = _playerUiState.value.currentStorageFilter
+        val isTelegramReady = try {
+            telegramRepositoryProvider.get().isReady()
+        } catch (e: Exception) {
+            false
+        }
         val next = when (current) {
             com.unshoo.pixelmusic.data.model.StorageFilter.ALL -> com.unshoo.pixelmusic.data.model.StorageFilter.LOCAL
-            com.unshoo.pixelmusic.data.model.StorageFilter.LOCAL -> com.unshoo.pixelmusic.data.model.StorageFilter.TELEGRAM
+            com.unshoo.pixelmusic.data.model.StorageFilter.LOCAL -> {
+                if (isTelegramReady) {
+                    com.unshoo.pixelmusic.data.model.StorageFilter.TELEGRAM
+                } else {
+                    com.unshoo.pixelmusic.data.model.StorageFilter.YOUTUBE
+                }
+            }
             com.unshoo.pixelmusic.data.model.StorageFilter.TELEGRAM -> com.unshoo.pixelmusic.data.model.StorageFilter.YOUTUBE
             com.unshoo.pixelmusic.data.model.StorageFilter.YOUTUBE -> com.unshoo.pixelmusic.data.model.StorageFilter.ALL
             com.unshoo.pixelmusic.data.model.StorageFilter.ONLINE -> com.unshoo.pixelmusic.data.model.StorageFilter.ALL
@@ -6927,33 +6939,40 @@ class PlayerViewModel @Inject constructor(
         return musicRepository.getSongsByIdsOnce(songIds)
     }
 
+    fun setCurrentLibraryTabId(tabId: LibraryTabId) {
+        _currentLibraryTabId.value = tabId
+    }
+
     //Sorting
     fun sortSongs(sortOption: SortOption, persist: Boolean = true) {
-        libraryStateHolder.sortSongs(sortOption, persist)
-        _playerUiState.update { it.copy(currentSongSortOption = sortOption) }
+        val validOption = SortOption.fromStorageKey(sortOption.storageKey, SortOption.SONGS, SortOption.SongTitleAZ)
+        libraryStateHolder.sortSongs(validOption, persist)
+        _playerUiState.update { it.copy(currentSongSortOption = validOption) }
         if (persist) {
             viewModelScope.launch {
-                userPreferencesRepository.setSongsSortOption(sortOption.storageKey)
+                userPreferencesRepository.setSongsSortOption(validOption.storageKey)
             }
         }
     }
 
     fun sortAlbums(sortOption: SortOption, persist: Boolean = true) {
-        libraryStateHolder.sortAlbums(sortOption, persist)
-        _playerUiState.update { it.copy(currentAlbumSortOption = sortOption) }
+        val validOption = SortOption.fromStorageKey(sortOption.storageKey, SortOption.ALBUMS, SortOption.AlbumTitleAZ)
+        libraryStateHolder.sortAlbums(validOption, persist)
+        _playerUiState.update { it.copy(currentAlbumSortOption = validOption) }
         if (persist) {
             viewModelScope.launch {
-                userPreferencesRepository.setAlbumsSortOption(sortOption.storageKey)
+                userPreferencesRepository.setAlbumsSortOption(validOption.storageKey)
             }
         }
     }
 
     fun sortArtists(sortOption: SortOption, persist: Boolean = true) {
-        libraryStateHolder.sortArtists(sortOption, persist)
-        _playerUiState.update { it.copy(currentArtistSortOption = sortOption) }
+        val validOption = SortOption.fromStorageKey(sortOption.storageKey, SortOption.ARTISTS, SortOption.ArtistNameAZ)
+        libraryStateHolder.sortArtists(validOption, persist)
+        _playerUiState.update { it.copy(currentArtistSortOption = validOption) }
         if (persist) {
             viewModelScope.launch {
-                userPreferencesRepository.setArtistsSortOption(sortOption.storageKey)
+                userPreferencesRepository.setArtistsSortOption(validOption.storageKey)
             }
         }
     }
@@ -6965,21 +6984,23 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun sortFavoriteSongs(sortOption: SortOption, persist: Boolean = true) {
-        libraryStateHolder.sortFavoriteSongs(sortOption, persist)
-        _playerUiState.update { it.copy(currentFavoriteSortOption = sortOption) }
+        val validOption = SortOption.fromStorageKey(sortOption.storageKey, SortOption.LIKED, SortOption.LikedSongDateLiked)
+        libraryStateHolder.sortFavoriteSongs(validOption, persist)
+        _playerUiState.update { it.copy(currentFavoriteSortOption = validOption) }
         if (persist) {
             viewModelScope.launch {
-                userPreferencesRepository.setLikedSongsSortOption(sortOption.storageKey)
+                userPreferencesRepository.setLikedSongsSortOption(validOption.storageKey)
             }
         }
     }
 
     fun sortFolders(sortOption: SortOption, persist: Boolean = true) {
-        libraryStateHolder.sortFolders(sortOption, persist)
-        _playerUiState.update { it.copy(currentFolderSortOption = sortOption) }
+        val validOption = SortOption.fromStorageKey(sortOption.storageKey, SortOption.FOLDERS, SortOption.FolderNameAZ)
+        libraryStateHolder.sortFolders(validOption, persist)
+        _playerUiState.update { it.copy(currentFolderSortOption = validOption) }
         if (persist) {
             viewModelScope.launch {
-                userPreferencesRepository.setFoldersSortOption(sortOption.storageKey)
+                userPreferencesRepository.setFoldersSortOption(validOption.storageKey)
             }
         }
     }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafelyReplacing
+import com.unshoo.pixelmusic.presentation.navigation.navigateToTopLevelSafely
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
@@ -154,9 +155,14 @@ fun SearchScreen(
     navController: NavHostController,
     onSearchBarActiveChange: (Boolean) -> Unit = {}
 ) {
-    // Always reset search query to empty on every visit so the screen starts
-    // at the Moods & Genres section (as requested by the user).
     var searchQuery by remember { mutableStateOf("") }
+    androidx.activity.compose.BackHandler(enabled = true) {
+        if (searchQuery.isNotEmpty()) {
+            searchQuery = ""
+        } else {
+            navController.navigateToTopLevelSafely(com.unshoo.pixelmusic.presentation.navigation.Screen.Home.route)
+        }
+    }
     val statusBarTopInset = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
     val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val navBarCompactMode by playerViewModel.navBarCompactMode.collectAsStateWithLifecycle()

@@ -4,6 +4,7 @@ package com.unshoo.pixelmusic.presentation.screens
 
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafelyReplacing
+import com.unshoo.pixelmusic.presentation.navigation.navigateToTopLevelSafely
 
 import android.os.Trace
 import android.text.format.Formatter
@@ -781,7 +782,7 @@ fun LibraryScreen(
         }
     }
 
-    BackHandler(enabled = hasSelectionInCurrentTab || canHandleFolderBack) {
+    BackHandler(enabled = true) {
         when {
             hasSelectionInCurrentTab -> {
                 when (currentTabId) {
@@ -810,6 +811,10 @@ fun LibraryScreen(
 
             canHandleFolderBack -> {
                 playerViewModel.navigateBackFolder()
+            }
+
+            else -> {
+                navController.navigateToTopLevelSafely(Screen.Home.route)
             }
         }
     }
@@ -1147,24 +1152,18 @@ fun LibraryScreen(
                     // shape = AbsoluteSmoothCornerShape(cornerRadiusTL = 24.dp, smoothnessAsPercentTR = 60, /*...*/) // Your custom shape
                 ) {
                     Column(Modifier.fillMaxSize()) {
-                        // OPTIMIZACIÃ“N: La lÃ³gica de ordenamiento ahora es mÃ¡s eficiente.
-                        val availableSortOptions by playerViewModel.availableSortOptions.collectAsStateWithLifecycle()
-                        val sanitizedSortOptions = remember(availableSortOptions, currentTabId) {
-                            val cleaned = availableSortOptions.filterIsInstance<SortOption>()
-                            val ensured = if (cleaned.any { option ->
-                                    option.storageKey == currentTabId.defaultSort.storageKey
-                                }
-                            ) {
-                                cleaned
-                            } else {
-                                buildList {
-                                    add(currentTabId.defaultSort)
-                                    addAll(cleaned)
-                                }
+                        LaunchedEffect(currentTabId) {
+                            playerViewModel.setCurrentLibraryTabId(currentTabId)
+                        }
+                        val sanitizedSortOptions = remember(currentTabId) {
+                            when (currentTabId) {
+                                LibraryTabId.SONGS -> SortOption.SONGS
+                                LibraryTabId.ALBUMS -> SortOption.ALBUMS
+                                LibraryTabId.ARTISTS -> SortOption.ARTISTS
+                                LibraryTabId.PLAYLISTS -> SortOption.PLAYLISTS
+                                LibraryTabId.FOLDERS -> SortOption.FOLDERS
+                                LibraryTabId.LIKED -> SortOption.LIKED
                             }
-
-                            val distinctByKey = ensured.distinctBy { it.storageKey }
-                            distinctByKey.ifEmpty { listOf(currentTabId.defaultSort) }
                         }
 
                         val playlistUiState by playlistViewModel.uiState.collectAsStateWithLifecycle()

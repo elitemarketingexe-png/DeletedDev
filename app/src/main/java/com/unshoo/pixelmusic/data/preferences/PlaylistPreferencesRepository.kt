@@ -113,7 +113,12 @@ class PlaylistPreferencesRepository @Inject constructor(
         val mappedYtPlaylists = ytPlaylistInfos.map { ytPlaylistInfo ->
             val pId = ytPlaylistInfo.id.removePrefix("VL")
             val defaultCoverImage = ytPlaylistInfo.coverPath ?: ytPlaylistInfo.coverHref
-            val savedCoverImageUri = coverPrefs.getString("${pId}_coverImageUri", null) ?: coverPrefs.getString("${ytPlaylistInfo.id}_coverImageUri", null)
+            val savedCoverRaw = coverPrefs.getString("${pId}_coverImageUri", null) ?: coverPrefs.getString("${ytPlaylistInfo.id}_coverImageUri", null)
+            val savedCoverImageUri = when (savedCoverRaw) {
+                "__REMOVED__" -> null
+                null -> defaultCoverImage
+                else -> savedCoverRaw
+            }
             val coverColor = when {
                 coverPrefs.contains("${pId}_coverColorArgb") -> coverPrefs.getInt("${pId}_coverColorArgb", 0)
                 coverPrefs.contains("${ytPlaylistInfo.id}_coverColorArgb") -> coverPrefs.getInt("${ytPlaylistInfo.id}_coverColorArgb", 0)
@@ -309,8 +314,13 @@ class PlaylistPreferencesRepository @Inject constructor(
             }
 
             coverPrefs.edit().apply {
-                putString("${normalizedId}_coverImageUri", playlist.coverImageUri)
-                putString("${playlist.id}_coverImageUri", playlist.coverImageUri)
+                if (playlist.coverImageUri != null) {
+                    putString("${normalizedId}_coverImageUri", playlist.coverImageUri)
+                    putString("${playlist.id}_coverImageUri", playlist.coverImageUri)
+                } else {
+                    putString("${normalizedId}_coverImageUri", "__REMOVED__")
+                    putString("${playlist.id}_coverImageUri", "__REMOVED__")
+                }
                 if (playlist.coverColorArgb != null) {
                     putInt("${normalizedId}_coverColorArgb", playlist.coverColorArgb)
                     putInt("${playlist.id}_coverColorArgb", playlist.coverColorArgb)
