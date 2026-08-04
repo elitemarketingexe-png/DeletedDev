@@ -202,7 +202,7 @@ private fun ExpressiveFloatingPillNavigationBar(
             colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
                 toolbarContainerColor = solidTintedColor
             ),
-            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
+            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 5.dp, bottom = 5.dp)
         ) {
             mainItems.forEachIndexed { index, item ->
                 val isSelected = selectedIndex == index
@@ -238,7 +238,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                     },
                     modifier = Modifier
                         .weight(itemWeight)
-                        .height(48.dp),
+                        .height(44.dp),
                     shape = CircleShape,
                     color = animColor,
                     contentColor = animContentColor
@@ -248,7 +248,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                         horizontalArrangement = Arrangement.Center,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 8.dp)
+                            .padding(horizontal = 10.dp)
                     ) {
                         val iconRes = if (isSelected && item.selectedIconResId != null && item.selectedIconResId != 0) {
                             item.selectedIconResId
@@ -259,7 +259,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                         Icon(
                             painter = painterResource(id = iconRes),
                             contentDescription = item.label,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(23.dp)
                         )
 
                         AnimatedVisibility(
@@ -279,7 +279,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = item.label,
-                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp),
+                                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.5.sp),
                                     maxLines = 1,
                                     fontWeight = FontWeight.ExtraBold,
                                     softWrap = false

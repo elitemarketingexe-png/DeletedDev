@@ -683,6 +683,8 @@ private val M3_TRANSFORM_SCALE_OUT_SPEC = tween<Float>(
     easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
 )
 
+
+
 private fun mainRootDirection(
     fromRoute: String?,
     toRoute: String?
@@ -703,22 +705,22 @@ private fun mainRootEnterTransition(
         MainRootDirection.FORWARD -> {
             slideInHorizontally(
                 animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                initialOffsetX = { (it * 0.35f).toInt() }
+                initialOffsetX = { (it * 0.65f).toInt() }
             ) + scaleIn(
                 animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                initialScale = 0.95f,
+                initialScale = 0.92f,
                 transformOrigin = TransformOrigin(0.5f, 0.5f)
             ) + fadeIn(
-                animationSpec = tween(durationMillis = 280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
+                animationSpec = tween(durationMillis = 260, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
             )
         }
         MainRootDirection.BACKWARD -> {
             slideInHorizontally(
                 animationSpec = tween(durationMillis = 400, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                initialOffsetX = { -(it * 0.25f).toInt() }
+                initialOffsetX = { -(it * 0.30f).toInt() }
             ) + scaleIn(
                 animationSpec = tween(durationMillis = 400, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                initialScale = 0.96f,
+                initialScale = 0.94f,
                 transformOrigin = TransformOrigin(0.5f, 0.5f)
             ) + fadeIn(
                 animationSpec = tween(durationMillis = 280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
@@ -737,10 +739,10 @@ private fun mainRootExitTransition(
         MainRootDirection.FORWARD -> {
             slideOutHorizontally(
                 animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)),
-                targetOffsetX = { -(it * 0.25f).toInt() }
+                targetOffsetX = { -(it * 0.35f).toInt() }
             ) + scaleOut(
                 animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)),
-                targetScale = 0.97f,
+                targetScale = 0.94f,
                 transformOrigin = TransformOrigin(0.5f, 0.5f)
             ) + fadeOut(
                 animationSpec = tween(durationMillis = 240, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f))
