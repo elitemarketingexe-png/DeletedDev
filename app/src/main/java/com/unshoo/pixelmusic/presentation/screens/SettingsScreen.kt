@@ -111,22 +111,7 @@ fun SettingsScreen(
 
     // Animation effects
     val lastCategoryClickTime = remember { mutableStateOf(0L) }
-    val transitionState = remember { MutableTransitionState(false) }
-    LaunchedEffect(true) { transitionState.targetState = true }
-
-    val transition = rememberTransition(transitionState, label = "SettingsAppearTransition")
-
-    val contentAlpha by
-            transition.animateFloat(
-                    label = "ContentAlpha",
-                    transitionSpec = { tween(durationMillis = 500) }
-            ) { if (it) 1f else 0f }
-
-    val contentOffset by
-            transition.animateDp(
-                    label = "ContentOffset",
-                    transitionSpec = { tween(durationMillis = 400, easing = FastOutSlowInEasing) }
-            ) { if (it) 0.dp else 40.dp }
+    // Navigation handles screen transition natively without double-offset delay
 
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
@@ -207,10 +192,6 @@ fun SettingsScreen(
         modifier = Modifier
             .nestedScroll(nestedScrollConnection)
             .fillMaxSize()
-            .graphicsLayer {
-                alpha = contentAlpha
-                translationY = contentOffset.toPx()
-            }
     ) {
         val currentTopBarHeightDp = with(density) { topBarHeight.value.toDp() }
         LazyColumn(
@@ -240,8 +221,8 @@ fun SettingsScreen(
                 )
             }
             item {
-                // Rapid-click throttle: prevent freeze / stack from tapping category cards too fast
-                val throttleMs = 50L
+                // Rapid-click throttle: prevent double-navigation / ghost touches when switching category pages
+                val throttleMs = 350L
 
                 val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
                 ExpressiveSettingsGroup {
