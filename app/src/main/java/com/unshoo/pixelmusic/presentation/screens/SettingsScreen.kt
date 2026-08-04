@@ -161,7 +161,7 @@ fun SettingsScreen(
                 val consumed = newHeight - previousHeight
 
                 if (consumed.roundToInt() != 0) {
-                    coroutineScope.launch { topBarHeight.snapTo(newHeight) }
+                    topBarHeight.dispatchRawDelta(consumed)
                 }
 
                 val canConsumeScroll = !(isScrollingDown && newHeight == minTopBarHeightPx)
