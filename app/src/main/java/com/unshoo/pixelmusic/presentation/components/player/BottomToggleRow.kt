@@ -31,18 +31,13 @@ fun BottomToggleRow(
     onActiveColorMain: Color = MaterialTheme.colorScheme.onPrimaryFixed,
     onActiveColorSecondary: Color = MaterialTheme.colorScheme.onSecondaryFixed,
     onActiveColorTertiary: Color = MaterialTheme.colorScheme.onTertiaryFixed,
-    inactiveColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f),
-    inactiveContentColor: Color = MaterialTheme.colorScheme.onSurface,
+    inactiveColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    inactiveContentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     containerColor: Color? = null
 ) {
     val isFavorite = isFavoriteProvider()
     val rowCorners = 60.dp
-    val isDark = LocalPixelMusicDarkTheme.current
-    val resolvedContainerColor = containerColor ?: if (isDark) {
-        MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f)
-    } else {
-        Color.White.copy(alpha = 0.9f)
-    }
+    val resolvedContainerColor = containerColor ?: MaterialTheme.colorScheme.surfaceContainerHigh
 
     Box(
         modifier = modifier.background(

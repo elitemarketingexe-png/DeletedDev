@@ -3172,14 +3172,9 @@ private fun BottomToggleRow(
 ) {
     val isFavorite = isFavoriteProvider()
     val rowCorners = 60.dp
-    val inactiveBg = LocalMaterialTheme.current.onSurface.copy(alpha = 0.07f)
-    val inactiveContentColor = LocalMaterialTheme.current.onSurface
-    val isDark = LocalPixelMusicDarkTheme.current
-    val containerBg = if (isDark) {
-        LocalMaterialTheme.current.surfaceContainer.copy(alpha = 0.5f)
-    } else {
-        Color.White.copy(alpha = 0.9f)
-    }
+    val inactiveBg = LocalMaterialTheme.current.surfaceContainerHighest
+    val inactiveContentColor = LocalMaterialTheme.current.onSurfaceVariant
+    val containerBg = LocalMaterialTheme.current.surfaceContainerHigh
 
 
     Box(
