@@ -177,14 +177,14 @@ private fun ExpressiveFloatingPillNavigationBar(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Official Material 3 Expressive HorizontalFloatingToolbar container with drop shadow
+        // Official Material 3 Expressive HorizontalFloatingToolbar container with drop shadow & Material You dynamic theming
         HorizontalFloatingToolbar(
             expanded = true,
             modifier = Modifier
                 .weight(1f)
                 .shadow(elevation = 6.dp, shape = CircleShape),
             colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
-                toolbarContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                toolbarContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
             ),
             contentPadding = FloatingToolbarDefaults.ContentPadding
         ) {
@@ -209,14 +209,14 @@ private fun ExpressiveFloatingPillNavigationBar(
                         .height(48.dp),
                     shape = CircleShape,
                     color = if (isSelected) {
-                        MaterialTheme.colorScheme.secondaryContainer
+                        MaterialTheme.colorScheme.primaryContainer
                     } else {
                         Color.Transparent
                     },
                     contentColor = if (isSelected) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
+                        MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                     }
                 ) {
                     Row(
@@ -296,14 +296,14 @@ private fun ExpressiveFloatingPillNavigationBar(
                 modifier = Modifier.size(58.dp),
                 shape = CircleShape,
                 color = if (isSearchSelected) {
-                    MaterialTheme.colorScheme.secondaryContainer
+                    MaterialTheme.colorScheme.primaryContainer
                 } else {
-                    MaterialTheme.colorScheme.surfaceContainerLow
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
                 },
                 contentColor = if (isSearchSelected) {
-                    MaterialTheme.colorScheme.onSecondaryContainer
+                    MaterialTheme.colorScheme.onPrimaryContainer
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
                 },
                 tonalElevation = 2.dp,
                 shadowElevation = 6.dp
