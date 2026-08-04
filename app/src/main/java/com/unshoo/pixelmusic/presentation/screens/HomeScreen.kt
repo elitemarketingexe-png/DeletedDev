@@ -260,28 +260,7 @@ fun HomeScreen(
             maxItems = 64
         )
     }
-    // SpatialFlow parity: Recently Played must reflect the currently playing song immediately.
-    // Keep a stable list identity for animations, but always adopt the latest mapped history
-    // while Home is visible (do not wait for ON_STOP).
-    var recentlyPlayedSongs by rememberSaveable { mutableStateOf(latestRecentlyPlayedSongs) }
-    val latestRecentlyPlayedSongsState = rememberUpdatedState(latestRecentlyPlayedSongs)
-
-    LaunchedEffect(latestRecentlyPlayedSongs) {
-        // Always sync when history changes — including while Home is on screen.
-        recentlyPlayedSongs = latestRecentlyPlayedSongs
-    }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_START || event == Lifecycle.Event.ON_RESUME) {
-                recentlyPlayedSongs = latestRecentlyPlayedSongsState.value
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
+    val recentlyPlayedSongs = latestRecentlyPlayedSongs
 
     val recentlyPlayedQueue = remember(recentlyPlayedSongs) {
         recentlyPlayedSongs.map { it.song }.toImmutableList()
