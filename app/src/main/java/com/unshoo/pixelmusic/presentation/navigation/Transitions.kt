@@ -1,6 +1,7 @@
 package com.unshoo.pixelmusic.presentation.navigation
 
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -8,98 +9,93 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.unit.IntOffset
-import com.unshoo.pixelmusic.ui.theme.ExpressiveSprings
 
 // MD3 Expressive — push/pop transitions between screens.
 //
-// These specs are sourced from the same ExpressiveSprings tokens (ui/theme/Motion.kt,
-// verified against material3 1.5.0-alpha21) that already back MaterialTheme.motionScheme
-// everywhere else in the app — bottom sheets, cards, the pill nav bar. Previously this file
-// used fixed-duration tween()s with a hand-rolled cubic-bezier "emphasized" curve, which
-// *looked* M3-ish but wasn't actually driven by the app's motion scheme, so it couldn't be
-// interrupted/retargeted like a real spring (e.g. a fast back-swipe had to fight or restart
-// a running tween instead of smoothly reversing from its current position/velocity), and it
-// slowly drifted out of sync with the token values used everywhere else in the app.
+// ────────────────────────────────────────────────────────────────────────────────
+// HIT-TESTING REGRESSION FIX (why these are tween()s and not spring()s):
 //
-// Per M3's own speed mapping (fast = small components, default = partial-screen motion,
-// slow = full-screen/hero motion), a screen push/pop is full-screen hero content, so it uses
-// the "slow spatial" spring for position + scale, and "default effects" for fade — opacity
-// should still settle briskly no matter how large the moving element is.
-private val PUSH_POP_SPATIAL_SPRING = spring<IntOffset>(
-    dampingRatio = ExpressiveSprings.SlowSpatialDampingRatio,
-    stiffness = ExpressiveSprings.SlowSpatialStiffness
-)
+// Navigation-Compose keeps the *outgoing* destination in composition — rendered on
+// top of the incoming one and fully hit-testable — until its exit transition has
+// completely settled. This file previously used slow, under-damped springs
+// (damping ≈ 0.8–0.95, stiffness ≈ 110–200), which take ~0.6–1s to settle, and the
+// fade-out finished ~400ms before the spatial spring did. The result was an
+// invisible zombie screen sitting on top of the screen you navigated back to,
+// still consuming touches. Because Compose hit-testing delivers a tap to the
+// topmost subtree first, tapping "Appearance" on the Settings list actually hit
+// the zombie Appearance screen's "App Theme" row at the same coordinates and the
+// app navigated to the wrong screen ("previous screen still receives touch events").
+//
+// Springs in Compose have no fixed end — they only finish once value+velocity fall
+// below the visibility threshold, which for damped bouncy specs is humanly
+// noticeable. Fixed-duration tweens settle deterministically (PUSH/POP_TOTAL_MS),
+// so the popped entry is disposed almost immediately after it becomes transparent;
+// the remaining hit-test window is a handful of frames instead of a second.
+// ScreenWrapper additionally hard-gates input for any entry that is neither the
+// navigation target nor RESUMED, so no future spec change can reintroduce the leak.
+//
+// The choreography (50% enter from the right + 0.92 scale-in, 25% parallax exit,
+// 25% pop-enter parallax, full-width pop-exit slide) is unchanged and matches the
+// proven AOSP/PixelPlayer timings: 350ms spatial motion with fades finishing in
+// ~200-225ms, i.e. content is fully opaque/invisible well before the slide lands.
+// ────────────────────────────────────────────────────────────────────────────────
+private const val PUSH_POP_TOTAL_MS = 350
+private const val PUSH_POP_FADE_MS = 225
+private const val POP_FADE_MS = 200
 
-private val PUSH_POP_SCALE_SPRING = spring<Float>(
-    dampingRatio = ExpressiveSprings.SlowSpatialDampingRatio,
-    stiffness = ExpressiveSprings.SlowSpatialStiffness
-)
+// MD3 Expressive — Emphasized easing family (matches Material Motion spec).
+// Decelerate for things arriving on screen, accelerate for things leaving.
+private val EmphasizedDecelerateEasing = CubicBezierEasing(0.2f, 0.85f, 0.7f, 1f)
+private val EmphasizedAccelerateEasing = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
 
-private val PUSH_POP_FADE_SPRING = spring<Float>(
-    dampingRatio = ExpressiveSprings.DefaultEffectsDampingRatio,
-    stiffness = ExpressiveSprings.DefaultEffectsStiffness
-)
+// Kept as a millisecond value for legacy call sites that used to `delay()` roughly
+// as long as a push/pop transition takes before acting.
+const val TRANSITION_DURATION = PUSH_POP_TOTAL_MS
 
-// Soft, calm & smooth POP back gesture / button transition specs (Settings & screen pop)
-private val POP_SPATIAL_SPRING = spring<IntOffset>(
-    dampingRatio = 0.92f,
-    stiffness = 110f
-)
-
-private val POP_SCALE_SPRING = spring<Float>(
-    dampingRatio = 0.92f,
-    stiffness = 110f
-)
-
-private val POP_FADE_SPRING = spring<Float>(
-    dampingRatio = 0.95f,
-    stiffness = 150f
-)
-
-// Kept as a millisecond value for legacy call sites (SettingsScreen / SettingsCategoryScreen)
-// that `delay()` roughly as long as a push/pop transition takes before acting.
-const val TRANSITION_DURATION = 500
-
-// Push: Enter from Right — slides in 50% of screen width + slight scale up (mirrors popExit's weight)
+// Push: Enter from Right — slides in from 50% of screen width + slight scale up.
 fun enterTransition() = slideInHorizontally(
-    animationSpec = PUSH_POP_SPATIAL_SPRING,
+    animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedDecelerateEasing),
     initialOffsetX = { (it * 0.5f).toInt() }
 ) + scaleIn(
-    animationSpec = PUSH_POP_SCALE_SPRING,
+    animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedDecelerateEasing),
     initialScale = 0.92f,
     transformOrigin = TransformOrigin(0.5f, 0.5f)
 ) + fadeIn(
-    animationSpec = PUSH_POP_FADE_SPRING
+    animationSpec = tween(durationMillis = PUSH_POP_FADE_MS, easing = EmphasizedDecelerateEasing)
 )
 
-// Push: Exit to Left — recedes 25% (parallax, barely moves).
+// Push: Exit to Left — recedes 25% (parallax, barely moves) and fades out fast so
+// the covered screen stops drawing (and stops being a viable touch target) quickly.
 fun exitTransition() = slideOutHorizontally(
-    animationSpec = PUSH_POP_SPATIAL_SPRING,
+    animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedAccelerateEasing),
     targetOffsetX = { -(it * 0.25f).toInt() }
 ) + fadeOut(
-    animationSpec = PUSH_POP_FADE_SPRING
+    animationSpec = tween(durationMillis = PUSH_POP_FADE_MS, easing = EmphasizedAccelerateEasing)
 )
 
-// Pop: Enter from Left — parallax slide-in 25% + subtle scale up (softer, calmer deceleration)
+// Pop: Enter from Left — parallax slide-in 25% + subtle scale up.
 fun popEnterTransition() = slideInHorizontally(
-    animationSpec = POP_SPATIAL_SPRING,
-    initialOffsetX = { -(it * 0.20f).toInt() }
+    animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedDecelerateEasing),
+    initialOffsetX = { -(it * 0.25f).toInt() }
 ) + scaleIn(
-    animationSpec = POP_SCALE_SPRING,
-    initialScale = 0.96f
+    animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedDecelerateEasing),
+    initialScale = 0.96f,
+    transformOrigin = TransformOrigin(0.5f, 0.5f)
 ) + fadeIn(
-    animationSpec = POP_FADE_SPRING
+    animationSpec = tween(durationMillis = POP_FADE_MS, easing = EmphasizedDecelerateEasing)
 )
 
-// Pop: Exit to Right — slides out 50% + smooth, calm scale down
+// Pop: Exit to Right — slides FULLY off the right edge + slight scale down.
+// Sliding all the way out (not just 50%) means the popped screen leaves the tap
+// area entirely by the time it is disposed, and the fast fade means it stops
+// being visible long before that — with tweens it is guaranteed gone in 350ms.
 fun popExitTransition() = slideOutHorizontally(
-    animationSpec = POP_SPATIAL_SPRING,
-    targetOffsetX = { (it * 0.5f).toInt() }
+    animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedAccelerateEasing),
+    targetOffsetX = { it }
 ) + scaleOut(
-    animationSpec = POP_SCALE_SPRING,
+    animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedAccelerateEasing),
     targetScale = 0.94f,
     transformOrigin = TransformOrigin(0.5f, 0.5f)
 ) + fadeOut(
-    animationSpec = POP_FADE_SPRING
+    animationSpec = tween(durationMillis = POP_FADE_MS, easing = EmphasizedAccelerateEasing)
 )

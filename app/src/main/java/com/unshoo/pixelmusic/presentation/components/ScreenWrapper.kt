@@ -21,12 +21,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
-import androidx.lifecycle.compose.currentStateAsState
 import com.unshoo.pixelmusic.presentation.navigation.isMainRootRoute
 
 
@@ -39,9 +39,14 @@ fun ScreenWrapper(
     content: @Composable () -> Unit
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    
-    // Lifecycle State
-    var isResumed by remember { mutableStateOf(false) }
+
+    // Lifecycle State — initialized from the entry's real state; previously the
+    // initial value was hardcoded to false and then "fixed" by writing
+    // `isResumed = true` in the middle of composition, which is undefined
+    // behavior (a state write during the composition pass).
+    var isResumed by remember {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -53,12 +58,6 @@ fun ScreenWrapper(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    
-    // Initial Check
-    val currentState = lifecycleOwner.lifecycle.currentStateAsState().value
-    if (currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-        isResumed = true
     }
 
     // Visible entries is the public Navigation API designed for transition-aware stacking.
@@ -82,6 +81,26 @@ fun ScreenWrapper(
         entry.destination.route?.let { route -> !isMainRootRoute(route) } == true
     }
     val shouldRunDepthEffects = !isMainRootScreen || hasVisibleNonMainRootScreen
+
+    // ── INPUT ROUTING (hit-testing) FIX ───────────────────────────────────────────
+    // While a transition runs, Navigation-Compose keeps BOTH destinations composed:
+    //  • push: the old screen sits underneath, partially visible (parallax).
+    //  • pop : the popped screen stays ON TOP of the screen you returned to until
+    //          its exit transition fully settles and the entry is disposed.
+    // Compose hit-testing delivers a tap to the topmost subtree first, so during
+    // that window a tap meant for, say, "Appearance" on the Settings list lands on
+    // the still-alive popped screen's row at the same coordinates ("App Theme")
+    // and navigates to the wrong screen. The zombie is often already fully faded,
+    // which is why it looks like "the previous screen still receives touch events".
+    //
+    // Hard rule: an entry may receive input only while it is the current
+    // navigation target (the screen the user is moving TO) or it is RESUMED
+    // (settled on top). Everything else — a background screen under a push and a
+    // zombie screen under a pop — gets a touch-eating overlay on top of its
+    // content for exactly as long as it is not a valid touch target. No timers,
+    // no guessing: the gate clears itself the frame the lifecycle/nav state flips,
+    // unlike the previous TRANSITION_DURATION-delayed overlay hack.
+    val isInputBlocked = myEntry != null && !isNavigationTarget && !isResumed
 
     // Dim Logic:
     // If I am BACKGROUND (myIndex < topIndex) -> Dim.
@@ -155,5 +174,26 @@ fun ScreenWrapper(
                 .graphicsLayer { alpha = dimAlpha }
                 .background(Color.Black)
         )
+
+        // Input gate overlay (see comment above). As the topmost child of this
+        // entry's subtree it consumes every pointer change on the Main pass, so the
+        // screen's own clickables never see an unconsumed down event and can't
+        // fire while this entry is leaving/covered. Because it only exists while
+        // the entry is not a valid touch target, it also can never swallow the *next*
+        // screen's taps once this entry is disposed.
+        if (isInputBlocked) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+            )
+        }
     }
 }
