@@ -294,12 +294,14 @@ fun AppNavigation(
                 ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
                     val categoryId = backStackEntry.arguments?.getString("categoryId")
                     if (categoryId != null) {
-                        SettingsCategoryScreen(
-                            categoryId = categoryId,
-                            navController = navController,
-                            playerViewModel = playerViewModel,
-                            onBackClick = { navController.popBackStack() }
-                        )
+                        androidx.compose.runtime.key(categoryId) {
+                            SettingsCategoryScreen(
+                                categoryId = categoryId,
+                                navController = navController,
+                                playerViewModel = playerViewModel,
+                                onBackClick = { navController.popBackStack() }
+                            )
+                        }
                     }
                 }
             }
