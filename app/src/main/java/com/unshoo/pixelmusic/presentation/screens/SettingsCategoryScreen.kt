@@ -258,21 +258,23 @@ fun SettingsCategoryScreen(
         mutableStateOf(uiState.storageLimitMb.toFloat())
     }
 
-    // Reset all overlays / dialogs immediately when category changes or screen enters
-    LaunchedEffect(categoryId) {
-        showExplorerSheet = false
-        refreshRequested = false
-        syncRequestObservedRunning = false
-        syncIndicatorLabel = null
-        showClearLyricsDialog = false
-        showRebuildDatabaseWarning = false
-        showRegenerateDailyMixDialog = false
-        showRegenerateStatsDialog = false
-        showRegenerateAllPalettesDialog = false
-        showExportDataDialog = false
-        showImportFlow = false
-        exportSections = BackupSection.defaultSelection
-        importFileUri = null
+    // Reset all overlays / dialogs immediately when category changes or screen exits
+    DisposableEffect(categoryId) {
+        onDispose {
+            showExplorerSheet = false
+            refreshRequested = false
+            syncRequestObservedRunning = false
+            syncIndicatorLabel = null
+            showClearLyricsDialog = false
+            showRebuildDatabaseWarning = false
+            showRegenerateDailyMixDialog = false
+            showRegenerateStatsDialog = false
+            showRegenerateAllPalettesDialog = false
+            showExportDataDialog = false
+            showImportFlow = false
+            exportSections = BackupSection.defaultSelection
+            importFileUri = null
+        }
     }
 
     val exportLauncher = rememberLauncherForActivityResult(
