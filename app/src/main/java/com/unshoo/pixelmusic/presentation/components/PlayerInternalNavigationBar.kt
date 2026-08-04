@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -135,6 +136,9 @@ internal fun resolveNavBarOccupiedHeight(
     val contentHeight = resolveNavBarContentHeight(navBarStyle, compactMode, heightOffset)
     return if (navBarStyle == NavBarStyle.FULL_WIDTH) {
         contentHeight + systemNavBarInset
+    } else if (navBarStyle == NavBarStyle.FLOATING_PILL) {
+        val bottomMargin = if (systemNavBarInset > 0.dp) systemNavBarInset else 6.dp
+        contentHeight + bottomMargin
     } else {
         val bottomMargin = if (systemNavBarInset > 0.dp) systemNavBarInset else 14.dp
         contentHeight + bottomMargin
@@ -177,22 +181,22 @@ private fun ExpressiveFloatingPillNavigationBar(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Official Material 3 Expressive HorizontalFloatingToolbar container with drop shadow & Material You dynamic theming
+        // Tomato-style Material You Expressive Floating Pill Navigation Bar
         HorizontalFloatingToolbar(
             expanded = true,
             modifier = Modifier
                 .weight(1f)
                 .shadow(elevation = 6.dp, shape = CircleShape),
             colors = FloatingToolbarDefaults.standardFloatingToolbarColors(
-                toolbarContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                toolbarContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
             ),
-            contentPadding = FloatingToolbarDefaults.ContentPadding
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
         ) {
             mainItems.forEachIndexed { index, item ->
                 val isSelected = selectedIndex == index
 
                 val itemWeight by animateFloatAsState(
-                    targetValue = if (isSelected && !shouldHideLabel) 2.2f else 1.0f,
+                    targetValue = if (isSelected && !shouldHideLabel) 2.4f else 1.0f,
                     animationSpec = motionScheme.fastSpatialSpec(),
                     label = "pill_item_weight_$index"
                 )
@@ -206,7 +210,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                     },
                     modifier = Modifier
                         .weight(itemWeight)
-                        .height(48.dp),
+                        .height(52.dp),
                     shape = CircleShape,
                     color = if (isSelected) {
                         MaterialTheme.colorScheme.primaryContainer

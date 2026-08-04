@@ -99,7 +99,7 @@ internal fun rememberSheetVisualState(
                 32.dp
             } else if (navBarStyle == NavBarStyle.DEFAULT) {
                 navBarCornerRadiusDp
-            } else if (navBarStyle == NavBarStyle.FULL_WIDTH) {
+            } else if (navBarStyle == NavBarStyle.FULL_WIDTH || navBarStyle == NavBarStyle.FLOATING_PILL) {
                 32.dp
             } else {
                 navBarCornerRadiusDp
@@ -140,7 +140,7 @@ internal fun rememberSheetVisualState(
                 32.dp
             } else if (navBarStyle == NavBarStyle.DEFAULT) {
                 10.dp
-            } else if (navBarStyle == NavBarStyle.FULL_WIDTH) {
+            } else if (navBarStyle == NavBarStyle.FULL_WIDTH || navBarStyle == NavBarStyle.FLOATING_PILL) {
                 32.dp
             } else {
                 navBarCornerRadiusDp
