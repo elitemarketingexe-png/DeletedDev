@@ -1087,7 +1087,10 @@ class DualPlayerEngine @Inject constructor(
         val expireSeconds = resolvedUri.getQueryParameter("expire")?.toLongOrNull()
             ?: return true
         val nowSeconds = System.currentTimeMillis() / 1000L
-        return expireSeconds > nowSeconds + 120L
+        // Require at least 15 minutes (900s) remaining validity.
+        // YouTube URLs expire in 6 hours. If the app hasn't been used in 5.5+ hours,
+        // force a silent refresh in the background BEFORE playback starts to guarantee zero lag/retries.
+        return expireSeconds > (nowSeconds + 900L)
     }
 
     private suspend fun resolveTelegramUriAsync(uri: Uri, uriString: String): Uri? = withContext(Dispatchers.IO) {
