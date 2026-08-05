@@ -295,15 +295,22 @@ class PlaybackStatsRepository @Inject constructor(
 
         val allSongs = segmentsBySong
             .mapNotNull { (songId, segmentsForSong) ->
-                val song = songMap[songId] ?: return@mapNotNull null
-                val title = song.title.takeIf { it.isNotBlank() }
-                    ?: song.path.substringAfterLast('/').ifBlank { return@mapNotNull null }
-                val artist = song.displayArtist.takeIf { it.isNotBlank() } ?: "Unknown Artist"
+                val song = songMap[songId]
+                val lastEvent = normalizedEvents.lastOrNull { it.songId == songId }
+                val title = song?.title?.takeIf { it.isNotBlank() }
+                    ?: song?.path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                    ?: lastEvent?.title?.takeIf { it.isNotBlank() }
+                    ?: return@mapNotNull null
+                val artist = song?.displayArtist?.takeIf { it.isNotBlank() }
+                    ?: lastEvent?.artist?.takeIf { it.isNotBlank() }
+                    ?: "Unknown Artist"
+                val thumbnail = song?.albumArtUriString
+                    ?: lastEvent?.thumbnail
                 SongPlaybackSummary(
                     songId = songId,
                     title = title,
                     artist = artist,
-                    albumArtUri = song.albumArtUriString,
+                    albumArtUri = thumbnail,
                     totalDurationMs = segmentsForSong.sumOf { it.durationMs },
                     playCount = segmentsForSong.size
                 )
