@@ -189,21 +189,10 @@ class ListeningStatsTracker @Inject constructor(
             album = album
         )
 
-        // Instant local history head so Recently Played matches the current song immediately
-        // (before the full session finalize / YT remote sync completes).
-        if (!title.isNullOrBlank()) {
-            val optimistic = PlaybackStatsRepository.PlaybackHistoryEntry(
-                songId = safeSongId,
-                timestamp = nowEpoch,
-                title = title,
-                artist = artist,
-                thumbnail = thumbnail
-            )
-            _playbackHistory.update { current ->
-                val withoutDup = current.filterNot { it.songId == safeSongId }
-                (listOf(optimistic) + withoutDup).take(MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS)
-            }
-        }
+        // REAL LISTENING TRACKING:
+        // Do NOT insert optimistic history entries upon song tap/change.
+        // Songs are now recorded in history & listening stats strictly when
+        // real accumulated listening time meets our verification threshold in finalizeCurrentSession().
 
         persistenceScope.launch(Dispatchers.IO) {
             // MusicService's YouTubeTelemetryManager is the sole remote history writer. Do not
@@ -771,25 +760,26 @@ class ListeningStatsTracker @Inject constructor(
     }
 
     /**
-     * Counts a play only when the device actually listened through the track.
+     * Counts a play ONLY when the user actually listened to the track.
      *
-     * Both conditions are intentional: position alone can be satisfied by seeking to the end,
-     * while elapsed listening alone can be satisfied by a stuck stream or bad remote duration.
-     * Requiring both keeps YouTube/Cast metadata and remote watch-history timing from creating
-     * local plays. A small end tolerance accounts for players transitioning just before their
-     * final progress callback.
+     * Strict Scrubbing Protection:
+     * Seeking/scrubbing to the end of a track NEVER increments play count or history.
+     * Only actual elapsed listening time (`listenedMs`) is counted.
      */
     private fun isCompletedPlayback(
         listenedMs: Long,
         lastPositionMs: Long,
         durationMs: Long
     ): Boolean {
-        if (listenedMs >= MIN_PLAYBACK_LISTEN_MS) return true
-        if (durationMs > 0L && durationMs != C.TIME_UNSET) {
-            val minRequiredListeningMs = (durationMs * 0.30f).toLong().coerceAtMost(MIN_PLAYBACK_LISTEN_MS)
-            return listenedMs >= minRequiredListeningMs || lastPositionMs >= minRequiredListeningMs
+        // Minimum required listening threshold: 15 seconds (or 50% of short tracks under 30s)
+        val requiredThresholdMs = if (durationMs > 0L && durationMs != C.TIME_UNSET && durationMs < 30_000L) {
+            (durationMs * 0.50f).toLong().coerceAtLeast(3_000L)
+        } else {
+            MIN_PLAYBACK_LISTEN_MS
         }
-        return false
+        // STRICT: Require ACTUAL elapsed listening time (listenedMs).
+        // Seeking/scrubbing position (lastPositionMs) is NEVER used to validate a completed play.
+        return listenedMs >= requiredThresholdMs
     }
 
     companion object {
