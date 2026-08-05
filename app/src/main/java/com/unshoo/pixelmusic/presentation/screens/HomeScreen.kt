@@ -119,6 +119,7 @@ import com.unshoo.pixelmusic.presentation.navigation.Screen
 import com.unshoo.pixelmusic.presentation.components.StreamingProviderSheet
 import com.unshoo.pixelmusic.presentation.telegram.auth.TelegramLoginActivity
 import com.unshoo.pixelmusic.presentation.viewmodel.ExploreViewModel
+import com.unshoo.pixelmusic.presentation.viewmodel.LibraryViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.SettingsViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.StatsViewModel
@@ -151,6 +152,11 @@ fun HomeScreen(
     favoriteArtistReleasesViewModel: FavoriteArtistReleasesViewModel = hiltViewModel(),
     accountsViewModel: AccountsViewModel = hiltViewModel(),
     exploreViewModel: ExploreViewModel = hiltViewModel(),
+    // Pre-warm only — not read here. Mirrors exploreViewModel: without this, LibraryViewModel
+    // (and the Paging3 setup in LibraryStateHolder) is only created the moment the user taps
+    // the Library tab, so that work lands mid tab-switch-transition, when frame budget is
+    // tightest. Creating it as soon as Home composes moves that cost off the transition path.
+    libraryViewModel: LibraryViewModel = hiltViewModel(),
     onOpenSidebar: () -> Unit
 ) {
     val context = LocalContext.current
