@@ -50,7 +50,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.EntryPointAccessors
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
@@ -86,7 +86,7 @@ fun WavySliderExpressive(
         EntryPointAccessors.fromApplication(appContext, SmartImageEntryPoint::class.java)
     }
     val userPreferencesRepository = entryPoint.userPreferencesRepository()
-    val performanceModeEnabled by userPreferencesRepository.performanceModeEnabledFlow.collectAsState(initial = false)
+    val performanceModeEnabled by userPreferencesRepository.performanceModeEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
 
     val density = LocalDensity.current
     val strokeWidthPx = with(density) { strokeWidth.toPx() }

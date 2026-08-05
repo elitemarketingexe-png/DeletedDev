@@ -2,7 +2,6 @@ package com.unshoo.pixelmusic
 
 import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
 
-// import androidx.compose.ui.platform.LocalView // No longer needed for this
 // import androidx.core.view.WindowInsetsCompat // No longer needed for this
 import android.Manifest
 import android.content.ActivityNotFoundException
@@ -20,6 +19,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.metrics.performance.JankStats
+import androidx.metrics.performance.PerformanceMetricsState
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
@@ -438,7 +438,7 @@ class MainActivity : ComponentActivity() {
                 window,
                 { frameData ->
                     if (frameData.isJank && BuildConfig.DEBUG) {
-                        LogUtils.d(this, "JankStats frame drop detected: ${frameData.frameDurationUiNanos / 1_000_000}ms (isJank=${frameData.isJank})")
+                        LogUtils.d(this, "JankStats frame drop detected: ${frameData.frameDurationUiNanos / 1_000_000}ms")
                     }
                 }
             )
@@ -783,6 +783,14 @@ class MainActivity : ComponentActivity() {
         val isMiniPlayerDismissing by playerViewModel.isMiniPlayerDismissing.collectAsStateWithLifecycle()
         val hapticsEnabled by playerViewModel.hapticsEnabled.collectAsStateWithLifecycle()
         val rootView = LocalView.current
+        // Jank diagnostics: JankStats (wired up in onResume, below) already flags dropped
+        // frames but had no way to say *where* — every log line just said "frame drop
+        // detected". Tagging the active route here means JankStats attaches it to any frame
+        // that overlaps, so a jank report can be traced back to the screen that caused it.
+        LaunchedEffect(currentRoute, rootView) {
+            PerformanceMetricsState.getHolderForHierarchy(rootView).state
+                ?.putState("screen", currentRoute ?: "unknown")
+        }
         val platformHapticFeedback = LocalHapticFeedback.current
         val appHapticsConfig = remember(hapticsEnabled) {
             AppHapticsConfig(enabled = hapticsEnabled)

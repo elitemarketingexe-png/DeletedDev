@@ -6,9 +6,7 @@ import android.annotation.SuppressLint
 import androidx.annotation.OptIn
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -657,76 +655,63 @@ private fun launchTabToRoute(tab: String): String = when (tab) {
     else -> Screen.Home.route
 }
 
-private enum class MainRootDirection {
-    FORWARD,
-    BACKWARD
-}
-
-
-private val M3_TRANSFORM_FADE_IN_SPEC = tween<Float>(
-    durationMillis = 320,
-    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+// MD3 Expressive — fade-through spring specs for switching between top-level
+// (bottom-nav) destinations.
+//
+// Deliberately non-directional: fade-through (cross-dissolve, no slide) is the
+// correct M3 pattern for peer destinations that have no spatial/hierarchical
+// relationship to one another — unlike push/pop in Transitions.kt, which slides
+// because the entered screen is conceptually "inside" the one that opened it.
+// An earlier version of this file computed a FORWARD/BACKWARD tab direction here,
+// but nothing ever consumed the value beyond a null-check — dead code, replaced
+// below by a plain isMainRootTransition() boolean that does the same gating.
+//
+// Real spring specs, not tween()+cubic-bezier approximations — this matches the
+// physics-based M3 Expressive motion system already used elsewhere in this app
+// (ScreenWrapper's corner-radius/dim springs) instead of hand-picked curves that
+// only resemble one. Springs have no fixed end time, but that's safe here: input
+// gating in ScreenWrapper is keyed off lifecycle/navigation-target state, not
+// transition duration (see the hit-testing note in Transitions.kt), and
+// shouldRunDepthEffects already skips the offscreen depth layer for main-root
+// switches — so there's no zombie hit-test window a longer-settling spring could
+// reopen. Exit uses "fast" tokens and enter uses "default" tokens, preserving this
+// file's previous exit-quicker-than-enter feel (180ms/320ms) so the outgoing tab
+// clears out of the way promptly while the incoming one settles a touch slower.
+private val M3_TRANSFORM_FADE_IN_SPEC = spring<Float>(
+    dampingRatio = ExpressiveSprings.DefaultEffectsDampingRatio,
+    stiffness = ExpressiveSprings.DefaultEffectsStiffness
 )
 
-private val M3_TRANSFORM_FADE_OUT_SPEC = tween<Float>(
-    durationMillis = 180,
-    easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
+private val M3_TRANSFORM_FADE_OUT_SPEC = spring<Float>(
+    dampingRatio = ExpressiveSprings.FastEffectsDampingRatio,
+    stiffness = ExpressiveSprings.FastEffectsStiffness
 )
 
-private val M3_TRANSFORM_SCALE_IN_SPEC = tween<Float>(
-    durationMillis = 320,
-    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+private val M3_TRANSFORM_SCALE_IN_SPEC = spring<Float>(
+    dampingRatio = ExpressiveSprings.DefaultSpatialDampingRatio,
+    stiffness = ExpressiveSprings.DefaultSpatialStiffness
 )
 
-private val M3_TRANSFORM_SCALE_OUT_SPEC = tween<Float>(
-    durationMillis = 180,
-    easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
+private val M3_TRANSFORM_SCALE_OUT_SPEC = spring<Float>(
+    dampingRatio = ExpressiveSprings.FastSpatialDampingRatio,
+    stiffness = ExpressiveSprings.FastSpatialStiffness
 )
 
-
-
-private fun mainRootDirection(
-    fromRoute: String?,
-    toRoute: String?
-): MainRootDirection? {
-    val fromIndex = mainRootRouteIndex(fromRoute) ?: return null
-    val toIndex = mainRootRouteIndex(toRoute) ?: return null
-    if (fromIndex == toIndex) return null
-    return if (toIndex > fromIndex) MainRootDirection.FORWARD else MainRootDirection.BACKWARD
-}
+private fun isMainRootTransition(fromRoute: String?, toRoute: String?): Boolean =
+    isMainRootRoute(fromRoute) && isMainRootRoute(toRoute) && fromRoute != toRoute
 
 private fun mainRootEnterTransition(
     fromRoute: String?,
     toRoute: String?,
     fallback: EnterTransition
 ): EnterTransition {
-    val dir = mainRootDirection(fromRoute, toRoute) ?: return fallback
-    return when (dir) {
-        MainRootDirection.FORWARD -> {
-            slideInHorizontally(
-                animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                initialOffsetX = { (it * 0.65f).toInt() }
-            ) + scaleIn(
-                animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                initialScale = 0.92f,
-                transformOrigin = TransformOrigin(0.5f, 0.5f)
-            ) + fadeIn(
-                animationSpec = tween(durationMillis = 260, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
-            )
-        }
-        MainRootDirection.BACKWARD -> {
-            slideInHorizontally(
-                animationSpec = tween(durationMillis = 400, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                initialOffsetX = { -(it * 0.30f).toInt() }
-            ) + scaleIn(
-                animationSpec = tween(durationMillis = 400, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)),
-                initialScale = 0.94f,
-                transformOrigin = TransformOrigin(0.5f, 0.5f)
-            ) + fadeIn(
-                animationSpec = tween(durationMillis = 280, easing = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f))
-            )
-        }
-    }
+    if (!isMainRootTransition(fromRoute, toRoute)) return fallback
+    return fadeIn(animationSpec = M3_TRANSFORM_FADE_IN_SPEC) +
+        scaleIn(
+            animationSpec = M3_TRANSFORM_SCALE_IN_SPEC,
+            initialScale = 0.96f,
+            transformOrigin = TransformOrigin(0.5f, 0.5f)
+        )
 }
 
 private fun mainRootExitTransition(
@@ -734,31 +719,11 @@ private fun mainRootExitTransition(
     toRoute: String?,
     fallback: ExitTransition
 ): ExitTransition {
-    val dir = mainRootDirection(fromRoute, toRoute) ?: return fallback
-    return when (dir) {
-        MainRootDirection.FORWARD -> {
-            slideOutHorizontally(
-                animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)),
-                targetOffsetX = { -(it * 0.35f).toInt() }
-            ) + scaleOut(
-                animationSpec = tween(durationMillis = 380, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)),
-                targetScale = 0.94f,
-                transformOrigin = TransformOrigin(0.5f, 0.5f)
-            ) + fadeOut(
-                animationSpec = tween(durationMillis = 240, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f))
-            )
-        }
-        MainRootDirection.BACKWARD -> {
-            slideOutHorizontally(
-                animationSpec = tween(durationMillis = 400, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)),
-                targetOffsetX = { (it * 0.85f).toInt() }
-            ) + scaleOut(
-                animationSpec = tween(durationMillis = 400, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)),
-                targetScale = 0.95f,
-                transformOrigin = TransformOrigin(0.5f, 0.5f)
-            ) + fadeOut(
-                animationSpec = tween(durationMillis = 260, easing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f))
-            )
-        }
-    }
+    if (!isMainRootTransition(fromRoute, toRoute)) return fallback
+    return fadeOut(animationSpec = M3_TRANSFORM_FADE_OUT_SPEC) +
+        scaleOut(
+            animationSpec = M3_TRANSFORM_SCALE_OUT_SPEC,
+            targetScale = 0.98f,
+            transformOrigin = TransformOrigin(0.5f, 0.5f)
+        )
 }

@@ -37,7 +37,7 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.EntryPointAccessors
 
 /**
@@ -97,7 +97,7 @@ fun WavyMusicSlider(
         EntryPointAccessors.fromApplication(appContext, SmartImageEntryPoint::class.java)
     }
     val userPreferencesRepository = entryPoint.userPreferencesRepository()
-    val performanceModeEnabled by userPreferencesRepository.performanceModeEnabledFlow.collectAsState(initial = false)
+    val performanceModeEnabled by userPreferencesRepository.performanceModeEnabledFlow.collectAsStateWithLifecycle(initialValue = false)
 
     val isDragged by interactionSource.collectIsDraggedAsState()
     val isPressed by interactionSource.collectIsPressedAsState()
