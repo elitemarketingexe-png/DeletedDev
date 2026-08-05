@@ -509,6 +509,7 @@ class PlaybackStatsRepository @Inject constructor(
         readEvents()
             .asSequence()
             .sortedByDescending { event -> event.timestamp }
+            .distinctBy { event -> event.songId }
             .take(safeLimit)
             .map { event ->
                 PlaybackHistoryEntry(

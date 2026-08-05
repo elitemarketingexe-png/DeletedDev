@@ -563,7 +563,8 @@ class ListeningStatsTracker @Inject constructor(
                 thumbnail = session.thumbnail
             )
             _playbackHistory.update { current ->
-                (listOf(historyEntry) + current).take(MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS)
+                val filtered = current.filterNot { it.songId == songId }
+                (listOf(historyEntry) + filtered).take(MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS)
             }
             persistPlayback(
                 songId = songId,
