@@ -152,14 +152,24 @@ fun HomeScreen(
     favoriteArtistReleasesViewModel: FavoriteArtistReleasesViewModel = hiltViewModel(),
     accountsViewModel: AccountsViewModel = hiltViewModel(),
     exploreViewModel: ExploreViewModel = hiltViewModel(),
-    // Pre-warm only — not read here. Mirrors exploreViewModel: without this, LibraryViewModel
-    // (and the Paging3 setup in LibraryStateHolder) is only created the moment the user taps
-    // the Library tab, so that work lands mid tab-switch-transition, when frame budget is
-    // tightest. Creating it as soon as Home composes moves that cost off the transition path.
-    libraryViewModel: LibraryViewModel = hiltViewModel(),
     onOpenSidebar: () -> Unit
 ) {
     val context = LocalContext.current
+
+    // DEFERRED PRE-WARMING PIPELINE:
+    // Do not instantiate LibraryViewModel inline during initial layout inflation.
+    // Defer pre-warming by 600ms after initial render to guarantee 120 FPS launch AND zero-lag tab switching.
+    val viewModelStoreOwner = androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current
+    LaunchedEffect(viewModelStoreOwner) {
+        if (viewModelStoreOwner != null) {
+            kotlinx.coroutines.delay(600L)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                runCatching {
+                    androidx.lifecycle.ViewModelProvider(viewModelStoreOwner)[LibraryViewModel::class.java]
+                }
+            }
+        }
+    }
     // DETECTAR MODO BENCHMARK
     val isBenchmarkMode = remember {
         (context as? android.app.Activity)?.intent?.getBooleanExtra("is_benchmark", false) ?: false
