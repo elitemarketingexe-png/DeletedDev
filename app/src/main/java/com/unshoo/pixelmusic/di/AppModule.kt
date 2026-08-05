@@ -272,33 +272,32 @@ object AppModule {
             }
             .build()
 
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+        val isLowRamDevice = activityManager?.isLowRamDevice == true
+
+        // LOAD BALANCING PIPELINE:
+        // On low RAM / thermal sensitive devices, scale memory cache down to 8% and use RGB_565 (2 bytes/pixel)
+        // to cut GPU memory bandwidth and RAM footprint in half. Limit decode parallelism to 2 worker threads
+        // so CPU cores stay in low-power states without queuing RenderThread GPU upload command flushes.
+        val cachePercent = if (isLowRamDevice) 0.08 else 0.12
+
         return ImageLoader.Builder(context)
             .okHttpClient(okHttpClient)
-            // PERF: limit parallel decodes to 2 to prevent HWUI image decode
-            // thread saturation. With 6+ concurrent decodes the GPU upload
-            // queue backs up, causing 80+ "Image decoding logging dropped!"
-            // warnings and triggering 31-33 frame skips on Choreographer.
             .dispatcher(Dispatchers.IO.limitedParallelism(2))
-            .allowHardware(true) // Hardware bitmaps reduce Java heap pressure for UI album art
-            .crossfade(120) // Smooth image appearance; short enough to not queue during scrolling
+            .allowHardware(true)
+            .bitmapConfig(if (isLowRamDevice) android.graphics.Bitmap.Config.RGB_565 else android.graphics.Bitmap.Config.ARGB_8888)
             .memoryCache {
                 MemoryCache.Builder(context)
-                    // PERF: bumped from 8% → 15%. At 8% the cache evicts album
-                    // thumbnails during tab switches, forcing re-decodes that
-                    // saturate HWUI threads and cause 30+ frame skips. 15% holds
-                    // ~2 screens of thumbnails in memory, drastically reducing
-                    // cache misses on tab return. On a 256 MB heap this is ~38 MB
-                    // — still leaves ample headroom for ExoPlayer and Compose.
-                    .maxSizePercent(0.15)
+                    .maxSizePercent(cachePercent)
                     .build()
             }
             .diskCache {
                 DiskCache.Builder()
                     .directory(context.cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(100L * 1024 * 1024) // 100 MB disk cache
+                    .maxSizeBytes(if (isLowRamDevice) 40L * 1024 * 1024 else 80L * 1024 * 1024)
                     .build()
             }
-            .respectCacheHeaders(false) // Ignore server cache headers, always cache
+            .respectCacheHeaders(false)
             .build()
     }
 

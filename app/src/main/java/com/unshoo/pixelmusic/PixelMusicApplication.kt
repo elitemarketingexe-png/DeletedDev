@@ -169,71 +169,86 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         MediaItemBuilder.initialize(this)
         BotGuardTokenGenerator.initialize(this)
 
-        // Pre-warm L1 card color cache from SharedPreferences disk cache off the main thread.
-        startupScope.launch {
-            com.unshoo.pixelmusic.presentation.utils.CardColorExtractor.init(this@PixelMusicApplication)
-            // Initialise NewPipe YouTube Extractor on a background thread.
-            // NewPipe.init() walks its locale/country tables and registers
-            // internal regexes — pure CPU, no I/O — but it adds 50-150ms
-            // of main-thread time on cold start.
-            org.schabi.newpipe.extractor.NewPipe.init(
-                com.unshoo.pixelmusic.data.remote.youtube.YoutubeExtractor(
-                    com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.client
-                )
-            )
-        }
-
-        // BUGFIX (slow first playback): resolve ExoCache's lazy SimpleCache off the main thread
-        // now, instead of letting MusicService.onCreate() do it synchronously on the main thread
-        // later. See the field comment on `exoCache` above for the full explanation.
-        exoCacheWarmUpJob = warmUpScope.launch {
+        // THERMAL OPTIMIZATION PIPELINE:
+        // Consolidate background warm-up work into a staggered sequential pipeline
+        // executing on warmUpScope (Thread.MIN_PRIORITY). Running 7+ parallel
+        // coroutine launches simultaneously on startup forces the CPU governor to
+        // scale all cores to max frequency, causing thermal dissipation (device heat).
+        warmUpScope.launch {
+            // Stage 1 (T+500ms): Pre-warm ExoCache lazy SimpleCache index off the main thread
+            kotlinx.coroutines.delay(500L)
             try {
                 exoCache.get().cache
             } catch (e: Exception) {
-                Timber.w(e, "ExoCache pre-warm failed (non-fatal, will retry lazily)")
+                Timber.w(e, "ExoCache pre-warm failed (non-fatal)")
             }
-        }
 
-        // BUGFIX (startup jank): AdMob's MobileAds.initialize() + the immediate rewarded-ad
-        // load used to run synchronously, inline, on the main thread during onCreate() - the
-        // one startup task in this file that wasn't already deferred. MobileAds.initialize()
-        // is documented as safe to call from a background thread, so move it (and the app-open
-        // counter, a trivial SharedPreferences write) onto the same startupScope everything
-        // else here already uses, instead of spending main-thread time on it before the first
-        // frame is even posted.
-        startupScope.launch {
+            // Stage 2 (T+1500ms): Initialize NewPipe YouTube Extractor and CardColorExtractor
+            kotlinx.coroutines.delay(1000L)
+            try {
+                com.unshoo.pixelmusic.presentation.utils.CardColorExtractor.init(this@PixelMusicApplication)
+                org.schabi.newpipe.extractor.NewPipe.init(
+                    com.unshoo.pixelmusic.data.remote.youtube.YoutubeExtractor(
+                        com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.client
+                    )
+                )
+            } catch (e: Exception) {
+                Timber.w(e, "NewPipe / CardColorExtractor warm-up failed")
+            }
+
+            // Stage 3 (T+3000ms): Initialize AdManager and LastFM
+            kotlinx.coroutines.delay(1500L)
             try {
                 com.unshoo.pixelmusic.data.ads.AdManager.initialize(this@PixelMusicApplication)
                 com.unshoo.pixelmusic.data.ads.AdManager.incrementAppOpenCount(this@PixelMusicApplication)
             } catch (e: Throwable) {
                 Timber.e(e, "AdMob initialization failed")
             }
-        }
 
-        // Initialize Last.fm client
-        com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(
-            apiKey = BuildConfig.LASTFM_API_KEY,
-            secret = BuildConfig.LASTFM_SECRET
-        )
-        startupScope.launch {
             val prefs = userPreferencesRepository.get()
-            val savedApiKey = prefs.lastfmApiKeyFlow.first()
-            val savedSecret = prefs.lastfmApiSecretFlow.first()
+            val savedApiKey = runCatching { prefs.lastfmApiKeyFlow.first() }.getOrDefault("")
+            val savedSecret = runCatching { prefs.lastfmApiSecretFlow.first() }.getOrDefault("")
             if (savedApiKey.isNotEmpty() && savedSecret.isNotEmpty()) {
                 com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(
                     apiKey = savedApiKey,
                     secret = savedSecret
                 )
             }
-            val sessionKey = prefs.lastfmSessionFlow.first()
+            val sessionKey = runCatching { prefs.lastfmSessionFlow.first() }.getOrDefault("")
             if (sessionKey.isNotEmpty()) {
                 com.unshoo.pixelmusic.data.lastfm.LastFM.sessionKey = sessionKey
             }
+
+            // Stage 4 (T+5000ms): DNS pre-warming, legacy cache migration, and BotGuard warmup
+            kotlinx.coroutines.delay(2000L)
+            try {
+                java.net.InetAddress.getAllByName("music.youtube.com")
+                java.net.InetAddress.getAllByName("googlevideo.com")
+            } catch (e: Exception) {
+                Timber.w(e, "DNS pre-warming failed")
+            }
+
+            awaitMainThreadIdle()
+            try {
+                BotGuardTokenGenerator.preWarm("warmup_session")
+            } catch (e: Throwable) {
+                Timber.w(e, "BotGuard pre-warm deferred task failed")
+            }
+
+            AlbumArtUtils.migrateLegacyCacheLocation(this@PixelMusicApplication)
+            val savedLimit = runCatching {
+                prefs.albumArtCacheLimitMbFlow.first()
+            }.getOrNull()
+            if (savedLimit != null) {
+                AlbumArtCacheManager.configuredCacheLimitMb = savedLimit.toLong()
+            }
         }
 
-        // (NewPipe YouTube Extractor initialisation moved into the
-        // CardColorExtractor.init startupScope.launch above so it doesn't
-        // block the main thread.)
+        // Initialize Last.fm client defaults
+        com.unshoo.pixelmusic.data.lastfm.LastFM.initialize(
+            apiKey = BuildConfig.LASTFM_API_KEY,
+            secret = BuildConfig.LASTFM_SECRET
+        )
 
         // Bind Content Language and Country to YouTube.locale
         startupScope.launch {
@@ -250,8 +265,6 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
             }
         }
 
-        // Benchmark variant intentionally restarts/kills app process during tests.
-        // Avoid persisting those events as user-facing crash reports.
         if (BuildConfig.BUILD_TYPE != "benchmark") {
             CrashHandler.install(this)
         }
@@ -259,7 +272,6 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         } else {
-            // Release tree: only WARN/ERROR/WTF - no DEBUG/VERBOSE/INFO
             Timber.plant(ReleaseTree())
         }
 
@@ -274,39 +286,6 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         }
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(appLifecycleObserver)
-
-        // DNS pre-warming
-        startupScope.launch {
-            try {
-                java.net.InetAddress.getAllByName("music.youtube.com")
-                java.net.InetAddress.getAllByName("googlevideo.com")
-            } catch (e: Exception) {
-                Timber.w(e, "DNS pre-warming failed")
-            }
-        }
-
-        // Deferred BotGuard PoToken Warmup:
-        // Schedule warmup 4 seconds after launch on warmUpScope (lowest thread priority Thread.MIN_PRIORITY),
-        // and await main thread idle so cold-start launch FPS and UI rendering are untouched.
-        botGuardWarmUpJob = warmUpScope.launch {
-            kotlinx.coroutines.delay(4_000L)
-            awaitMainThreadIdle()
-            try {
-                BotGuardTokenGenerator.preWarm("warmup_session")
-            } catch (e: Throwable) {
-                Timber.w(e, "BotGuard pre-warm deferred task failed (non-fatal)")
-            }
-        }
-
-        startupScope.launch {
-            AlbumArtUtils.migrateLegacyCacheLocation(this@PixelMusicApplication)
-            val savedLimit = runCatching {
-                userPreferencesRepository.get().albumArtCacheLimitMbFlow.first()
-            }.getOrNull()
-            if (savedLimit != null) {
-                AlbumArtCacheManager.configuredCacheLimitMb = savedLimit.toLong()
-            }
-        }
     }
 
     override fun newImageLoader(): ImageLoader {
