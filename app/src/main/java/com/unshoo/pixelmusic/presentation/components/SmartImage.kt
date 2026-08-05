@@ -196,21 +196,27 @@ fun SmartImage(
             model
         }
 
+        val isListThumbnail = requestTargetSize.width is coil.size.Dimension.Pixels &&
+            (requestTargetSize.width as coil.size.Dimension.Pixels).px <= 256
+
+        val effectiveCrossfade = if (isListThumbnail) 0 else crossfadeDurationMillis
+
         if (optimizedModel is ImageRequest) {
             optimizedModel.newBuilder(context)
                 .size(requestTargetSize)
+                .crossfade(effectiveCrossfade)
                 .build()
         } else {
             ImageRequest.Builder(context)
                 .data(optimizedModel)
-                .crossfade(crossfadeDurationMillis)
+                .crossfade(effectiveCrossfade)
                 .diskCachePolicy(if (useDiskCache) CachePolicy.ENABLED else CachePolicy.DISABLED)
                 .memoryCachePolicy(if (useMemoryCache) CachePolicy.ENABLED else CachePolicy.DISABLED)
                 .allowHardware(allowHardware)
                 .size(requestTargetSize)
                 // PERF: use the URL as a memory cache key so that returning
-                // to a tab instantly shows the cached bitmap as placeholder
-                // instead of flashing a blank/decode frame.
+                // to a tab or scrolling rapidly instantly shows the cached bitmap
+                // instead of flashing a blank/decode frame or firing recomposition animations.
                 .apply {
                     if (memoryCacheKey != null) {
                         memoryCacheKey(memoryCacheKey)

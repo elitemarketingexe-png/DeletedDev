@@ -148,7 +148,9 @@ fun ScreenWrapper(
             // the exception: Home/Search/Library keep the same slide/fade transition, but skip
             // the expensive offscreen depth layer while no deeper screen is visible.
             .graphicsLayer {
-                compositingStrategy = if (shouldRunDepthEffects) {
+                // Avoid Offscreen compositing strategy unless rounded corner depth clip is actively required (>0.5dp).
+                // Auto avoids allocating offscreen framebuffer textures on GPU during main tab crossfades and scrolling.
+                compositingStrategy = if (shouldRunDepthEffects && cornerRadius > 0.5f) {
                     CompositingStrategy.Offscreen
                 } else {
                     CompositingStrategy.Auto
