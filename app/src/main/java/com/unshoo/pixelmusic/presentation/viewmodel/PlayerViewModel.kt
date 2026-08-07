@@ -7235,6 +7235,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun dismissPlaylistAndShowUndo() {
+        collapsePlayerSheet()
         setMiniPlayerDismissing(false)
         playlistDismissUndoStateHolder.dismissPlaylistAndShowUndo(
             scope = viewModelScope,

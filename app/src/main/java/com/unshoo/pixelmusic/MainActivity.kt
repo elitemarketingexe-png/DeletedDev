@@ -1158,9 +1158,15 @@ class MainActivity : ComponentActivity() {
                         // but means every player state tick re-evaluates the
                         // entire content lambda. Use the StateFlow as a
                         // `State<Float>` directly with `collectAsStateWithLifecycle`.
-                        val expansionFractionLocal = playerViewModel.playerContentExpansionFraction.value
-                        val isExpandedOrExpanding = remember(expansionFractionLocal) {
-                            expansionFractionLocal > 0.01f
+                        val isMiniPlayerDismissingForOverlay by playerViewModel.isMiniPlayerDismissing.collectAsStateWithLifecycle()
+                        val isExpandedOrExpanding = remember(
+                            playerViewModel.playerContentExpansionFraction.value,
+                            showPlayerContentInitially,
+                            isMiniPlayerDismissingForOverlay
+                        ) {
+                            !isMiniPlayerDismissingForOverlay &&
+                                showPlayerContentInitially &&
+                                playerViewModel.playerContentExpansionFraction.value > 0.01f
                         }
 
                         AnimatedVisibility(
