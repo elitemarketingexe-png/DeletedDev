@@ -7,7 +7,7 @@ import androidx.core.net.toUri
 import com.unshoo.pixelmusic.data.database.youtube.AppDatabase
 import com.unshoo.pixelmusic.data.model.youtube.PlaylistInfo
 import com.unshoo.pixelmusic.data.model.youtube.Song
-import com.unshoo.pixelmusic.data.model.youtube.UmihiSettings
+import com.unshoo.pixelmusic.data.model.youtube.PixelMusicSettings
 import com.unshoo.pixelmusic.data.preferences.StreamingAudioQuality
 import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
 import com.unshoo.pixelmusic.presentation.viewmodel.ConnectivityStateHolder
@@ -111,7 +111,7 @@ object YoutubeHelper {
                 ?.jsonPrimitive?.contentOrNull
             category?.takeIf { it.isNotBlank() && it != "Music" }
         } catch (e: Exception) {
-            UmihiHelper.printe("Failed to extract genre: ${e.message}")
+            PixelMusicHelper.printe("Failed to extract genre: ${e.message}")
             null
         }
     }
@@ -169,7 +169,7 @@ object YoutubeHelper {
 
     fun extractPlaylists(
         jsonString: String,
-        settings: UmihiSettings
+        settings: PixelMusicSettings
     ): List<PlaylistInfo> {
         val json = Json.parseToJsonElement(jsonString).jsonObject
         val playlistInfos = mutableListOf<PlaylistInfo>()
@@ -411,7 +411,7 @@ object YoutubeHelper {
                 Song(youtubeId = videoId, title = title, artist = artist, thumbnailHref = upgradeThumbnailUrlToHighQuality(thumbnail))
             } ?: emptyList()
         } catch (e: Exception) {
-            UmihiHelper.printe("extractRelatedSongs failed: ${e.message}")
+            PixelMusicHelper.printe("extractRelatedSongs failed: ${e.message}")
             emptyList()
         }
     }
@@ -436,7 +436,7 @@ object YoutubeHelper {
         )
     }
 
-    fun extractSongList(jsonString: String, settings: UmihiSettings): List<Song> {
+    fun extractSongList(jsonString: String, settings: PixelMusicSettings): List<Song> {
         val json = Json.parseToJsonElement(jsonString).jsonObject
 
         val contents = json["contents"]
@@ -451,7 +451,7 @@ object YoutubeHelper {
         return parseSongsFromContents(contents, settings)
     }
 
-    fun extractContinuationSongs(jsonString: String, settings: UmihiSettings): List<Song> {
+    fun extractContinuationSongs(jsonString: String, settings: PixelMusicSettings): List<Song> {
         val json = Json.parseToJsonElement(jsonString).jsonObject
 
         val contents = json["onResponseReceivedActions"]
@@ -489,7 +489,7 @@ object YoutubeHelper {
 
     private fun parseSongsFromContents(
         contents: JsonArray?,
-        settings: UmihiSettings
+        settings: PixelMusicSettings
     ): List<Song> {
         val songs = mutableListOf<Song>()
         if (contents == null) return songs
@@ -651,14 +651,14 @@ object YoutubeHelper {
         val videoId = song.youtubeId
 
         if (song.audioFilePath?.isNotBlank() == true && File(song.audioFilePath).exists()) {
-            UmihiHelper.printd("$videoId : Playing directly from song.audioFilePath: ${song.audioFilePath}")
+            PixelMusicHelper.printd("$videoId : Playing directly from song.audioFilePath: ${song.audioFilePath}")
             return song.audioFilePath
         }
 
         // ── OFFLINE-FIRST GATE ─────────────────────────────────────────────────
         val cachedLocalPath = localFilePathCache.get(videoId)
         if (cachedLocalPath != null && File(cachedLocalPath).exists()) {
-            UmihiHelper.printd("$videoId : Playing from in-memory local file cache")
+            PixelMusicHelper.printd("$videoId : Playing from in-memory local file cache")
             return cachedLocalPath
         }
 
@@ -667,12 +667,12 @@ object YoutubeHelper {
         try {
             savedSong = localSongRepository.getSong(videoId)
         } catch (ex: Exception) {
-            UmihiHelper.printe(ex.toString())
+            PixelMusicHelper.printe(ex.toString())
         }
 
         if (savedSong != null) {
             if (savedSong.audioFilePath != null && File(savedSong.audioFilePath).exists()) {
-                UmihiHelper.printd("$videoId : Was downloaded, playing from local file")
+                PixelMusicHelper.printd("$videoId : Was downloaded, playing from local file")
                 localFilePathCache.put(videoId, savedSong.audioFilePath)
                 return savedSong.audioFilePath
             }
@@ -699,7 +699,7 @@ object YoutubeHelper {
         // ── Cache hit at the quality the user actually wants ───────────────────
         streamUrlLruCache.get(targetCacheKey)?.let {
             if (isYoutubeUrlValid(it)) {
-                UmihiHelper.printd(
+                PixelMusicHelper.printd(
                     "$videoId : INSTANT start from cache ($targetCacheKey, quality=${plan.quality})"
                 )
                 return it
@@ -709,7 +709,7 @@ object YoutubeHelper {
         if (!preferLowFirst && maxBitrate == 0) {
             streamUrlLruCache.get("${videoId}_high")?.let {
                 if (isYoutubeUrlValid(it)) {
-                    UmihiHelper.printd("$videoId : INSTANT start from cached HIGH stream")
+                    PixelMusicHelper.printd("$videoId : INSTANT start from cached HIGH stream")
                     return it
                 }
             }
@@ -718,7 +718,7 @@ object YoutubeHelper {
         if (preferLowFirst) {
             streamUrlLruCache.get("${videoId}_low")?.let {
                 if (isYoutubeUrlValid(it)) {
-                    UmihiHelper.printd("$videoId : INSTANT start from cached LOW stream")
+                    PixelMusicHelper.printd("$videoId : INSTANT start from cached LOW stream")
                     return it
                 }
             }
@@ -742,7 +742,7 @@ object YoutubeHelper {
                 maxBitrateKbps = maxBitrate,
             )
         } catch (primary: Exception) {
-            UmihiHelper.printe(
+            PixelMusicHelper.printe(
                 "$videoId : ${plan.quality} stream resolve failed (${primary.message}); " +
                     "retrying with fallback quality"
             )
@@ -794,7 +794,7 @@ object YoutubeHelper {
             warmHigherQualityInBackground(context, song, maxBitrate)
         }
 
-        UmihiHelper.printd(
+        PixelMusicHelper.printd(
             "$videoId : INSTANT ${plan.quality} stream ready " +
                 "(ceiling=${maxBitrate}kbps lowFirst=$preferLowFirst targetCacheKey=$targetCacheKey bitrate=$bitrate)"
         )
@@ -826,9 +826,9 @@ object YoutubeHelper {
                     result.second?.let { streamMimeTypeLruCache.put("${videoId}_high", it) }
                     result.third?.let { streamBitrateLruCache.put("${videoId}_high", it) }
                 }
-                UmihiHelper.printd("$videoId : Background quality upgrade cached ($cacheKey)")
+                PixelMusicHelper.printd("$videoId : Background quality upgrade cached ($cacheKey)")
             } catch (e: Exception) {
-                UmihiHelper.printe("$videoId : Background quality upgrade failed: ${e.message}")
+                PixelMusicHelper.printe("$videoId : Background quality upgrade failed: ${e.message}")
             }
         }
     }
@@ -1070,7 +1070,7 @@ object YoutubeHelper {
         val isCiphered = isCipheredFormat(format)
         val hasGvsPoToken = !authState.resolveGvsPoToken(client).isNullOrBlank()
         if (authState.webClientPoTokenEnabled && isWebClient && isCiphered && !hasGvsPoToken) {
-            UmihiHelper.printd("Skipping ciphered ${client.clientName} stream candidate because Web PoToken playback is enabled but no GVS token is available")
+            PixelMusicHelper.printd("Skipping ciphered ${client.clientName} stream candidate because Web PoToken playback is enabled but no GVS token is available")
             return true
         }
         return false
@@ -1173,7 +1173,7 @@ object YoutubeHelper {
             if (expireSecs != null) {
                 val currentSecs = System.currentTimeMillis() / 1000
                 if (expireSecs > currentSecs + 60) {
-                    UmihiHelper.printd("validateStatus: URL fresh (expires in ${expireSecs - currentSecs}s) — skipping HTTP probe")
+                    PixelMusicHelper.printd("validateStatus: URL fresh (expires in ${expireSecs - currentSecs}s) — skipping HTTP probe")
                     return true
                 }
             }
@@ -1183,10 +1183,10 @@ object YoutubeHelper {
         // On weak networks this probe is the #1 source of multi-second click-to-play lag.
         // Prefer trusting googlevideo URLs that still have an expire param over hanging.
         if (url.contains("googlevideo.com", ignoreCase = true) && expireParam.isNotEmpty()) {
-            UmihiHelper.printd("validateStatus: trusting googlevideo URL without probe (low-latency path)")
+            PixelMusicHelper.printd("validateStatus: trusting googlevideo URL without probe (low-latency path)")
             return true
         }
-        UmihiHelper.printd("validateStatus: URL near/past expiry — performing HTTP probe")
+        PixelMusicHelper.printd("validateStatus: URL near/past expiry — performing HTTP probe")
         try {
             val requestProfile = StreamClientUtils.resolveRequestProfile(url)
             val rangeRequest = StreamClientUtils
@@ -1222,7 +1222,7 @@ object YoutubeHelper {
                     contentType.startsWith("application/xml") ||
                     contentType.startsWith("text/xml")
                 ) {
-                    UmihiHelper.printd("validateStatus: Rejecting — non-media Content-Type: $contentType")
+                    PixelMusicHelper.printd("validateStatus: Rejecting — non-media Content-Type: $contentType")
                     return@use false
                 }
 
@@ -1230,7 +1230,7 @@ object YoutubeHelper {
                 response.body.source().request(1)
             }
         } catch (e: Exception) {
-            UmihiHelper.printe("validateStatus: probe failed: ${e.message}")
+            PixelMusicHelper.printe("validateStatus: probe failed: ${e.message}")
         }
         return false
     }
@@ -1337,7 +1337,7 @@ object YoutubeHelper {
         try {
             signatureTimestamp = NewPipeUtils.getSignatureTimestamp(videoId).getOrNull()
         } catch (e: Exception) {
-            UmihiHelper.printe("Failed to get signature timestamp: ${e.message}")
+            PixelMusicHelper.printe("Failed to get signature timestamp: ${e.message}")
         }
 
         var didRefreshVisitorData = false
@@ -1350,7 +1350,7 @@ object YoutubeHelper {
         val clientsToTry = if (lowQuality) clients.take(4) else clients
         for (clientObj in clientsToTry) {
             try {
-                UmihiHelper.printd("Trying playback client: ${clientObj.clientName}")
+                PixelMusicHelper.printd("Trying playback client: ${clientObj.clientName}")
                 var playerResponse = playerResponseCache[clientObj.clientName]
                 if (playerResponse == null) {
                     var playerResResult = YouTube.player(
@@ -1369,7 +1369,7 @@ object YoutubeHelper {
                         val isBot = "bot" in reason.lowercase(Locale.US) || "unusual traffic" in reason.lowercase(Locale.US) || "automated" in reason.lowercase(Locale.US)
 
                         if (status != "OK" && isBot && !didRefreshVisitorData) {
-                            UmihiHelper.printd("Bot detection triggered. Refreshing visitorData and invalidating PoToken...")
+                            PixelMusicHelper.printd("Bot detection triggered. Refreshing visitorData and invalidating PoToken...")
                             // Invalidate the stale BotGuard session so the next mint gets a fresh token.
                             try {
                                 com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.invalidateAll()
@@ -1402,7 +1402,7 @@ object YoutubeHelper {
                 }
 
                 if (playerResponse == null) {
-                    UmihiHelper.printe("Player response was null for client ${clientObj.clientName}")
+                    PixelMusicHelper.printe("Player response was null for client ${clientObj.clientName}")
                     continue
                 }
 
@@ -1410,13 +1410,13 @@ object YoutubeHelper {
                 var reason = playerResponse.playabilityStatus.reason.orEmpty()
 
                 if (status != "OK") {
-                    UmihiHelper.printe("Playability check failed for client ${clientObj.clientName}: status=$status, reason=$reason")
+                    PixelMusicHelper.printe("Playability check failed for client ${clientObj.clientName}: status=$status, reason=$reason")
                     continue
                 }
 
                 val candidates = selectCandidates(playerResponse, lowQuality, maxBitrateKbps)
                 if (candidates.isEmpty()) {
-                    UmihiHelper.printe("No audio formats found for client ${clientObj.clientName}")
+                    PixelMusicHelper.printe("No audio formats found for client ${clientObj.clientName}")
                     continue
                 }
 
@@ -1445,13 +1445,13 @@ object YoutubeHelper {
                         resolvedMimeType = normalizeMimeType(candidate.mimeType)
                         resolvedBitrate = candidate.bitrate
                         lastSuccessfulClientKey = StreamClientUtils.buildClientKey(clientObj)
-                        UmihiHelper.printd(
+                        PixelMusicHelper.printd(
                             "Successfully resolved stream with client: ${clientObj.clientName} " +
                                 "mime=$resolvedMimeType low=$lowQuality bitrate=$resolvedBitrate"
                         )
                         break
                     } else {
-                        UmihiHelper.printe("Stream URL validation failed for client ${clientObj.clientName}")
+                        PixelMusicHelper.printe("Stream URL validation failed for client ${clientObj.clientName}")
                     }
                 }
 
@@ -1466,12 +1466,12 @@ object YoutubeHelper {
                 }
 
             } catch (e: Exception) {
-                UmihiHelper.printe("Error with client ${clientObj.clientName}: ${e.message}")
+                PixelMusicHelper.printe("Error with client ${clientObj.clientName}: ${e.message}")
             }
         }
 
         // Failsafe: Original NewPipe Extractor fallback
-        UmihiHelper.printd("All premium stream clients failed. Using failsafe NewPipe extractor...")
+        PixelMusicHelper.printd("All premium stream clients failed. Using failsafe NewPipe extractor...")
         @Suppress("UNUSED_VARIABLE")
         val service = ServiceList.YouTube
         var attempts = 0
@@ -1544,7 +1544,7 @@ object YoutubeHelper {
                 }
                 return streamUrl
             } catch (e: Exception) {
-                UmihiHelper.printe("Failsafe NewPipe extraction failed: ${e.message}")
+                PixelMusicHelper.printe("Failsafe NewPipe extraction failed: ${e.message}")
                 if (!lowQuality) delay(Constants.YoutubeApi.RETRY_DELAY * (attempt + 1))
             }
         }
@@ -1642,7 +1642,7 @@ object YoutubeHelper {
 
     fun extractAccountPlaylists(
         jsonString: String,
-        settings: UmihiSettings
+        settings: PixelMusicSettings
     ): List<PlaylistItem> {
         val root = Json.parseToJsonElement(jsonString)
         val items = mutableListOf<JsonObject>()
@@ -1676,7 +1676,7 @@ object YoutubeHelper {
                 val nextJson = YoutubeRequestHelper.requestContinuation(continuationToken, settings)
                 playlistsList.addAll(extractAccountPlaylists(nextJson, settings))
             } catch (e: Exception) {
-                UmihiHelper.printe("Error fetching playlists continuation: ${e.message}")
+                PixelMusicHelper.printe("Error fetching playlists continuation: ${e.message}")
             }
         }
 
@@ -1685,7 +1685,7 @@ object YoutubeHelper {
 
     fun extractAccountAlbums(
         jsonString: String,
-        settings: UmihiSettings
+        settings: PixelMusicSettings
     ): List<AlbumItem> {
         val root = Json.parseToJsonElement(jsonString)
         val items = mutableListOf<JsonObject>()
@@ -1727,7 +1727,7 @@ object YoutubeHelper {
                 val nextJson = YoutubeRequestHelper.requestContinuation(continuationToken, settings)
                 albumsList.addAll(extractAccountAlbums(nextJson, settings))
             } catch (e: Exception) {
-                UmihiHelper.printe("Error fetching albums continuation: ${e.message}")
+                PixelMusicHelper.printe("Error fetching albums continuation: ${e.message}")
             }
         }
 
@@ -1736,7 +1736,7 @@ object YoutubeHelper {
 
     fun extractAccountArtists(
         jsonString: String,
-        settings: UmihiSettings
+        settings: PixelMusicSettings
     ): List<ArtistItem> {
         val root = Json.parseToJsonElement(jsonString)
         val items = mutableListOf<JsonObject>()
@@ -1768,7 +1768,7 @@ object YoutubeHelper {
                 val nextJson = YoutubeRequestHelper.requestContinuation(continuationToken, settings)
                 artistsList.addAll(extractAccountArtists(nextJson, settings))
             } catch (e: Exception) {
-                UmihiHelper.printe("Error fetching artists continuation: ${e.message}")
+                PixelMusicHelper.printe("Error fetching artists continuation: ${e.message}")
             }
         }
 

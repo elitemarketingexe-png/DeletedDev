@@ -23,7 +23,7 @@ class DownloadRepository(appContext: Context) {
     suspend fun downloadPlaylist(playlist: Playlist) {
         val existingWork = getExistingJobs(playlist.info.id)
         if (existingWork.isNotEmpty()) {
-            UmihiHelper.printd("Download is already ongoing for playlist ${playlist.info.title}")
+            PixelMusicHelper.printd("Download is already ongoing for playlist ${playlist.info.title}")
             return
         }
         localPlaylistRepository.insertPlaylistWithSongs(playlist)
@@ -44,12 +44,12 @@ class DownloadRepository(appContext: Context) {
     suspend fun deletePlaylist(playlist: Playlist) {
         localPlaylistRepository.deleteFullPlaylist(playlist.info.id)
         val audioDir =
-            UmihiHelper.getDownloadDirectory(
+            PixelMusicHelper.getDownloadDirectory(
                 _appContext,
                 Constants.Downloads.AUDIO_FILES_FOLDER
             )
         val imageDir =
-            UmihiHelper.getDownloadDirectory(_appContext, Constants.Downloads.THUMBNAILS_FOLDER)
+            PixelMusicHelper.getDownloadDirectory(_appContext, Constants.Downloads.THUMBNAILS_FOLDER)
 
         File(imageDir, "${playlist.info.id}.jpg").takeIf { it.exists() }?.delete()
 
@@ -69,7 +69,7 @@ class DownloadRepository(appContext: Context) {
         val id = "${Constants.Downloads.DOWNLOADED_PLAYLIST_ID}${song.youtubeId}"
         val existingWork = getExistingJobs(id)
         if (existingWork.isNotEmpty()) {
-            UmihiHelper.printd("Download is already ongoing for song ${playlist.info.title}")
+            PixelMusicHelper.printd("Download is already ongoing for song ${playlist.info.title}")
             return
         }
 
@@ -94,13 +94,13 @@ class DownloadRepository(appContext: Context) {
     }
 
     fun cancelPlaylistDownload(playlist: Playlist) {
-        UmihiHelper.printd("stopping work ${playlist.info.title}")
+        PixelMusicHelper.printd("stopping work ${playlist.info.title}")
         workManager.cancelUniqueWork(playlist.info.id)
     }
 
     fun cancelSongDownload(youtubeId: String) {
         val id = "${Constants.Downloads.DOWNLOADED_PLAYLIST_ID}$youtubeId"
-        UmihiHelper.printd("stopping song work $id")
+        PixelMusicHelper.printd("stopping song work $id")
         workManager.cancelUniqueWork(id)
     }
 
@@ -124,12 +124,12 @@ class DownloadRepository(appContext: Context) {
 
     suspend fun deleteSong(youtubeId: String) {
         val audioDir =
-            UmihiHelper.getDownloadDirectory(
+            PixelMusicHelper.getDownloadDirectory(
                 _appContext,
                 Constants.Downloads.AUDIO_FILES_FOLDER
             )
         val imageDir =
-            UmihiHelper.getDownloadDirectory(_appContext, Constants.Downloads.THUMBNAILS_FOLDER)
+            PixelMusicHelper.getDownloadDirectory(_appContext, Constants.Downloads.THUMBNAILS_FOLDER)
 
         File(audioDir, "$youtubeId.webm").takeIf { it.exists() }?.delete()
         File(imageDir, "$youtubeId.jpg").takeIf { it.exists() }?.delete()

@@ -2,7 +2,7 @@ package com.unshoo.pixelmusic.data.remote.youtube
 
 import com.unshoo.pixelmusic.data.model.youtube.Playlist
 import com.unshoo.pixelmusic.data.model.youtube.PlaylistInfo
-import com.unshoo.pixelmusic.data.model.youtube.UmihiSettings
+import com.unshoo.pixelmusic.data.model.youtube.PixelMusicSettings
 import com.unshoo.pixelmusic.data.model.youtube.PlaylistSongCrossRef
 import kotlinx.coroutines.yield
 
@@ -13,14 +13,14 @@ import kotlinx.coroutines.yield
  * - [retrieveAll] fetches the list of playlists visible in the authenticated user's library.
  * - [retrieveOne] fetches the full song list for a single playlist, including continuations.
  *
- * Requires a valid authenticated [UmihiSettings] (cookies) passed from [DatastoreRepository].
+ * Requires a valid authenticated [PixelMusicSettings] (cookies) passed from [DatastoreRepository].
  */
 class YoutubePlaylistDataSource {
 
     /**
      * Returns all playlist info entries visible in the user's YouTube Music library.
      */
-    fun retrieveAll(settings: UmihiSettings): List<PlaylistInfo> {
+    fun retrieveAll(settings: PixelMusicSettings): List<PlaylistInfo> {
         return YoutubeHelper.extractPlaylists(
             YoutubeRequestHelper.browse(
                 Constants.YoutubeApi.Browse.PLAYLIST_BROWSE_ID,
@@ -35,7 +35,7 @@ class YoutubePlaylistDataSource {
      * Uses the app's InnerTube parser because it handles playlist continuations reliably
      * for very large playlists (5k-20k+ songs). The older JSON helper only read page 1.
      */
-    suspend fun retrieveOne(playlist: Playlist, settings: UmihiSettings): Playlist {
+    suspend fun retrieveOne(playlist: Playlist, settings: PixelMusicSettings): Playlist {
         val remoteCandidates = when {
             playlist.info.id == "liked_songs" -> listOf("LM")
             playlist.info.id == "LM" -> listOf("LM")

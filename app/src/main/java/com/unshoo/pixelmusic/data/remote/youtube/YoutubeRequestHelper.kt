@@ -4,13 +4,13 @@ import com.github.kittinunf.fuel.core.extensions.jsonBody
 import com.github.kittinunf.fuel.httpPost
 import com.github.kittinunf.fuel.json.responseJson
 import com.github.kittinunf.result.Result
-import com.unshoo.pixelmusic.data.model.youtube.UmihiSettings
+import com.unshoo.pixelmusic.data.model.youtube.PixelMusicSettings
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.buildJsonArray
 
 object YoutubeRequestHelper {
-    fun browse(browseId: String, settings: UmihiSettings): String {
+    fun browse(browseId: String, settings: PixelMusicSettings): String {
         return requestWithContext(
             url = Constants.YoutubeApi.Browse.URL,
             idName = "browseId",
@@ -19,7 +19,7 @@ object YoutubeRequestHelper {
         )
     }
 
-    fun requestContinuation(continuationToken: String, settings: UmihiSettings): String {
+    fun requestContinuation(continuationToken: String, settings: PixelMusicSettings): String {
         return requestWithContext(
             url = Constants.YoutubeApi.Browse.URL,
             idName = "continuation",
@@ -52,7 +52,7 @@ object YoutubeRequestHelper {
         )
     }
 
-    fun like(videoId: String, settings: UmihiSettings): String {
+    fun like(videoId: String, settings: PixelMusicSettings): String {
         return requestWithTarget(
             url = "https://www.youtube.com/youtubei/v1/like/like",
             videoId = videoId,
@@ -60,7 +60,7 @@ object YoutubeRequestHelper {
         )
     }
 
-    fun removeLike(videoId: String, settings: UmihiSettings): String {
+    fun removeLike(videoId: String, settings: PixelMusicSettings): String {
         return requestWithTarget(
             url = "https://www.youtube.com/youtubei/v1/like/removelike",
             videoId = videoId,
@@ -72,7 +72,7 @@ object YoutubeRequestHelper {
     private fun requestWithTarget(
         url: String,
         videoId: String,
-        settings: UmihiSettings
+        settings: PixelMusicSettings
     ): String {
         val baseBody = YoutubeAuthHelper.buildContextBody(null, null, settings)
         val body = buildJsonObject {
@@ -105,7 +105,7 @@ object YoutubeRequestHelper {
         url: String,
         idName: String,
         id: String,
-        settings: UmihiSettings? = null
+        settings: PixelMusicSettings? = null
     ): String {
         val body =
             YoutubeAuthHelper.buildContextBody(idName, id, settings)

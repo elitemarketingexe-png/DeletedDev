@@ -4,13 +4,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.unshoo.pixelmusic.data.model.youtube.Playlist
 import com.unshoo.pixelmusic.data.model.youtube.Song
 import kotlin.math.abs
 
-object UmihiNotificationManager {
+object PixelMusicNotificationManager {
     private lateinit var notificationManager: NotificationManager
     private lateinit var pendingIntent: PendingIntent
 
@@ -34,11 +35,12 @@ object UmihiNotificationManager {
                     it.importance
                 ).apply {
                     description = it.description
+                    setShowBadge(false)
                 }
                 notificationManager.createNotificationChannel(notificationChannel)
             }
         } else {
-            UmihiHelper.printe("Could not start the notification channels because the android version is too old")
+            PixelMusicHelper.printe("Could not start notification channels because the Android version is too old")
         }
     }
 
@@ -52,16 +54,21 @@ object UmihiNotificationManager {
             init(context)
         }
 
-        val notification = getBaseNotification(context, NotificationChannels.PLAYLIST_DOWNLOAD)
+        val percent = if (totalSongs > 0) ((currentSong.toFloat() / totalSongs) * 100).toInt().coerceIn(0, 100) else 0
+        val contentText = "$currentSong of $totalSongs songs ($percent%)"
+
+        val builder = getBaseNotification(context, NotificationChannels.PLAYLIST_DOWNLOAD)
             .setContentTitle(playlist.info.title)
-            .setContentText("$currentSong of $totalSongs songs downloaded")
+            .setContentText(contentText)
+            .setSubText("Pixel Music Offline Download")
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setProgress(totalSongs, currentSong, false)
             .setOngoing(true)
             .setGroup(NotificationChannels.PLAYLIST_DOWNLOAD.group)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+
+        val notification = builder.build()
 
         // Android 16 Live Updates: render download progress as an island-style status-bar pill.
         com.unshoo.pixelmusic.data.service.LiveUpdateUtil.promote(notification)
@@ -78,17 +85,21 @@ object UmihiNotificationManager {
             init(context)
         }
 
+        val id = getNotificationID(playlist.info.id)
+        notificationManager.cancel(id)
+
         val notification = getBaseNotification(context, NotificationChannels.PLAYLIST_DOWNLOAD)
             .setContentTitle(playlist.info.title)
-            .setContentText("Playlist downloaded")
+            .setContentText("Playlist saved for offline listening")
+            .setSubText("Download complete")
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setAutoCancel(true)
             .setGroup(NotificationChannels.PLAYLIST_DOWNLOAD.group)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        notificationManager.notify(getNotificationID(playlist.info.id), notification)
+        notificationManager.notify(id, notification)
         updateGroupSummary(context)
     }
 
@@ -100,8 +111,11 @@ object UmihiNotificationManager {
             init(context)
         }
 
+        val id = getNotificationID(playlist.info.id)
+        notificationManager.cancel(id)
+
         val notification = getBaseNotification(context, NotificationChannels.PLAYLIST_DOWNLOAD)
-            .setContentTitle("Download failed")
+            .setContentTitle("Download issue")
             .setContentText("Failed to download ${playlist.info.title}")
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setAutoCancel(true)
@@ -110,7 +124,7 @@ object UmihiNotificationManager {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
 
-        notificationManager.notify(getNotificationID(playlist.info.id), notification)
+        notificationManager.notify(id, notification)
         updateGroupSummary(context)
     }
 
@@ -118,14 +132,7 @@ object UmihiNotificationManager {
         context: Context,
         playlist: Playlist
     ) {
-        if (!::notificationManager.isInitialized) {
-            init(context)
-        }
-        val id = getNotificationID(playlist.info.id)
-        try {
-            notificationManager.cancel(id)
-            notificationManager.cancel(0)
-        } catch (_: Exception) {}
+        cancelPlaylistDownloadNotification(context, playlist.info.id)
     }
 
     fun cancelPlaylistDownloadNotification(context: Context, playlistId: String) {
@@ -142,8 +149,8 @@ object UmihiNotificationManager {
     private fun updateGroupSummary(context: Context) {
         val summaryNotification =
             getBaseNotification(context, NotificationChannels.PLAYLIST_DOWNLOAD)
-                .setContentTitle("Download finished")
-                .setContentText("")
+                .setContentTitle("Pixel Music Downloads")
+                .setContentText("Downloads summary")
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setGroup(NotificationChannels.PLAYLIST_DOWNLOAD.group)
                 .setGroupSummary(true)
@@ -163,7 +170,7 @@ object UmihiNotificationManager {
         }
 
         val notification = getBaseNotification(context, NotificationChannels.SONG_DOWNLOAD)
-            .setContentTitle("Download failed")
+            .setContentTitle("Download issue")
             .setContentText("Failed to download ${song.title} - ${song.artist}")
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setAutoCancel(true)
@@ -185,7 +192,8 @@ object UmihiNotificationManager {
 
         val notification = getBaseNotification(context, NotificationChannels.SONG_DOWNLOAD)
             .setContentTitle(song.title)
-            .setContentText("Song downloaded")
+            .setContentText("Song saved for offline listening")
+            .setSubText(song.artist)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setAutoCancel(true)
             .setGroup(NotificationChannels.SONG_DOWNLOAD.group)

@@ -28,11 +28,11 @@ object DownloadHelper {
         return withContext(Dispatchers.IO) {
             try {
                 val imageDir =
-                    UmihiHelper.getDownloadDirectory(context, Constants.Downloads.THUMBNAILS_FOLDER)
+                    PixelMusicHelper.getDownloadDirectory(context, Constants.Downloads.THUMBNAILS_FOLDER)
                 val imageFile = File(imageDir, "$id.jpg")
 
                 if (imageFile.exists()) {
-                    UmihiHelper.printd("Song Image $id was already downloaded")
+                    PixelMusicHelper.printd("Song Image $id was already downloaded")
                     return@withContext imageFile
                 }
 
@@ -44,7 +44,7 @@ object DownloadHelper {
                 imageFile
 
             } catch (e: Exception) {
-                UmihiHelper.printe(
+                PixelMusicHelper.printe(
                     tag = "PlaylistDownloadWorker",
                     message = "Error Downloading Thumbnail",
                     exception = e
@@ -75,12 +75,12 @@ object DownloadHelper {
                     return@withContext existingFile.uri.toString()
                 }
             } catch (e: Exception) {
-                UmihiHelper.printe("Error checking custom download path exists: ${e.message}")
+                PixelMusicHelper.printe("Error checking custom download path exists: ${e.message}")
             }
         }
 
         val audioDir =
-            UmihiHelper.getDownloadDirectory(context, Constants.Downloads.AUDIO_FILES_FOLDER)
+            PixelMusicHelper.getDownloadDirectory(context, Constants.Downloads.AUDIO_FILES_FOLDER)
         val outputFile = File(audioDir, "${song.youtubeId}.webm")
 
         if (outputFile.exists() && outputFile.length() > 0) {
@@ -98,19 +98,23 @@ object DownloadHelper {
 
         for (attempt in 1..maxRetries) {
             try {
-                // Fetch HIGHEST QUALITY audio stream URL (maxBitrateKbps = 0)
+                // Invalidate any cached/expired stream URL to guarantee fresh highest-quality URL
+                YoutubeHelper.invalidateStreamCache(song.youtubeId)
                 val url = YoutubeHelper.getSongPlayerUrlWithQuality(context, song, maxBitrateKbps = 0)
                 if (url.isBlank()) {
                     throw IOException("Empty stream URL for song ${song.youtubeId}")
                 }
 
+                // YouTube googlevideo.com requires Range header (e.g. Range: bytes=0-) for audio streaming downloads
                 val req = Request.Builder()
                     .url(url)
                     .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
+                    .header("Range", "bytes=0-")
+                    .header("Accept", "*/*")
                     .build()
 
                 client.newCall(req).execute().use { response ->
-                    if (!response.isSuccessful) {
+                    if (!response.isSuccessful && response.code != 206) {
                         throw IOException("Failed download (HTTP ${response.code}) for song ${song.youtubeId}")
                     }
 
@@ -153,14 +157,14 @@ object DownloadHelper {
             } catch (e: Exception) {
                 lastException = e
                 cleanupTempFile()
-                UmihiHelper.printe("Download attempt $attempt/$maxRetries failed for ${song.title}: ${e.message}")
+                PixelMusicHelper.printe("Download attempt $attempt/$maxRetries failed for ${song.title}: ${e.message}")
                 if (attempt < maxRetries) {
                     kotlinx.coroutines.delay(attempt * 600L)
                 }
             }
         }
 
-        UmihiHelper.printe("All $maxRetries download attempts failed for ${song.title}")
+        PixelMusicHelper.printe("All $maxRetries download attempts failed for ${song.title}")
         return@withContext null
     }
 
@@ -170,8 +174,8 @@ object DownloadHelper {
         }.getOrDefault(1536).coerceIn(0, 10240)
         if (limitMb <= 0) return@withContext
 
-        val audioDir = UmihiHelper.getDownloadDirectory(context, Constants.Downloads.AUDIO_FILES_FOLDER)
-        val imageDir = UmihiHelper.getDownloadDirectory(context, Constants.Downloads.THUMBNAILS_FOLDER)
+        val audioDir = PixelMusicHelper.getDownloadDirectory(context, Constants.Downloads.AUDIO_FILES_FOLDER)
+        val imageDir = PixelMusicHelper.getDownloadDirectory(context, Constants.Downloads.THUMBNAILS_FOLDER)
         val limitBytes = limitMb.toLong() * 1024L * 1024L
 
         fun allCacheFiles(): List<File> = listOf(audioDir, imageDir)
@@ -226,7 +230,7 @@ object DownloadHelper {
 
             return destinationFile
         } catch (e: Exception) {
-            UmihiHelper.printe("Failed to copy to public downloads: ${e.message}", exception = e)
+            PixelMusicHelper.printe("Failed to copy to public downloads: ${e.message}", exception = e)
             return null
         }
     }

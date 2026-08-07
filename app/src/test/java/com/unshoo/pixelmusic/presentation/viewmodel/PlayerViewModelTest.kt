@@ -164,7 +164,7 @@ class PlayerViewModelTest {
         coEvery { mockAiPreferencesRepository.aiProvider } returns flowOf("GEMINI")
         coEvery { mockAiPreferencesRepository.geminiApiKey } returns flowOf("")
         coEvery { mockAiPreferencesRepository.deepseekApiKey } returns flowOf("")
-        every { mockYoutubeDatastoreRepository.settings } returns flowOf(com.unshoo.pixelmusic.data.model.youtube.UmihiSettings())
+        every { mockYoutubeDatastoreRepository.settings } returns flowOf(com.unshoo.pixelmusic.data.model.youtube.PixelMusicSettings())
 
         // Mock StateHolders Flows
         every { mockLibraryStateHolder.allSongs } returns _allSongsFlow

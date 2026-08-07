@@ -1,7 +1,7 @@
 package com.unshoo.pixelmusic.data.remote.youtube
 
 import com.unshoo.pixelmusic.data.model.youtube.Cookies
-import com.unshoo.pixelmusic.data.model.youtube.UmihiSettings
+import com.unshoo.pixelmusic.data.model.youtube.PixelMusicSettings
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -13,7 +13,7 @@ import kotlin.text.Charsets.UTF_8
 
 object YoutubeAuthHelper {
 
-    fun buildContextBody(idName: String?, id: String?, settings: UmihiSettings?): JsonObject {
+    fun buildContextBody(idName: String?, id: String?, settings: PixelMusicSettings?): JsonObject {
         return buildJsonObject {
             val user = buildJsonObject {
                 put("lockedSafetyMode", JsonPrimitive(false))

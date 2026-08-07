@@ -1,6 +1,6 @@
 package com.unshoo.pixelmusic.data.model.youtube
 
-data class UmihiSettings(
+data class PixelMusicSettings(
     val updateChannel: UpdateChannel = UpdateChannel.Stable,
     val cookies: Cookies = Cookies(),
     val dataSyncId: String = "",

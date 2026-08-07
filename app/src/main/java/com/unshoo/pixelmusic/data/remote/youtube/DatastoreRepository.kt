@@ -9,7 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.unshoo.pixelmusic.data.model.youtube.Cookies
-import com.unshoo.pixelmusic.data.model.youtube.UmihiSettings
+import com.unshoo.pixelmusic.data.model.youtube.PixelMusicSettings
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
@@ -53,8 +53,8 @@ open class DatastoreRepository(private val context: Context) {
     }
 
     open val settings = context.youtubeDataStore.data.map {
-        val updateChannel = it[PreferenceKeys.UPDATE_CHANNEL]?.let { value -> UmihiSettings.UpdateChannel.valueOf(value) }
-            ?: UmihiSettings.UpdateChannel.Stable
+        val updateChannel = it[PreferenceKeys.UPDATE_CHANNEL]?.let { value -> PixelMusicSettings.UpdateChannel.valueOf(value) }
+            ?: PixelMusicSettings.UpdateChannel.Stable
         val showPodcastPlaylist = it[PreferenceKeys.SHOW_PODCAST_PLAYLIST] ?: true
         val useSpecialLanguage = it[PreferenceKeys.USE_SPECIAL_LANGUAGE] ?: false
         val useAudioOffload = it[PreferenceKeys.USE_AUDIO_OFFLOAD] ?: false
@@ -76,7 +76,7 @@ open class DatastoreRepository(private val context: Context) {
         val cookies = cookies.first()
         val dataSyncId = dataSyncId.first()
 
-        UmihiSettings(
+        PixelMusicSettings(
             updateChannel = updateChannel,
             showPodcastPlaylist = showPodcastPlaylist,
             cookies = cookies,

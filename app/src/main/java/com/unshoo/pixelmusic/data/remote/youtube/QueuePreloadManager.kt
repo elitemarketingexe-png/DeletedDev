@@ -143,13 +143,13 @@ object QueuePreloadManager {
                 val thumbnailUrl = song.thumbnailHref
                 if (thumbnailUrl.isNotBlank()) {
                     try {
-                        val imageDir = UmihiHelper.getDownloadDirectory(
+                        val imageDir = PixelMusicHelper.getDownloadDirectory(
                             ctx,
                             Constants.Downloads.THUMBNAILS_FOLDER
                         )
                         val destFile = File(imageDir, "$videoId.jpg")
                         if (!destFile.exists()) {
-                            val artBytes = UmihiHelper.fetchArtworkBytes(thumbnailUrl)
+                            val artBytes = PixelMusicHelper.fetchArtworkBytes(thumbnailUrl)
                             if (artBytes != null && artBytes.isNotEmpty()) {
                                 destFile.writeBytes(artBytes)
                             }

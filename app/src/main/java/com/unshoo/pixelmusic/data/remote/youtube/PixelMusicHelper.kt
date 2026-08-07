@@ -14,8 +14,8 @@ import java.io.File
 import java.nio.file.Paths
 import kotlin.time.measureTimedValue
 
-object UmihiHelper {
-    const val TAG = "UmihiPrint"
+object PixelMusicHelper {
+    const val TAG = "PixelMusicPrint"
     const val WEAROS_MAX_IMAGE_SIZE = 720
 
     inline fun <T> benchmark(
@@ -23,7 +23,7 @@ object UmihiHelper {
         block: () -> T
     ): T {
         val result = measureTimedValue(block)
-        printd(tag = "UmihiBench", message = "$label: ${result.duration.inWholeMilliseconds} ms")
+        printd(tag = "PixelMusicBench", message = "$label: ${result.duration.inWholeMilliseconds} ms")
         return result.value
     }
 
@@ -77,7 +77,7 @@ object UmihiHelper {
     }
 }
 
-fun ByteArray.cappedTo(maxSize: Int = UmihiHelper.WEAROS_MAX_IMAGE_SIZE): ByteArray? {
+fun ByteArray.cappedTo(maxSize: Int = PixelMusicHelper.WEAROS_MAX_IMAGE_SIZE): ByteArray? {
     val bitmap = BitmapFactory.decodeByteArray(this, 0, size) ?: return null
     val capped = if (bitmap.width <= maxSize && bitmap.height <= maxSize) bitmap else {
         val scale = maxSize.toFloat() / maxOf(bitmap.width, bitmap.height)
