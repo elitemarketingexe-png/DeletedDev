@@ -6086,6 +6086,7 @@ class PlayerViewModel @Inject constructor(
      */
     fun cancelPlaylistDownload(playlistId: String) {
         WorkManager.getInstance(context).cancelAllWorkByTag(playlistDownloadTag(playlistId))
+        com.unshoo.pixelmusic.data.remote.youtube.UmihiNotificationManager.cancelPlaylistDownloadNotification(context, playlistId)
     }
 
     data class PlaylistDownloadStatus(

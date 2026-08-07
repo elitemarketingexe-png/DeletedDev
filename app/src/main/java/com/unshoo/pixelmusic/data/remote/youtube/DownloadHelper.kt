@@ -57,7 +57,7 @@ object DownloadHelper {
     suspend fun downloadAudio(
         context: Context,
         song: Song,
-        connections: Int = 8
+        connections: Int = 1
     ): String? = withContext(Dispatchers.IO) {
 
         val repo = DatastoreRepository(context)
@@ -83,118 +83,85 @@ object DownloadHelper {
             UmihiHelper.getDownloadDirectory(context, Constants.Downloads.AUDIO_FILES_FOLDER)
         val outputFile = File(audioDir, "${song.youtubeId}.webm")
 
-        if (outputFile.exists()) {
+        if (outputFile.exists() && outputFile.length() > 0) {
             return@withContext outputFile.absolutePath
         }
 
-        val url = YoutubeHelper.getSongPlayerUrl(context, song)
+        val tempFile = File(audioDir, "${song.youtubeId}.tmp")
 
-        val total = try {
-            val headReq = Request.Builder()
-                .url(url)
-                .header("Range", "bytes=0-0")
-                .build()
+        fun cleanupTempFile() {
+            try { tempFile.delete() } catch (_: Exception) {}
+        }
 
-            client.newCall(headReq).execute().use { headRes ->
-                if (!headRes.isSuccessful) {
-                    return@withContext null
+        val maxRetries = 3
+        var lastException: Exception? = null
+
+        for (attempt in 1..maxRetries) {
+            try {
+                // Fetch HIGHEST QUALITY audio stream URL (maxBitrateKbps = 0)
+                val url = YoutubeHelper.getSongPlayerUrlWithQuality(context, song, maxBitrateKbps = 0)
+                if (url.isBlank()) {
+                    throw IOException("Empty stream URL for song ${song.youtubeId}")
                 }
-                headRes.headers["Content-Range"]
-                    ?.substringAfter("/")
-                    ?.toLongOrNull()
-                    ?: return@withContext null
-            }
-        } catch (e: Exception) {
-            UmihiHelper.printe("Failed to get content length: ${e.message}")
-            return@withContext null
-        }
 
-        val chunkSize = total / connections
-        // Pre-compute every chunk's temp file path up front (instead of only tracking
-        // successfully-awaited results). This guarantees we always know the full set of
-        // files that *could* have been written, so cleanup on cancel/failure is complete
-        // even when some chunks finished before a sibling chunk failed or the download
-        // was cancelled. Previously, only chunks captured by a completed `awaitAll()` were
-        // tracked, so any chunk that finished successfully right before a cancellation or a
-        // sibling failure was silently leaked to disk forever (never cleaned up, since
-        // enforceStorageLimit only runs after a *successful* download).
-        val tempFiles = (0 until connections).map { i -> File(audioDir, "${song.youtubeId}.part$i") }
+                val req = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
+                    .build()
 
-        fun cleanupTempFiles() {
-            tempFiles.forEach { it.delete() }
-        }
-
-        try {
-            (0 until connections).map { i ->
-                async {
-                    val start = i * chunkSize
-                    val end = if (i == connections - 1) total - 1 else (start + chunkSize - 1)
-                    val temp = tempFiles[i]
-
-                    val req = Request.Builder()
-                        .url(url)
-                        .header("Range", "bytes=$start-$end")
-                        .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
-                        .build()
-
-                    client.newCall(req).execute().use { response ->
-                        if (!response.isSuccessful) {
-                            throw IOException("Failed to download chunk $i: ${response.code}")
-                        }
-
-                        response.body?.byteStream()?.use { input ->
-                            FileOutputStream(temp).use { output ->
-                                input.copyTo(output)
-                            }
-                        } ?: throw IOException("Empty response body for chunk $i")
+                client.newCall(req).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw IOException("Failed download (HTTP ${response.code}) for song ${song.youtubeId}")
                     }
 
-                    temp
-                }
-            }.awaitAll()
-
-            if (customPath.isNotBlank()) {
-                val treeUri = Uri.parse(customPath)
-                val documentDir = DocumentFile.fromTreeUri(context, treeUri)
-                val file = documentDir?.createFile("audio/webm", fileName)
-                val outputUri = file?.uri
-                if (outputUri != null) {
-                    context.contentResolver.openOutputStream(outputUri)?.use { out ->
-                        tempFiles.sortedBy { it.name }.forEach { part ->
-                            part.inputStream().use { it.copyTo(out) }
-                            part.delete()
+                    response.body?.byteStream()?.use { input ->
+                        FileOutputStream(tempFile).use { output ->
+                            input.copyTo(output)
                         }
+                    } ?: throw IOException("Empty response body for song ${song.youtubeId}")
+                }
+
+                if (!tempFile.exists() || tempFile.length() <= 0) {
+                    throw IOException("Downloaded file is zero bytes")
+                }
+
+                // Copy to custom path if set
+                if (customPath.isNotBlank()) {
+                    val treeUri = Uri.parse(customPath)
+                    val documentDir = DocumentFile.fromTreeUri(context, treeUri)
+                    val file = documentDir?.createFile("audio/webm", fileName)
+                    val outputUri = file?.uri
+                    if (outputUri != null) {
+                        context.contentResolver.openOutputStream(outputUri)?.use { out ->
+                            tempFile.inputStream().use { it.copyTo(out) }
+                        }
+                        cleanupTempFile()
+                        return@withContext outputUri.toString()
                     }
-                    return@withContext outputUri.toString()
+                }
+
+                // Copy/rename to final output destination
+                tempFile.copyTo(outputFile, overwrite = true)
+                cleanupTempFile()
+
+                enforceStorageLimit(context, keepFile = outputFile)
+                return@withContext outputFile.absolutePath
+
+            } catch (e: CancellationException) {
+                cleanupTempFile()
+                throw e
+            } catch (e: Exception) {
+                lastException = e
+                cleanupTempFile()
+                UmihiHelper.printe("Download attempt $attempt/$maxRetries failed for ${song.title}: ${e.message}")
+                if (attempt < maxRetries) {
+                    kotlinx.coroutines.delay(attempt * 600L)
                 }
             }
-
-            FileOutputStream(outputFile).use { out ->
-                tempFiles.sortedBy { it.name }.forEach { part ->
-                    part.inputStream().use { it.copyTo(out) }
-                    part.delete()
-                }
-            }
-
-            enforceStorageLimit(context, keepFile = outputFile)
-            return@withContext outputFile.absolutePath
-
-        } catch (e: CancellationException) {
-            // Never swallow cancellation: doing so breaks structured concurrency and can make
-            // a user-initiated pause/cancel look like a normal function return to callers
-            // (e.g. WorkManager workers up the stack), which previously caused false
-            // "download failed" states. Clean up partial files, then rethrow so cancellation
-            // propagates correctly.
-            UmihiHelper.printd("Download cancelled for ${song.youtubeId}, cleaning up partial files")
-            cleanupTempFiles()
-            outputFile.delete()
-            throw e
-        } catch (e: Exception) {
-            UmihiHelper.printe("Download failed for ${song.youtubeId}: ${e.message}")
-            cleanupTempFiles()
-            outputFile.delete()
-            return@withContext null
         }
+
+        UmihiHelper.printe("All $maxRetries download attempts failed for ${song.title}")
+        return@withContext null
     }
 
     private suspend fun enforceStorageLimit(context: Context, keepFile: File? = null) = withContext(Dispatchers.IO) {

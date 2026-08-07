@@ -121,21 +121,22 @@ object UmihiNotificationManager {
         if (!::notificationManager.isInitialized) {
             init(context)
         }
+        val id = getNotificationID(playlist.info.id)
+        try {
+            notificationManager.cancel(id)
+            notificationManager.cancel(0)
+        } catch (_: Exception) {}
+    }
 
-        val notification = getBaseNotification(context, NotificationChannels.PLAYLIST_DOWNLOAD)
-            .setContentTitle(playlist.info.title)
-            .setContentText("Download canceled")
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setProgress(0, 0, false)
-            .setOngoing(false)
-            .setAutoCancel(true)
-            .setGroup(NotificationChannels.PLAYLIST_DOWNLOAD.group)
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-
-        notificationManager.notify(getNotificationID(playlist.info.id), notification)
-        updateGroupSummary(context)
+    fun cancelPlaylistDownloadNotification(context: Context, playlistId: String) {
+        if (!::notificationManager.isInitialized) {
+            init(context)
+        }
+        try {
+            val id = getNotificationID(playlistId)
+            notificationManager.cancel(id)
+            notificationManager.cancel(0)
+        } catch (_: Exception) {}
     }
 
     private fun updateGroupSummary(context: Context) {

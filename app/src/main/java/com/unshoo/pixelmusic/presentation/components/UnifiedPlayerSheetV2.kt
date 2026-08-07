@@ -542,7 +542,7 @@ fun UnifiedPlayerSheetV2(
         onDraggingPlayerAreaChange = sheetBackAndDragState.onDraggingPlayerAreaChange
     )
 
-    if (!actuallyShowSheetContent) return
+    if (!actuallyShowSheetContent || !showPlayerContentArea) return
 
     val playerSheetSemanticsDescription = remember(
         currentSheetContentState,
