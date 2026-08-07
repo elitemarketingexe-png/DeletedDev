@@ -63,7 +63,7 @@ object DownloadHelper {
     suspend fun downloadAudio(
         context: Context,
         song: Song,
-        connections: Int = 1
+        connections: Int = 8
     ): String? = withContext(Dispatchers.IO) {
 
         val repo = DatastoreRepository(context)
@@ -111,24 +111,88 @@ object DownloadHelper {
                     throw IOException("Empty stream URL for song ${song.youtubeId}")
                 }
 
-                // YouTube googlevideo.com requires Range header (e.g. Range: bytes=0-) for audio streaming downloads
-                val req = Request.Builder()
-                    .url(url)
-                    .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
-                    .header("Range", "bytes=0-")
-                    .header("Accept", "*/*")
-                    .build()
+                // Determine total length for multi-part parallel downloading if requested
+                var totalLength: Long = -1L
+                try {
+                    val headReq = Request.Builder()
+                        .url(url)
+                        .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
+                        .header("Range", "bytes=0-0")
+                        .build()
 
-                client.newCall(req).execute().use { response ->
-                    if (!response.isSuccessful && response.code != 206) {
-                        throw IOException("Failed download (HTTP ${response.code}) for song ${song.youtubeId}")
+                    client.newCall(headReq).execute().use { res ->
+                        val contentRange = res.header("Content-Range")
+                        if (contentRange != null && contentRange.contains("/")) {
+                            totalLength = contentRange.substringAfter("/").toLongOrNull() ?: -1L
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                val numConnections = connections.coerceIn(1, 16)
+                if (totalLength > 0 && numConnections > 1) {
+                    val partFiles = (0 until numConnections).map { i -> File(audioDir, "${song.youtubeId}.part$i") }
+                    fun cleanupPartFiles() {
+                        partFiles.forEach { runCatching { it.delete() } }
                     }
 
-                    response.body?.byteStream()?.use { input ->
-                        FileOutputStream(tempFile).use { output ->
-                            input.copyTo(output)
+                    try {
+                        val chunkSize = totalLength / numConnections
+                        (0 until numConnections).map { i ->
+                            async {
+                                val start = i * chunkSize
+                                val end = if (i == numConnections - 1) totalLength - 1 else (start + chunkSize - 1)
+                                val partFile = partFiles[i]
+
+                                val req = Request.Builder()
+                                    .url(url)
+                                    .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
+                                    .header("Range", "bytes=$start-$end")
+                                    .header("Accept", "*/*")
+                                    .build()
+
+                                client.newCall(req).execute().use { response ->
+                                    if (!response.isSuccessful && response.code != 206) {
+                                        throw IOException("Failed chunk $i (HTTP ${response.code})")
+                                    }
+                                    response.body?.byteStream()?.use { input ->
+                                        FileOutputStream(partFile).use { output ->
+                                            input.copyTo(output)
+                                        }
+                                    } ?: throw IOException("Empty body for chunk $i")
+                                }
+                            }
+                        }.awaitAll()
+
+                        FileOutputStream(tempFile).use { out ->
+                            partFiles.forEach { part ->
+                                part.inputStream().use { it.copyTo(out) }
+                            }
                         }
-                    } ?: throw IOException("Empty response body for song ${song.youtubeId}")
+                        cleanupPartFiles()
+                    } catch (e: Exception) {
+                        cleanupPartFiles()
+                        throw e
+                    }
+                } else {
+                    // Single stream download with Range header
+                    val req = Request.Builder()
+                        .url(url)
+                        .header("User-Agent", Constants.YoutubeApi.USER_AGENT)
+                        .header("Range", "bytes=0-")
+                        .header("Accept", "*/*")
+                        .build()
+
+                    client.newCall(req).execute().use { response ->
+                        if (!response.isSuccessful && response.code != 206) {
+                            throw IOException("Failed download (HTTP ${response.code}) for song ${song.youtubeId}")
+                        }
+
+                        response.body?.byteStream()?.use { input ->
+                            FileOutputStream(tempFile).use { output ->
+                                input.copyTo(output)
+                            }
+                        } ?: throw IOException("Empty response body for song ${song.youtubeId}")
+                    }
                 }
 
                 if (!tempFile.exists() || tempFile.length() <= 0) {
