@@ -22,7 +22,13 @@ import java.net.URL
 import kotlin.coroutines.cancellation.CancellationException
 
 object DownloadHelper {
-    private val client = YoutubeHelper.client
+    private val client = YoutubeHelper.client.newBuilder()
+        .callTimeout(0, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
 
     suspend fun downloadImage(context: Context, imageUrl: String, id: String): File? {
         return withContext(Dispatchers.IO) {
