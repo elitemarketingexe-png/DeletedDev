@@ -208,12 +208,14 @@ class ExploreViewModel @Inject constructor(
                 // Extract personalized new releases directly from user's YouTube Home feed and account chips
                 var personalizedNewReleases = home.sections.filter { section ->
                     val t = section.title.lowercase()
-                    t.contains("new release") || t.contains("new releases") ||
-                    t.contains("new album") || t.contains("latest release") ||
-                    t.contains("new music") || t.contains("recent release") ||
-                    t.contains("novedades") || t.contains("nouveautés") ||
-                    t.contains("veröffentlichungen") || t.contains("release radar") ||
-                    t.contains("new for you")
+                    !t.contains("video") && !t.contains("videos") && (
+                        t.contains("new release") || t.contains("new releases") ||
+                        t.contains("new album") || t.contains("latest release") ||
+                        t.contains("new music") || t.contains("recent release") ||
+                        t.contains("novedades") || t.contains("nouveautés") ||
+                        t.contains("veröffentlichungen") || t.contains("release radar") ||
+                        t.contains("new for you")
+                    )
                 }.flatMap { it.items }.mapNotNull { item ->
                     when (item) {
                         is AlbumItem -> item
@@ -234,7 +236,9 @@ class ExploreViewModel @Inject constructor(
                 if (personalizedNewReleases.isEmpty()) {
                     val newReleaseChip = home.chips?.find { chip ->
                         val ct = chip.title.lowercase()
-                        ct.contains("new release") || ct.contains("new releases") || ct == "new" || ct == "nouveautés" || ct == "novedades"
+                        !ct.contains("video") && !ct.contains("videos") && (
+                            ct.contains("new release") || ct.contains("new releases") || ct == "new" || ct == "nouveautés" || ct == "novedades"
+                        )
                     }
                     val chipEndpoint = newReleaseChip?.endpoint
                     if (chipEndpoint != null) {
