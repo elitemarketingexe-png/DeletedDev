@@ -1,4 +1,4 @@
-﻿package com.unshoo.pixelmusic.data.remote.youtube
+package com.unshoo.pixelmusic.data.remote.youtube
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -73,7 +73,7 @@ object PixelMusicNotificationManager {
         val builder = baseBuilder(context, Channel.PLAYLIST_DOWNLOAD)
             .setContentTitle(playlist.info.title.truncate(40))
             .setContentText("$currentSong of $totalSongs · $percent%")
-            .setSubText("PixelMusic · Downloading")
+            .setSubText("Downloading")
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setProgress(totalSongs, currentSong, false)
             .setOngoing(true)
@@ -155,7 +155,7 @@ object PixelMusicNotificationManager {
         val builder = baseBuilder(context, Channel.SONG_DOWNLOAD)
             .setContentTitle(song.title.truncate(40))
             .setContentText(if (indeterminate) "Starting…" else "$percent%")
-            .setSubText("PixelMusic · Downloading")
+            .setSubText("Downloading")
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setProgress(100, percent, indeterminate)
             .setOngoing(true)
