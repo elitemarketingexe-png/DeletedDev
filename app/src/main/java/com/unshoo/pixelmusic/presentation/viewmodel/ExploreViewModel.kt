@@ -223,9 +223,9 @@ class ExploreViewModel @Inject constructor(
                             browseId = item.id,
                             playlistId = item.id,
                             title = item.title,
-                            artists = listOfNotNull(item.author?.let { unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem(name = it, id = null) }),
+                            artists = listOfNotNull(item.author),
                             year = null,
-                            thumbnail = item.thumbnail,
+                            thumbnail = item.thumbnail ?: "",
                             explicit = false
                         )
                         else -> null
@@ -253,9 +253,9 @@ class ExploreViewModel @Inject constructor(
                                         browseId = item.id,
                                         playlistId = item.id,
                                         title = item.title,
-                                        artists = listOfNotNull(item.author?.let { unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem(name = it, id = null) }),
+                                        artists = listOfNotNull(item.author),
                                         year = null,
-                                        thumbnail = item.thumbnail,
+                                        thumbnail = item.thumbnail ?: "",
                                         explicit = false
                                     )
                                     else -> null
