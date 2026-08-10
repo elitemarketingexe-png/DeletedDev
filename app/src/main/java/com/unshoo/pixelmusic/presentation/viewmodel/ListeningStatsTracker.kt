@@ -784,12 +784,15 @@ class ListeningStatsTracker @Inject constructor(
         lastPositionMs: Long,
         durationMs: Long
     ): Boolean {
-        if (listenedMs >= MIN_PLAYBACK_LISTEN_MS) return true
-        if (durationMs > 0L && durationMs != C.TIME_UNSET) {
-            val minRequiredListeningMs = (durationMs * 0.30f).toLong().coerceAtMost(MIN_PLAYBACK_LISTEN_MS)
-            return listenedMs >= minRequiredListeningMs || lastPositionMs >= minRequiredListeningMs
+        // Minimum required listening threshold: 15 seconds (or 50% of short tracks under 30s)
+        val requiredThresholdMs = if (durationMs > 0L && durationMs != C.TIME_UNSET && durationMs < 30_000L) {
+            (durationMs * 0.50f).toLong().coerceAtLeast(3_000L)
+        } else {
+            MIN_PLAYBACK_LISTEN_MS
         }
-        return false
+        // STRICT: Require ACTUAL elapsed listening time (listenedMs).
+        // Seeking/scrubbing position (lastPositionMs) is NEVER used to validate a completed play.
+        return listenedMs >= requiredThresholdMs
     }
 
     companion object {
@@ -800,21 +803,11 @@ class ListeningStatsTracker @Inject constructor(
         private const val AUTO_CACHE_PLAY_COUNT_THRESHOLD = 3
 
         /**
-         * BUGFIX (duplicate/conflicting telemetry writers): ListeningStatsTracker used to run a
-         * full second implementation of YouTube playback-start/watchtime pinging (its own CPN,
-         * its own timers, its own registerPlayback call) completely independently of
-         * MusicService's YouTubeTelemetryManager. Having two - really three, PlayerViewModel had
-         * a third - uncoordinated writers each report "playback started"/"watchtime" for the
-         * same video with different CPNs around the same time is a major contributor to
-         * unreliable/out-of-order YT Music history sync.
-         *
-         * MusicService's telemetry manager is now the single authoritative remote writer (it
-         * observes the actual MediaSession player and a canonical, correctly-extracted video ID).
-         * This flag gates the entire redundant tracking path, including URL resolution and CPN
-         * timing. Local playback completion, Recently Played, stats and Daily Mix scoring do not
-         * depend on YouTube telemetry and are tracked independently.
+         * YouTube telemetry remote history writer.
+         * Resolves tracking URLs, sends playback start pings, registers playback with InnerTube,
+         * and reports watchtime heartbeats so YouTube Music account history stays in sync.
          */
-        private const val SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY = false
+        private const val SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY = true
 
         // BUGFIX (freeze after long idle): upper bound for the synchronous, monitor-holding
         // persistence path in persistPlayback(forceSynchronous = true). See the call site for

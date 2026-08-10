@@ -12,6 +12,7 @@ import com.google.android.gms.cast.framework.media.NotificationOptions
 class CastOptionsProvider : OptionsProvider {
     override fun getCastOptions(context: Context): CastOptions {
         val notificationOptions = NotificationOptions.Builder()
+            .setTargetActivityClassName("com.unshoo.pixelmusic.MainActivity")
             .setActions(
                 listOf(
                     MediaIntentReceiver.ACTION_TOGGLE_PLAYBACK,

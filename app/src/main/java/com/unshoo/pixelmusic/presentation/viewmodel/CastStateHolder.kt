@@ -53,7 +53,7 @@ class CastStateHolder @Inject constructor(
                     // Returns null until initialized on the main thread or cached.
                     null
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Timber.tag(CAST_STATE_TAG).e(e, "Failed to get CastContext/SessionManager")
                 null
             }
