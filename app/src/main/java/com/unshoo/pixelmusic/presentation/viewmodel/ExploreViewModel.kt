@@ -205,11 +205,61 @@ class ExploreViewModel @Inject constructor(
                     !title.contains("quickpicks")
                 }
 
-                // Extract personalized new releases directly from user's YouTube Home feed
-                val personalizedNewReleases = home.sections.filter {
-                    val t = it.title.lowercase()
-                    t.contains("new release") || t.contains("new releases")
-                }.flatMap { it.items }.filterIsInstance<AlbumItem>()
+                // Extract personalized new releases directly from user's YouTube Home feed and account chips
+                var personalizedNewReleases = home.sections.filter { section ->
+                    val t = section.title.lowercase()
+                    t.contains("new release") || t.contains("new releases") ||
+                    t.contains("new album") || t.contains("latest release") ||
+                    t.contains("new music") || t.contains("recent release") ||
+                    t.contains("novedades") || t.contains("nouveautés") ||
+                    t.contains("veröffentlichungen") || t.contains("release radar") ||
+                    t.contains("new for you")
+                }.flatMap { it.items }.mapNotNull { item ->
+                    when (item) {
+                        is AlbumItem -> item
+                        is PlaylistItem -> AlbumItem(
+                            browseId = item.id,
+                            playlistId = item.id,
+                            title = item.title,
+                            artists = listOfNotNull(item.author?.let { unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem(name = it, id = null) }),
+                            year = null,
+                            thumbnail = item.thumbnail,
+                            explicit = false
+                        )
+                        else -> null
+                    }
+                }.distinctBy { it.browseId }
+
+                // If home page section didn't contain new releases directly, resolve user's account "New Releases" chip endpoint
+                if (personalizedNewReleases.isEmpty()) {
+                    val newReleaseChip = home.chips?.find { chip ->
+                        val ct = chip.title.lowercase()
+                        ct.contains("new release") || ct.contains("new releases") || ct == "new" || ct == "nouveautés" || ct == "novedades"
+                    }
+                    val chipEndpoint = newReleaseChip?.endpoint
+                    if (chipEndpoint != null) {
+                        val fetchedExplore = runCatching {
+                            YouTube.explore(browseId = chipEndpoint.browseId, params = chipEndpoint.params).getOrNull()
+                        }.getOrNull()
+                        if (fetchedExplore != null) {
+                            personalizedNewReleases = fetchedExplore.sections.flatMap { it.items }.mapNotNull { item ->
+                                when (item) {
+                                    is AlbumItem -> item
+                                    is PlaylistItem -> AlbumItem(
+                                        browseId = item.id,
+                                        playlistId = item.id,
+                                        title = item.title,
+                                        artists = listOfNotNull(item.author?.let { unshoo.ianshulyadav.pixelmusic.innertube.models.ArtistItem(name = it, id = null) }),
+                                        year = null,
+                                        thumbnail = item.thumbnail,
+                                        explicit = false
+                                    )
+                                    else -> null
+                                }
+                            }.distinctBy { it.browseId }
+                        }
+                    }
+                }
 
                 // Progressive streaming: map to domain UI models once
                 val uiSections = rawSections.map { it.toUiModel() }
