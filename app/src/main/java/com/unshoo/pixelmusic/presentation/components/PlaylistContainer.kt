@@ -85,6 +85,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavController
 import com.unshoo.pixelmusic.R
@@ -465,70 +466,55 @@ fun PlaylistItem(
                             modifier = Modifier.size(20.dp)
                         )
                     }
-                    if (playlist.source == "NETEASE") {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            painter = painterResource(R.drawable.netease_cloud_music_logo_icon_206716__1_),
-                            contentDescription = "Netease Music",
-                            tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    if (playlist.source == "TELEGRAM" || playlist.source == "TELEGRAM_TOPIC") {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            painter = painterResource(R.drawable.telegram),
-                            contentDescription = "Telegram",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    if (playlist.source == "TELEGRAM_TOPIC") {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Rounded.Topic,
-                            contentDescription = "Topic",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    if (playlist.source == "QQMUSIC") {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            imageVector = Icons.Rounded.Album,
-                            contentDescription = "QQ Music",
-                            tint = Color(0xFF2E7D32), // 修改为绿色
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    if (playlist.source == "NAVIDROME") {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            painter = painterResource(R.drawable.ic_navidrome),
-                            contentDescription = "Navidrome",
-                            tint = Color.Unspecified,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    if (playlist.source == "YOUTUBE") {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Image(
-                            painter = painterResource(R.drawable.ic_youtube),
-                            contentDescription = "YouTube",
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
                 }
                 val playlistCountText = when {
                     playlist.displaySongCount != null -> formatSongCount(playlist.displaySongCount)
                     playlist.source == "YOUTUBE" && playlist.songIds.isEmpty() -> "Syncing songs…"
                     else -> formatSongCount(playlist.songIds.size)
                 }
-                Text(
-                    text = playlistCountText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = playlistCountText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    val sourceLabel = when (playlist.source?.uppercase()) {
+                        "YOUTUBE" -> "YouTube"
+                        "TELEGRAM", "TELEGRAM_TOPIC" -> "Telegram"
+                        "NETEASE" -> "Netease"
+                        "QQMUSIC" -> "QQ Music"
+                        "NAVIDROME" -> "Navidrome"
+                        "LOCAL", "", null -> "Local"
+                        else -> playlist.source?.lowercase()?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.ROOT) else it.toString() } ?: "Local"
+                    }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        modifier = Modifier.height(18.dp)
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = sourceLabel,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    fontFamily = GoogleSansRounded
+                                )
+                            )
+                        }
+                    }
+                }
             }
 
 

@@ -78,6 +78,9 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.unshoo.pixelmusic.data.preferences.NavBarStyle
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.ViewStream
 import androidx.compose.material.icons.rounded.RoundedCorner
@@ -124,7 +127,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -1014,10 +1016,10 @@ fun ThemeSelectionPage(
         verticalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .padding(20.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.setup_theme_title),
                 style = MaterialTheme.typography.displayMedium.copy(
@@ -1026,7 +1028,7 @@ fun ThemeSelectionPage(
                 ),
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.setup_theme_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
@@ -1036,7 +1038,7 @@ fun ThemeSelectionPage(
         }
 
         Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
             themeOptions.forEach { option ->
@@ -1059,18 +1061,18 @@ fun ThemeSelectionPage(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                            .padding(horizontal = 18.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Pitch Black",
+                                text = "AMOLED",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Enable pure black backgrounds on dark theme",
+                                text = "Pure black dark theme",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1090,7 +1092,7 @@ fun ThemeSelectionPage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
             )
         }
     }
@@ -2256,7 +2258,11 @@ fun NavBarLayoutPage(
     onCustomizeRadius: () -> Unit,
     onSkip: () -> Unit
 ) {
-    val isDefault = uiState.navBarStyle != "full_width" // Default or null is default
+    val currentStyle = when (uiState.navBarStyle) {
+        NavBarStyle.FULL_WIDTH -> NavBarStyle.FULL_WIDTH
+        NavBarStyle.FLOATING_PILL -> NavBarStyle.FLOATING_PILL
+        else -> NavBarStyle.DEFAULT
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -2292,108 +2298,49 @@ fun NavBarLayoutPage(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 120.dp, max = 170.dp)
+                .heightIn(min = 130.dp, max = 175.dp)
                 .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {
-            NavBarPreview(isDefault = isDefault)
+            NavBarPreview(navBarStyle = currentStyle)
         }
-        
-        // Controls Section: Selectable Floating Pill vs Full Width Cards
+
+        // Controls Section: 3 Expressive Options (Material 3 Floating Pill, Default Floating Pill, Full Width Bar)
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            // Floating Pill Card
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isDefault) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = if (isDefault) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-                shape = RoundedCornerShape(20.dp),
-                onClick = { onModeSelected("default") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Navigation,
-                        contentDescription = null,
-                        tint = if (isDefault) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Floating Pill Bar",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isDefault) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Floating capsule with smooth pill animations & corner customization",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isDefault) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    RadioButton(
-                        selected = isDefault,
-                        onClick = { onModeSelected("default") }
-                    )
-                }
-            }
+            // Material 3 Expressive Floating Pill Card
+            NavBarStyleOptionCard(
+                title = "Material 3 Floating Pill",
+                subtitle = "Expressive pill capsule with active item indicators & dynamic animations",
+                icon = Icons.Rounded.AutoAwesome,
+                isSelected = currentStyle == NavBarStyle.FLOATING_PILL,
+                onClick = { onModeSelected(NavBarStyle.FLOATING_PILL) }
+            )
+
+            // Default Floating Pill Card
+            NavBarStyleOptionCard(
+                title = "Floating Pill Bar",
+                subtitle = "Clean floating capsule with smooth animations & corner customization",
+                icon = Icons.Rounded.Navigation,
+                isSelected = currentStyle == NavBarStyle.DEFAULT,
+                onClick = { onModeSelected(NavBarStyle.DEFAULT) }
+            )
 
             // Full Width Card
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (!isDefault) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = if (!isDefault) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-                shape = RoundedCornerShape(20.dp),
-                onClick = { onModeSelected("full_width") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
-                        .fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ViewStream,
-                        contentDescription = null,
-                        tint = if (!isDefault) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Full Width Bar",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (!isDefault) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Classic edge-to-edge navigation bar across the bottom",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (!isDefault) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    RadioButton(
-                        selected = !isDefault,
-                        onClick = { onModeSelected("full_width") }
-                    )
-                }
-            }
+            NavBarStyleOptionCard(
+                title = "Full Width Bar",
+                subtitle = "Classic edge-to-edge navigation bar across the bottom",
+                icon = Icons.Rounded.ViewStream,
+                isSelected = currentStyle == NavBarStyle.FULL_WIDTH,
+                onClick = { onModeSelected(NavBarStyle.FULL_WIDTH) }
+            )
 
-            // Customize Corner Radius Button (When Floating Pill is active)
+            // Customize Corner Radius Button (When Floating Pill or Default Pill is active)
             AnimatedVisibility(
-                visible = isDefault,
+                visible = currentStyle != NavBarStyle.FULL_WIDTH,
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
@@ -2427,12 +2374,68 @@ fun NavBarLayoutPage(
 }
 
 @Composable
-fun NavBarPreview(isDefault: Boolean) {
-    val gradientColors = listOf(
-        MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f), // Lighter top
-        MaterialTheme.colorScheme.surfaceContainer, // Darker bottom
-    )
-    
+private fun NavBarStyleOptionCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        shape = RoundedCornerShape(20.dp),
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = CircleShape,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            RadioButton(
+                selected = isSelected,
+                onClick = onClick
+            )
+        }
+    }
+}
+
+@Composable
+fun NavBarPreview(navBarStyle: String) {
     // Simulate the bottom of a screen
     Card(
         shape = RoundedCornerShape(24.dp),
@@ -2445,8 +2448,7 @@ fun NavBarPreview(isDefault: Boolean) {
             .padding(horizontal = 8.dp)
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize()
         ) {
             // Content placeholder
             Column(
@@ -2455,11 +2457,10 @@ fun NavBarPreview(isDefault: Boolean) {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                 // Fake content lines
                  repeat(3) {
                      Box(
                          modifier = Modifier
-                             .fillMaxWidth(if(it==1) 0.7f else 1f)
+                             .fillMaxWidth(if (it == 1) 0.7f else 1f)
                              .height(12.dp)
                              .clip(RoundedCornerShape(6.dp))
                              .background(MaterialTheme.colorScheme.surfaceContainerHighest)
@@ -2472,71 +2473,122 @@ fun NavBarPreview(isDefault: Boolean) {
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 AnimatedContent(
-                    targetState = isDefault,
+                    targetState = navBarStyle,
                     transitionSpec = {
                         (fadeIn(animationSpec = tween(400)) + slideInVertically { it })
                             .togetherWith(fadeOut(animationSpec = tween(200)) + slideOutVertically { it })
                     },
                     label = "NavbarPreviewAnim"
-                ) { default ->
-                    if (default) {
-                        // Default Pill Style
-                         Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp)
-                                .height(80.dp),
-                            shape = AbsoluteSmoothCornerShape(
-                                cornerRadiusTL = 28.dp,
-                                cornerRadiusTR = 28.dp,
-                                cornerRadiusBL = 28.dp,
-                                cornerRadiusBR = 28.dp,
-                                smoothnessAsPercentTL = 60,
-                                smoothnessAsPercentTR = 60,
-                                smoothnessAsPercentBL = 60,
-                                smoothnessAsPercentBR = 60
-                            ),
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            tonalElevation = 6.dp
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                verticalAlignment = Alignment.CenterVertically
+                ) { style ->
+                    when (style) {
+                        NavBarStyle.FLOATING_PILL -> {
+                            // Material 3 Expressive Floating Pill Preview
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                                    .height(56.dp),
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                tonalElevation = 6.dp,
+                                shadowElevation = 4.dp
                             ) {
-                                Icon(painterResource(R.drawable.rounded_home_24), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Icon(painterResource(R.drawable.rounded_search_24), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Icon(painterResource(R.drawable.rounded_library_music_24), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Row(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Active item with M3 Pill indicator badge
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.rounded_home_24),
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                    Icon(
+                                        painter = painterResource(R.drawable.rounded_search_24),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Icon(
+                                        painter = painterResource(R.drawable.rounded_library_music_24),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
-                    } else {
-                        // Full Width Style
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(80.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainer,
-                            tonalElevation = 6.dp,
-                            // Simulated rounded top corners for preview if desired, or simplified
-                            shape = AbsoluteSmoothCornerShape(
-                                cornerRadiusTL = 28.dp, // Default preview radius
-                                smoothnessAsPercentTL = 60,
-                                cornerRadiusTR = 28.dp,
-                                smoothnessAsPercentTR = 60,
-                                cornerRadiusBL = 0.dp,
-                                smoothnessAsPercentBL = 60,
-                                cornerRadiusBR = 0.dp,
-                                smoothnessAsPercentBR = 60
-                            )
-                        ) {
-                             Row(
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                verticalAlignment = Alignment.CenterVertically
+                        NavBarStyle.FULL_WIDTH -> {
+                            // Full Width Style Preview
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                tonalElevation = 6.dp,
+                                shape = AbsoluteSmoothCornerShape(
+                                    cornerRadiusTL = 24.dp,
+                                    smoothnessAsPercentTL = 60,
+                                    cornerRadiusTR = 24.dp,
+                                    smoothnessAsPercentTR = 60,
+                                    cornerRadiusBL = 0.dp,
+                                    smoothnessAsPercentBL = 60,
+                                    cornerRadiusBR = 0.dp,
+                                    smoothnessAsPercentBR = 60
+                                )
                             ) {
-                                Icon(painterResource(R.drawable.rounded_home_24), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Icon(painterResource(R.drawable.rounded_search_24), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Icon(painterResource(R.drawable.rounded_library_music_24), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                 Row(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(painterResource(R.drawable.rounded_home_24), null, tint = MaterialTheme.colorScheme.primary)
+                                    Icon(painterResource(R.drawable.rounded_search_24), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Icon(painterResource(R.drawable.rounded_library_music_24), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        else -> {
+                            // Default Floating Bar Style Preview
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 12.dp)
+                                    .height(56.dp),
+                                shape = AbsoluteSmoothCornerShape(
+                                    cornerRadiusTL = 28.dp,
+                                    cornerRadiusTR = 28.dp,
+                                    cornerRadiusBL = 28.dp,
+                                    cornerRadiusBR = 28.dp,
+                                    smoothnessAsPercentTL = 60,
+                                    smoothnessAsPercentTR = 60,
+                                    smoothnessAsPercentBL = 60,
+                                    smoothnessAsPercentBR = 60
+                                ),
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                tonalElevation = 6.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(painterResource(R.drawable.rounded_home_24), null, tint = MaterialTheme.colorScheme.primary)
+                                    Icon(painterResource(R.drawable.rounded_search_24), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Icon(painterResource(R.drawable.rounded_library_music_24), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }

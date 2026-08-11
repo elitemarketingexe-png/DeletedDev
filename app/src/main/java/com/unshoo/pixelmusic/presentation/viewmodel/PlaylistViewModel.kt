@@ -463,7 +463,9 @@ class PlaylistViewModel @Inject constructor(
                                                     anyDownloaded = true
                                                     val updatedYtSong = ytSong.copy(thumbnailPath = downloadedImage.path)
                                                     ytSongRepo.create(updatedYtSong)
-                                                    musicDao.updateSongArtwork(song.id.toLong(), downloadedImage.path)
+                                                    song.id.toLongOrNull()?.let { numericId ->
+                                                        musicDao.updateSongArtwork(numericId, downloadedImage.path)
+                                                    }
                                                 }
                                             }
                                         }

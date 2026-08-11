@@ -61,7 +61,7 @@ class MediaStorePagingSource(
             val songs = fetchSongDetails(idsToLoad)
 
             // Sort songs to match the order of idsToLoad (because "IN" query doesn't guarantee order)
-            val songsMap = songs.associateBy { it.id.toLong() }
+            val songsMap = songs.associateBy { it.id.toLongOrNull() ?: (-(15_000_000_000_000L + kotlin.math.abs(it.id.hashCode().toLong()))) }
             val orderedSongs = idsToLoad.mapNotNull { songsMap[it] }
 
             val nextKey = if (end < filteredIds.size) pageIndex + 1 else null

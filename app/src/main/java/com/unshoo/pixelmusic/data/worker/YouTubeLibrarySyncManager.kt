@@ -226,25 +226,6 @@ class YouTubeLibrarySyncManager @Inject constructor(
 
         val nativeSongs = allSongs.map { it.toNativeSong() }
         musicRepository.insertYoutubeSongs(nativeSongs)
-
-        val now = System.currentTimeMillis()
-        val events = nativeSongs.take(100).mapIndexedNotNull { index, song ->
-            val songIdStr = song.youtubeId ?: return@mapIndexedNotNull null
-            val unifiedId = ytSongId(songIdStr).toString()
-            PlaybackStatsRepository.PlaybackEvent(
-                songId = unifiedId,
-                timestamp = now - (index * 60_000L),
-                durationMs = song.duration.coerceAtLeast(0L),
-                startTimestamp = (now - (index * 60_000L) - song.duration).coerceAtLeast(0L),
-                endTimestamp = now - (index * 60_000L),
-                title = song.title,
-                artist = song.artist,
-                thumbnail = song.albumArtUriString,
-                genre = song.genre,
-                album = song.album
-            )
-        }
-        playbackStatsRepository.recordPlaybackBatch(events)
     }
 
     suspend fun syncLikedPlaylists() = withContext(Dispatchers.IO) {

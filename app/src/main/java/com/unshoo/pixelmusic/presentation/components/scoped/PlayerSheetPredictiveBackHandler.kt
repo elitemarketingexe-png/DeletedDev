@@ -30,7 +30,7 @@ internal fun PlayerSheetPredictiveBackHandler(
     registrationKey: Any?
 ) {
     val scope = rememberCoroutineScope()
-    key(registrationKey) {
+    key(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             PredictiveBackHandler(enabled = enabled) { progressFlow ->
                 try {

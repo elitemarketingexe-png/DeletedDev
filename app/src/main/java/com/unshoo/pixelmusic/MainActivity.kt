@@ -1159,14 +1159,13 @@ class MainActivity : ComponentActivity() {
                         // entire content lambda. Use the StateFlow as a
                         // `State<Float>` directly with `collectAsStateWithLifecycle`.
                         val isMiniPlayerDismissingForOverlay by playerViewModel.isMiniPlayerDismissing.collectAsStateWithLifecycle()
-                        val isExpandedOrExpanding = remember(
-                            playerViewModel.playerContentExpansionFraction.value,
-                            showPlayerContentInitially,
-                            isMiniPlayerDismissingForOverlay
-                        ) {
-                            !isMiniPlayerDismissingForOverlay &&
-                                showPlayerContentInitially &&
-                                playerViewModel.playerContentExpansionFraction.value > 0.01f
+                        val currentSheetStateForOverlay by playerViewModel.sheetState.collectAsStateWithLifecycle()
+                        val isExpandedOrExpanding by remember(showPlayerContentInitially) {
+                            derivedStateOf {
+                                !isMiniPlayerDismissingForOverlay &&
+                                    showPlayerContentInitially &&
+                                    (playerViewModel.playerContentExpansionFraction.value > 0.01f || currentSheetStateForOverlay == com.unshoo.pixelmusic.presentation.viewmodel.PlayerSheetState.EXPANDED)
+                            }
                         }
 
                         AnimatedVisibility(

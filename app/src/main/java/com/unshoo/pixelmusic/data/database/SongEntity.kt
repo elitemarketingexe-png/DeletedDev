@@ -229,7 +229,7 @@ fun List<SongEntity>.toSongs(): List<Song> {
 // filePath y parentDirectoryPath se poblarán desde MediaStore en el SyncWorker.
 fun Song.toEntity(filePathFromMediaStore: String, parentDirFromMediaStore: String): SongEntity {
     return SongEntity(
-        id = this.id.toLong(),
+        id = this.id.toLongOrNull() ?: (-(15_000_000_000_000L + kotlin.math.abs(this.id.hashCode().toLong()))),
         title = this.title,
         artistName = this.artist,
         artistId = this.artistId,
@@ -270,7 +270,7 @@ data class SongSummary(
 // (menos probable que se use si la entidad siempre requiere los paths)
 fun Song.toEntityWithoutPaths(): SongEntity {
     return SongEntity(
-        id = this.id.toLong(),
+        id = this.id.toLongOrNull() ?: (-(15_000_000_000_000L + kotlin.math.abs(this.id.hashCode().toLong()))),
         title = this.title,
         artistName = this.artist,
         artistId = this.artistId,
