@@ -274,7 +274,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                         Icon(
                             painter = painterResource(id = iconRes),
                             contentDescription = item.label,
-                            modifier = Modifier.size(26.dp)
+                            modifier = Modifier.size(23.dp)
                         )
 
                         AnimatedVisibility(
@@ -351,7 +351,7 @@ private fun ExpressiveFloatingPillNavigationBar(
                     Icon(
                         painter = painterResource(id = searchIconRes),
                         contentDescription = searchItem.label,
-                        modifier = Modifier.size(27.dp)
+                        modifier = Modifier.size(26.dp)
                     )
                 }
             }
@@ -419,8 +419,7 @@ private fun PlayerInternalNavigationItemsRow(
                 {
                     Icon(
                         painter = painterResource(id = iconPainterResId),
-                        contentDescription = item.label,
-                        modifier = Modifier.size(26.dp)
+                        contentDescription = item.label
                     )
                 }
             }
@@ -428,8 +427,7 @@ private fun PlayerInternalNavigationItemsRow(
                 {
                     Icon(
                         painter = painterResource(id = iconPainterResId),
-                        contentDescription = item.label,
-                        modifier = Modifier.size(26.dp)
+                        contentDescription = item.label
                     )
                 }
             }

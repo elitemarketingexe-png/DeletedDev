@@ -83,7 +83,7 @@ fun RowScope.CustomNavigationBarItem(
 
     // Micro-interacción: escala responsiva y natural (fast spatial spring — M3 token)
     val iconScale by animateFloatAsState(
-        targetValue = if (selected) 1.22f else 1.08f,
+        targetValue = if (selected) 1.15f else 1f,
         animationSpec = motionScheme.fastSpatial(),
         label = "iconScale"
     )
@@ -113,12 +113,12 @@ fun RowScope.CustomNavigationBarItem(
     )
 
     val density = LocalDensity.current.density
-    val indicatorWidth = 56.dp
-    val indicatorHeight = 28.dp
-    val iconWidth = 46.dp
-    val iconHeight = 26.dp
+    val indicatorWidth = 52.dp
+    val indicatorHeight = 26.dp
+    val iconWidth = 44.dp
+    val iconHeight = 24.dp
     val indicatorPadding = 2.dp
-    val indicatorShape = RoundedCornerShape(14.dp)
+    val indicatorShape = RoundedCornerShape(13.dp)
 
     // Layout principal
     Column(
