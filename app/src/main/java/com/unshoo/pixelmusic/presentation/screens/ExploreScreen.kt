@@ -178,7 +178,8 @@ fun ExploreScreen(
     exploreViewModel: ExploreViewModel = hiltViewModel(),
     quickPicksViewModel: QuickPicksViewModel = hiltViewModel()
 ) {
-    androidx.activity.compose.BackHandler(enabled = true) {
+    val sheetState by playerViewModel.sheetState.collectAsStateWithLifecycle()
+    androidx.activity.compose.BackHandler(enabled = sheetState == com.unshoo.pixelmusic.presentation.viewmodel.PlayerSheetState.COLLAPSED) {
         navController.navigateToTopLevelSafely(com.unshoo.pixelmusic.presentation.navigation.Screen.Home.route)
     }
 

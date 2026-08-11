@@ -156,7 +156,8 @@ fun SearchScreen(
     onSearchBarActiveChange: (Boolean) -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    androidx.activity.compose.BackHandler(enabled = true) {
+    val sheetState by playerViewModel.sheetState.collectAsStateWithLifecycle()
+    androidx.activity.compose.BackHandler(enabled = sheetState == com.unshoo.pixelmusic.presentation.viewmodel.PlayerSheetState.COLLAPSED) {
         if (searchQuery.isNotEmpty()) {
             searchQuery = ""
         } else {
