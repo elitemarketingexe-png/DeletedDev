@@ -25,11 +25,13 @@ internal fun rememberSheetBackAndDragState(
     var isDraggingPlayerArea by remember { mutableStateOf(false) }
     val predictiveBackEnabled by remember(
         showPlayerContentArea,
-        currentSheetContentState
+        currentSheetContentState,
+        isDragging
     ) {
         derivedStateOf {
             showPlayerContentArea &&
-                currentSheetContentState == PlayerSheetState.EXPANDED
+                currentSheetContentState == PlayerSheetState.EXPANDED &&
+                !isDragging
         }
     }
 
