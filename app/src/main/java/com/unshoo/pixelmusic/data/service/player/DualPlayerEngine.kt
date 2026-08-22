@@ -1269,6 +1269,7 @@ class DualPlayerEngine @Inject constructor(
 
     fun cancelNext() {
         transitionJob?.cancel()
+        val hadActiveTransition = transitionRunning
         transitionRunning = false
         resetPreparedWindowState()
         if (::playerB.isInitialized && playerB.mediaItemCount > 0) {
@@ -1282,6 +1283,17 @@ class DualPlayerEngine @Inject constructor(
         }
         incomingTrackReplayGainVolume = null
         setPauseAtEndOfMediaItems(false)
+        if (hadActiveTransition) {
+            // A crossfade was in flight when the new playback request arrived: the
+            // MediaSession had been exposed to the auxiliary (incoming) player for UI
+            // continuity. Re-publish the master so the session — and every
+            // MediaController/lockscreen/notification observing it — reflects the player
+            // that actually holds playback again. ArchiveTune parity: the session always
+            // mirrors the active master player; a cancelled crossfade must never leave it
+            // attached to the abandoned auxiliary instance, otherwise the now-playing UI
+            // keeps showing the abandoned track's title/artwork.
+            onPlayerSwappedListeners.forEach { it(playerA) }
+        }
     }
 
     fun performTransition(settings: TransitionSettings) {

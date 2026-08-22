@@ -1010,7 +1010,19 @@ class MusicService : MediaLibraryService() {
                 .collect { enabled ->
                     val wasDisabled = lastAutoQueueEnabled == false
                     lastAutoQueueEnabled = enabled
-                    if (enabled && wasDisabled) {
+                    if (!enabled) {
+                        withContext(Dispatchers.Main) {
+                            val player = mediaSession?.player
+                            if (player != null && player.mediaItemCount > 0) {
+                                val currentIndex = player.currentMediaItemIndex
+                                val totalCount = player.mediaItemCount
+                                if (totalCount > currentIndex + 1) {
+                                    player.removeMediaItems(currentIndex + 1, totalCount)
+                                }
+                            }
+                        }
+                        AutoQueueManager.reset()
+                    } else if (wasDisabled) {
                         withContext(Dispatchers.Main) {
                             val player = mediaSession?.player
                             if (player != null && player.mediaItemCount > 0) {

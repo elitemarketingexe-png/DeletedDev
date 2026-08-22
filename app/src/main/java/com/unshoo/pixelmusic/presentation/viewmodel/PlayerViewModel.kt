@@ -2576,6 +2576,14 @@ class PlayerViewModel @Inject constructor(
     private fun syncCurrentPlayerState(playerCtrl: MediaController) {
         val mediaItem = playerCtrl.currentMediaItem
         if (mediaItem != null) {
+            // ARCHIVETUNE PARITY: same preparing guard as onMediaItemTransition. This path
+            // also runs from the 2s controller-health "stale state repair", which would
+            // otherwise re-inject a foreign item into the display while a tap is in flight.
+            val preparingSongIdOnSync = _playerUiState.value.preparingSongId
+            if (preparingSongIdOnSync != null && preparingSongIdOnSync != mediaItem.mediaId) {
+                updateCurrentPlaybackQueueFromPlayer(playerCtrl)
+                return
+            }
             val song = resolveSongFromMediaItem(mediaItem)
             val readyPosition = playerCtrl.currentPosition.coerceAtLeast(0L)
             val songDurationHint = song?.duration?.coerceAtLeast(0L) ?: 0L
@@ -4750,6 +4758,15 @@ class PlayerViewModel @Inject constructor(
         updateCurrentPlaybackQueueFromPlayer(playerCtrl)
 
         playerCtrl.currentMediaItem?.let { mediaItem ->
+            // ARCHIVETUNE PARITY: a controller (re)connect while a tap is in flight must
+            // not repoint the display at a foreign item (e.g. a stale auxiliary player
+            // still bound to the MediaSession after a cancelled crossfade). The tapped
+            // song's own item is allowed through; any other item is ignored until the
+            // preparing state is cleared.
+            val preparingSongIdOnConnect = _playerUiState.value.preparingSongId
+            if (preparingSongIdOnConnect != null && preparingSongIdOnConnect != mediaItem.mediaId) {
+                return@let
+            }
             playbackStateHolder.ensureCurrentPlaybackOccurrence(mediaItem.mediaId)
             val song = resolveSongFromMediaItem(mediaItem)
 
@@ -4863,6 +4880,28 @@ class PlayerViewModel @Inject constructor(
                     }
 
                     mediaItem?.let { transitionedItem ->
+                        // ARCHIVETUNE PARITY (tap-to-play display flicker): while a direct
+                        // tap is being prepared (stream resolve + queue setup, ~3-4s), the
+                        // now-playing display must stay on the tapped song. ArchiveTune never
+                        // shows a track the active player is not actually on, because its
+                        // now-playing state is derived 1:1 from the player's current
+                        // metadata. Here, foreign transitions — a stale session-bound
+                        // auxiliary player after a cancelled crossfade, intermediate queue
+                        // items, or auto-advance of the previous track — must NOT repoint
+                        // currentSong. The tapped song's own transition passes through, and
+                        // preparing is cleared on STATE_READY / first play. A user-initiated
+                        // manual skip (REASON_SEEK) supersedes the in-flight tap: allow it
+                        // through and clear the preparing state.
+                        val preparingSongIdOnTransition = _playerUiState.value.preparingSongId
+                        if (preparingSongIdOnTransition != null &&
+                            preparingSongIdOnTransition != transitionedItem.mediaId
+                        ) {
+                            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+                                setPreparingSong(null)
+                            } else {
+                                return@let
+                            }
+                        }
                         val song = resolveSongFromMediaItem(transitionedItem)
                         if (song != null && (song.id.startsWith("youtube_") || song.youtubeId != null)) {
                             viewModelScope.launch(Dispatchers.IO) {
@@ -5108,6 +5147,11 @@ class PlayerViewModel @Inject constructor(
                           throwIfDirectPlaybackRequestIsStale(requestToken)
                           if (!isCached) {
                               Timber.w("Blocked playback: Offline and not cached.")
+                              // FIX: release the preparing guard — playback will never
+                              // start, so STATE_READY/first-play will never clear it, and
+                              // a stuck preparingSongId would freeze the now-playing
+                              // display on this song for every later player event.
+                              clearPreparingSongIfMatching()
                               _showNoInternetDialog.tryEmit(Unit)
                               return@launch
                           }
