@@ -195,7 +195,25 @@ class ExploreViewModel @Inject constructor(
             }
 
             if (home != null) {
-                val rawSections = home.sections.filter { section ->
+                val collectedSections = home.sections.toMutableList()
+                var currentContinuation = home.continuation
+
+                // Fetch initial 2 additional batches of continuation to gather a rich feed from user's YouTube Music homepage
+                var continuationBatches = 0
+                while (!currentContinuation.isNullOrBlank() && continuationBatches < 2) {
+                    continuationBatches++
+                    val continuationPage = withContext(Dispatchers.IO) {
+                        runCatching { YouTube.home(continuation = currentContinuation).getOrNull() }.getOrNull()
+                    }
+                    if (continuationPage != null && continuationPage.sections.isNotEmpty()) {
+                        collectedSections.addAll(continuationPage.sections)
+                        currentContinuation = continuationPage.continuation
+                    } else {
+                        break
+                    }
+                }
+
+                val rawSections = collectedSections.filter { section ->
                     val title = section.title.lowercase()
                     !title.contains("new music videos") &&
                     !title.contains("trending") &&
@@ -203,10 +221,10 @@ class ExploreViewModel @Inject constructor(
                     !title.contains("local") &&
                     !title.contains("quick picks") &&
                     !title.contains("quickpicks")
-                }
+                }.distinctBy { it.title }
 
                 // Extract personalized new releases directly from user's YouTube Home feed and account chips
-                var personalizedNewReleases = home.sections.filter { section ->
+                var personalizedNewReleases = rawSections.filter { section ->
                     val t = section.title.lowercase()
                     !t.contains("video") && !t.contains("videos") && (
                         t.contains("new release") || t.contains("new releases") ||
@@ -279,7 +297,9 @@ class ExploreViewModel @Inject constructor(
                     it.copy(
                         isLoading = false,
                         isRefreshing = false,
+                        isContinuationLoading = false,
                         homePageSections = rawSections,
+                        homePageContinuation = currentContinuation,
                         newReleaseAlbums = personalizedNewReleases,
                         moodChips = rawChips
                     )
@@ -337,7 +357,43 @@ class ExploreViewModel @Inject constructor(
     }
 
     fun loadMore() {
-        // Continuation loading removed for performance
+        val continuation = _uiState.value.homePageContinuation ?: return
+        if (_uiState.value.isContinuationLoading || _uiState.value.isLoading || _uiState.value.isRefreshing) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isContinuationLoading = true) }
+            val continuationHome = withContext(Dispatchers.IO) {
+                runCatching { YouTube.home(continuation = continuation).getOrNull() }.getOrNull()
+            }
+
+            if (continuationHome != null && continuationHome.sections.isNotEmpty()) {
+                val newRawSections = continuationHome.sections.filter { section ->
+                    val title = section.title.lowercase()
+                    !title.contains("new music videos") &&
+                    !title.contains("trending") &&
+                    !title.contains("long listens") &&
+                    !title.contains("local") &&
+                    !title.contains("quick picks") &&
+                    !title.contains("quickpicks")
+                }
+
+                val currentRaw = _uiState.value.homePageSections
+                val mergedRaw = (currentRaw + newRawSections).distinctBy { it.title }
+                val uiSections = mergedRaw.map { it.toUiModel() }
+
+                _sectionsState.value = uiSections
+                _uiState.update {
+                    it.copy(
+                        isContinuationLoading = false,
+                        homePageSections = mergedRaw,
+                        homePageContinuation = continuationHome.continuation
+                    )
+                }
+                persistToCache(mergedRaw)
+            } else {
+                _uiState.update { it.copy(isContinuationLoading = false, homePageContinuation = null) }
+            }
+        }
     }
 
     fun setSelectedFilter(filter: String) {

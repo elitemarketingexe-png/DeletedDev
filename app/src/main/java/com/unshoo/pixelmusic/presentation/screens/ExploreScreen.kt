@@ -8,6 +8,7 @@ import com.unshoo.pixelmusic.presentation.navigation.navigateToTopLevelSafely
 
 import androidx.compose.material3.IconButton
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.BookmarkBorder
@@ -208,6 +209,19 @@ fun ExploreScreen(
     val scrollThresholdPx = remember(density) { with(density) { 16.dp.toPx() } }
     val isScrolled = remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > scrollThresholdPx }
+    }
+
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val total = listState.layoutInfo.totalItemsCount
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            total > 0 && lastVisible >= total - 3
+        }
+    }
+    LaunchedEffect(shouldLoadMore, uiState.homePageContinuation, uiState.isContinuationLoading) {
+        if (shouldLoadMore && uiState.homePageContinuation != null && !uiState.isContinuationLoading && !uiState.isLoading && !isRefreshing) {
+            exploreViewModel.loadMore()
+        }
     }
 
     val surfaceColor = MaterialTheme.colorScheme.surface
@@ -740,7 +754,30 @@ fun ExploreScreen(
                                         key = "home_section_${section.title}_${index}_header",
                                         contentType = "section_header"
                                     ) {
-                                        SectionHeader(title = section.title)
+                                        val endpoint = section.endpoint
+                                        val onHeaderClick: (() -> Unit)? = endpoint?.browseId?.let { browseId ->
+                                            {
+                                                when {
+                                                    browseId.startsWith("UC") || browseId.startsWith("FEmusic_artist") -> {
+                                                        navController.navigateSafely(Screen.ArtistDetail.createRoute(browseId))
+                                                    }
+                                                    browseId.startsWith("VL") || browseId.startsWith("PL") || browseId.startsWith("RD") || browseId.startsWith("FEmusic_playlist") -> {
+                                                        navController.navigateSafely(Screen.PlaylistDetail.createRoute(browseId.removePrefix("VL")))
+                                                    }
+                                                    browseId.startsWith("MPRE") || browseId.startsWith("FEmusic_album") -> {
+                                                        navController.navigateSafely(Screen.AlbumDetail.createRoute(browseId))
+                                                    }
+                                                    else -> {
+                                                        navController.navigateSafely(Screen.PlaylistDetail.createRoute(browseId))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        SectionHeader(
+                                            title = section.title,
+                                            thumbnail = section.thumbnail,
+                                            onActionClick = onHeaderClick
+                                        )
                                     }
                                     item(
                                         key = "home_section_${section.title}_${index}_carousel",
@@ -761,6 +798,23 @@ fun ExploreScreen(
                                             )
                                         }
                                     }
+                                }
+                            }
+                        }
+
+                        if (uiState.isContinuationLoading) {
+                            item(key = "home_continuation_loader") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    androidx.compose.material3.CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        strokeWidth = 3.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                         }
@@ -1286,36 +1340,68 @@ fun ExploreTopBar(
 @Composable
 fun SectionHeader(
     title: String,
+    thumbnail: String? = null,
     onActionClick: (() -> Unit)? = null,
     actionLabel: String? = null
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp),
+            .then(
+                if (onActionClick != null) {
+                    Modifier.clickable(onClick = onActionClick)
+                } else Modifier
+            )
+            .padding(horizontal = 20.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = GoogleSansRounded
-            ),
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        if (onActionClick != null && actionLabel != null) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f, fill = false)
+        ) {
+            if (!thumbnail.isNullOrBlank()) {
+                SmartImage(
+                    model = thumbnail,
+                    contentDescription = title,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+            }
             Text(
-                text = actionLabel,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                text = title,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = GoogleSansRounded
                 ),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onActionClick)
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+        }
+        if (onActionClick != null) {
+            if (actionLabel != null) {
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = "View More",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
