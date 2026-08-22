@@ -4592,31 +4592,39 @@ class PlayerViewModel @Inject constructor(
                 var expectedSize: Long? = null
                 val uriStr = uri.toString()
 
-                if (uriStr.contains("127.0.0.1") && uriStr.contains("/stream/")) {
-                    val fileId = uriStr.substringAfter("/stream/").substringBefore("?").substringBefore("/").toIntOrNull()
-                    if (fileId != null) {
-                        val fileInfo = runCatching { musicRepository.telegramRepository.getFile(fileId) }.getOrNull()
-                        if (fileInfo != null) {
-                            expectedSize = fileInfo.expectedSize.takeIf { it > 0 }
-                            if (!fileInfo.local.path.isNullOrEmpty()) {
-                                val file = java.io.File(fileInfo.local.path)
-                                if (file.exists() && file.canRead()) {
-                                    sourceUri = Uri.fromFile(file)
-                                }
-                            }
+                val songEntity = mediaId.toLongOrNull()?.let { musicDao.getSongByIdOnce(it) }
+                val currentSongObj = playbackStateHolder.stablePlayerState.value.currentSong
+                
+                var telegramAltSong: Song? = null
+                val candidateTitle = songEntity?.title ?: currentSongObj?.title
+                val candidateArtist = currentSongObj?.artist ?: songEntity?.artistName
+                if (!candidateTitle.isNullOrBlank() && !candidateArtist.isNullOrBlank()) {
+                    val tKey = telegramAlternativeKey(candidateTitle, candidateArtist)
+                    if (tKey != null) {
+                        telegramAltSong = musicRepository.getTelegramSongsOnce().firstOrNull {
+                            telegramAlternativeKey(it.title, it.artist) == tKey
                         }
                     }
-                } else if (uriStr.startsWith("telegram://")) {
-                    val fileId = runCatching { musicRepository.telegramRepository.resolveTelegramUri(uriStr)?.first }.getOrNull()
-                    if (fileId != null) {
-                        val fileInfo = runCatching { musicRepository.telegramRepository.getFile(fileId) }.getOrNull()
-                        if (fileInfo != null) {
-                            expectedSize = fileInfo.expectedSize.takeIf { it > 0 }
-                            if (!fileInfo.local.path.isNullOrEmpty()) {
-                                val file = java.io.File(fileInfo.local.path)
-                                if (file.exists() && file.canRead()) {
-                                    sourceUri = Uri.fromFile(file)
-                                }
+                }
+
+                val telegramFileId = songEntity?.telegramFileId
+                    ?: telegramAltSong?.telegramFileId
+                    ?: if (uriStr.contains("127.0.0.1") && uriStr.contains("/stream/")) {
+                        uriStr.substringAfter("/stream/").substringBefore("?").substringBefore("/").toIntOrNull()
+                    } else if (uriStr.startsWith("telegram://") || uriStr.startsWith("telegram:")) {
+                        runCatching { musicRepository.telegramRepository.resolveTelegramUri(uriStr)?.first }.getOrNull()
+                    } else if (telegramAltSong?.contentUriString?.startsWith("telegram:") == true) {
+                        runCatching { musicRepository.telegramRepository.resolveTelegramUri(telegramAltSong.contentUriString)?.first }.getOrNull()
+                    } else null
+
+                if (telegramFileId != null) {
+                    val fileInfo = runCatching { musicRepository.telegramRepository.getFile(telegramFileId) }.getOrNull()
+                    if (fileInfo != null) {
+                        expectedSize = fileInfo.expectedSize.takeIf { it > 0 }
+                        if (!fileInfo.local.path.isNullOrEmpty()) {
+                            val file = java.io.File(fileInfo.local.path)
+                            if (file.exists() && file.canRead()) {
+                                sourceUri = Uri.fromFile(file)
                             }
                         }
                     }
@@ -4652,12 +4660,15 @@ class PlayerViewModel @Inject constructor(
                             }
                         }
                     }
+                    if (finalBitrate == null || finalBitrate <= 0) {
+                        finalBitrate = songEntity?.bitrate?.takeIf { it > 0 } ?: telegramAltSong?.bitrate?.takeIf { it > 0 }
+                    }
                     
                     PlaybackAudioMetadata(
                         mediaId = mediaId,
-                        mimeType = mimeType,
+                        mimeType = mimeType ?: songEntity?.mimeType ?: telegramAltSong?.mimeType,
                         bitrate = finalBitrate,
-                        sampleRate = sampleRate
+                        sampleRate = sampleRate ?: songEntity?.sampleRate ?: telegramAltSong?.sampleRate
                     )
                 }
             }.getOrNull() ?: return@launch

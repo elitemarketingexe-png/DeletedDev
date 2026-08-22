@@ -2246,12 +2246,17 @@ private fun formatAudioMetaLabel(mimeType: String?, bitrate: Int?, sampleRate: I
 
     val parts = buildList {
         sampleRate?.takeIf { it > 0 }?.let { add(String.format(Locale.US, "%.1f kHz", it / 1000.0)) }
-        bitrate?.takeIf { it > 0 }?.let { bitrateValue ->
-            val kbpsLabel = "${bitrateValue / 1000} kbps"
-            if (formatLabel != null) {
-                add("$kbpsLabel \u2022 $formatLabel")
-            } else {
-                add(kbpsLabel)
+        bitrate?.takeIf { it > 0 }?.let { rawBitrate ->
+            val kbps = if (rawBitrate >= 1000) rawBitrate / 1000 else rawBitrate
+            if (kbps > 0) {
+                val kbpsLabel = "$kbps kbps"
+                if (formatLabel != null) {
+                    add("$kbpsLabel \u2022 $formatLabel")
+                } else {
+                    add(kbpsLabel)
+                }
+            } else if (formatLabel != null) {
+                add(formatLabel)
             }
         } ?: formatLabel?.let { add(it) }
     }

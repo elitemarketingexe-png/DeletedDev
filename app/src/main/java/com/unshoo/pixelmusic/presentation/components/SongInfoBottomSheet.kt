@@ -295,7 +295,10 @@ fun SongInfoBottomSheet(
             meta.sampleRate?.takeIf { it > 0 }
                 ?.let { add(String.format(java.util.Locale.US, "%.1f kHz", it / 1000.0)) }
             meta.bitrate?.takeIf { it > 0 }
-                ?.let { add("${it / 1000} kbps") }
+                ?.let { rawBitrate ->
+                    val kbps = if (rawBitrate >= 1000) rawBitrate / 1000 else rawBitrate
+                    if (kbps > 0) add("$kbps kbps")
+                }
             formatLabel?.let { add(it) }
         }
         parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
