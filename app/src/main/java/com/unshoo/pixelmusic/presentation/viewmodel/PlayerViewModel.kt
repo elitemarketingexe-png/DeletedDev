@@ -4773,48 +4773,51 @@ class PlayerViewModel @Inject constructor(
         updateCurrentPlaybackQueueFromPlayer(playerCtrl)
 
         playerCtrl.currentMediaItem?.let { mediaItem ->
-            playbackStateHolder.ensureCurrentPlaybackOccurrence(mediaItem.mediaId)
-            val song = resolveSongFromMediaItem(mediaItem)
+            val preparingSongId = _playerUiState.value.preparingSongId
+            if (preparingSongId == null || mediaItem.mediaId == preparingSongId) {
+                playbackStateHolder.ensureCurrentPlaybackOccurrence(mediaItem.mediaId)
+                val song = resolveSongFromMediaItem(mediaItem)
 
-            if (song != null) {
-                val initialPosition = playerCtrl.currentPosition.coerceAtLeast(0L)
-                val resolvedDuration = playbackStateHolder.resolveDurationForPlaybackState(
-                    reportedDurationMs = playerCtrl.duration,
-                    songDurationHintMs = song.duration.coerceAtLeast(0L),
-                    currentPositionMs = initialPosition
-                )
-                playbackStateHolder.updateStablePlayerState {
-                    it.copy(
-                        currentSong = song,
-                        totalDuration = resolvedDuration
+                if (song != null) {
+                    val initialPosition = playerCtrl.currentPosition.coerceAtLeast(0L)
+                    val resolvedDuration = playbackStateHolder.resolveDurationForPlaybackState(
+                        reportedDurationMs = playerCtrl.duration,
+                        songDurationHintMs = song.duration.coerceAtLeast(0L),
+                        currentPositionMs = initialPosition
                     )
-                }
-                syncPlaybackPositionFromPlayer(mediaItem.mediaId, initialPosition)
-                viewModelScope.launch {
-                    val uri = song.albumArtUriString?.toUri()
-                    val currentUri = playbackStateHolder.stablePlayerState.value.currentSong?.albumArtUriString
-                    themeStateHolder.extractAndGenerateColorScheme(uri, currentUri)
-                }
-                loadLyricsForCurrentSong()
-                if (playerCtrl.isPlaying) {
-                    _isSheetVisible.value = true
-                    startProgressUpdates()
-                }
-            } else {
-                // FIX (miniplayer flash): If resolveSongFromMediaItem is transiently null during
-                // buffering (before song is fully cached in allSongsById), do NOT overwrite currentSong
-                // with null if a media item is actively loaded in the player. Keep last-known song.
-                if (_playerUiState.value.preparingSongId == null && playerCtrl.currentMediaItem == null) {
                     playbackStateHolder.updateStablePlayerState {
                         it.copy(
-                            currentSong = null,
-                            isPlaying = false,
-                            playWhenReady = false
+                            currentSong = song,
+                            totalDuration = resolvedDuration
                         )
                     }
-                    playbackStateHolder.clearCurrentPositionHints()
-                    playbackStateHolder.setCurrentPosition(0L)
-                    resetPlaybackAudioMetadata()
+                    syncPlaybackPositionFromPlayer(mediaItem.mediaId, initialPosition)
+                    viewModelScope.launch {
+                        val uri = song.albumArtUriString?.toUri()
+                        val currentUri = playbackStateHolder.stablePlayerState.value.currentSong?.albumArtUriString
+                        themeStateHolder.extractAndGenerateColorScheme(uri, currentUri)
+                    }
+                    loadLyricsForCurrentSong()
+                    if (playerCtrl.isPlaying) {
+                        _isSheetVisible.value = true
+                        startProgressUpdates()
+                    }
+                } else {
+                    // FIX (miniplayer flash): If resolveSongFromMediaItem is transiently null during
+                    // buffering (before song is fully cached in allSongsById), do NOT overwrite currentSong
+                    // with null if a media item is actively loaded in the player. Keep last-known song.
+                    if (playerCtrl.currentMediaItem == null) {
+                        playbackStateHolder.updateStablePlayerState {
+                            it.copy(
+                                currentSong = null,
+                                isPlaying = false,
+                                playWhenReady = false
+                            )
+                        }
+                        playbackStateHolder.clearCurrentPositionHints()
+                        playbackStateHolder.setCurrentPosition(0L)
+                        resetPlaybackAudioMetadata()
+                    }
                 }
             }
         }
