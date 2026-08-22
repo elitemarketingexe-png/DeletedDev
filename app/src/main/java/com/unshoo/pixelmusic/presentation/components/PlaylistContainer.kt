@@ -469,50 +469,45 @@ fun PlaylistItem(
                 }
                 val playlistCountText = when {
                     playlist.displaySongCount != null -> formatSongCount(playlist.displaySongCount)
-                    playlist.source == "YOUTUBE" && playlist.songIds.isEmpty() -> "Syncing songs…"
+                    playlist.source == "YOUTUBE" && playlist.songIds.isEmpty() -> ""
                     else -> formatSongCount(playlist.songIds.size)
                 }
 
-                val sourceLabel = when (playlist.source?.uppercase()) {
-                    "YOUTUBE" -> "YouTube"
-                    "TELEGRAM", "TELEGRAM_TOPIC" -> "Telegram"
-                    "NETEASE" -> "Netease"
-                    "QQMUSIC" -> "QQ Music"
-                    "NAVIDROME" -> "Navidrome"
-                    "LOCAL", "", null -> "Local"
-                    else -> playlist.source?.lowercase()?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.ROOT) else it.toString() } ?: "Local"
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                Text(
+                    text = playlistCountText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp)
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                        modifier = Modifier.height(18.dp)
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                text = sourceLabel,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    fontFamily = GoogleSansRounded
-                                )
-                            )
-                        }
-                    }
+                )
+            }
 
+            val sourceLabel = when (playlist.source?.uppercase()) {
+                "YOUTUBE" -> "YouTube"
+                "TELEGRAM", "TELEGRAM_TOPIC" -> "Telegram"
+                "NETEASE" -> "Netease"
+                "QQMUSIC" -> "QQ Music"
+                "NAVIDROME" -> "Navidrome"
+                "LOCAL", "", null -> "Local"
+                else -> playlist.source?.lowercase()?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.ROOT) else it.toString() } ?: "Local"
+            }
+
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                modifier = Modifier.height(18.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp)
+                ) {
                     Text(
-                        text = playlistCountText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = sourceLabel,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = GoogleSansRounded
+                        )
                     )
                 }
             }
