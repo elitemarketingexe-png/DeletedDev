@@ -524,7 +524,8 @@ fun ExploreScreen(
                                                             artist = item,
                                                             onClick = {
                                                                 navController.navigateSafely(Screen.ArtistDetail.createRoute(item.id))
-                                                            }
+                                                            },
+                                                            playerViewModel = playerViewModel
                                                         )
                                                     }
                                                     is PlaylistItem -> {
@@ -892,30 +893,14 @@ fun SongCardItem(
             .clip(ExpressiveMediumShape)
             .clickable(onClick = onClick)
     ) {
-        Box(modifier = Modifier.size(136.dp)) {
-            SmartImage(
-                model = song.albumArtUriString,
-                contentDescription = song.title,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(AbsoluteSmoothCornerShape(22.dp, 80)),
-                contentScale = ContentScale.Crop
-            )
-            Surface(
-                shape = ExpressiveSmallShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(6.dp)
-            ) {
-                Text(
-                    text = "Song",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
-        }
+        SmartImage(
+            model = song.albumArtUriString,
+            contentDescription = song.title,
+            modifier = Modifier
+                .size(136.dp)
+                .clip(AbsoluteSmoothCornerShape(22.dp, 80)),
+            contentScale = ContentScale.Crop
+        )
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = song.title,
@@ -1052,30 +1037,14 @@ fun PlaylistCardItem(
             .clip(ExpressiveMediumShape)
             .clickable(onClick = onClick)
     ) {
-        Box(modifier = Modifier.size(136.dp)) {
-            SmartImage(
-                model = playlist.thumbnail,
-                contentDescription = playlist.title,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(AbsoluteSmoothCornerShape(22.dp, 80)),
-                contentScale = ContentScale.Crop
-            )
-            Surface(
-                shape = ExpressiveSmallShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(6.dp)
-            ) {
-                Text(
-                    text = "Playlist",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
-        }
+        SmartImage(
+            model = playlist.thumbnail,
+            contentDescription = playlist.title,
+            modifier = Modifier
+                .size(136.dp)
+                .clip(AbsoluteSmoothCornerShape(22.dp, 80)),
+            contentScale = ContentScale.Crop
+        )
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = playlist.title,
@@ -1360,7 +1329,7 @@ fun RecentMixCardItem(
     playerViewModel: PlayerViewModel,
     onClick: () -> Unit
 ) {
-    val shape = remember { AbsoluteSmoothCornerShape(20.dp, 60) }
+    val shape = remember { AbsoluteSmoothCornerShape(22.dp, 80) }
     val previewSongIds = remember(playlist.songIds) {
         playlist.songIds.take(4)
     }
@@ -1375,17 +1344,34 @@ fun RecentMixCardItem(
 
     Column(
         modifier = Modifier
-            .width(140.dp)
+            .width(136.dp)
+            .clip(ExpressiveMediumShape)
             .clickable(onClick = onClick)
     ) {
-        PlaylistCover(
-            playlist = playlist,
-            playlistSongs = playlistSongs ?: emptyList(),
-            modifier = Modifier
-                .size(140.dp)
-                .clip(shape),
-            size = 140.dp
-        )
+        Box(modifier = Modifier.size(136.dp)) {
+            PlaylistCover(
+                playlist = playlist,
+                playlistSongs = playlistSongs ?: emptyList(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(shape),
+                size = 136.dp
+            )
+            Surface(
+                shape = ExpressiveSmallShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(6.dp)
+            ) {
+                Text(
+                    text = "Smart Mix",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = playlist.name,
@@ -1400,7 +1386,7 @@ fun RecentMixCardItem(
         )
         Text(
             text = "Smart Mix",
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1560,111 +1546,64 @@ fun ArtistCardItem(
     val playEndpoint = remember(artist) {
         artist.shuffleEndpoint 
             ?: artist.radioEndpoint
+            ?: artist.playEndpoint
             ?: unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
                 playlistId = "RDAMVM$artistId",
                 videoId = null
             )
     }
 
-    val radioEndpoint = remember(artist) {
-        artist.radioEndpoint
-            ?: artist.shuffleEndpoint
-            ?: unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
-                playlistId = "RDAMVM$artistId",
-                videoId = null
-            )
-    }
-
-    val bodyLargeStyle = MaterialTheme.typography.bodyMedium
-    val nameTextStyle = remember(bodyLargeStyle, colorScheme.onSurface) {
-        bodyLargeStyle.copy(
-            fontWeight = FontWeight.Bold,
-            fontFamily = GoogleSansRounded
-        )
-    }
-
-    Card(
+    Column(
         modifier = Modifier
             .width(136.dp)
-            .height(204.dp),
-        shape = ExpressiveLargeShape,
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        colors = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainerLow),
-        onClick = onClick
+            .clip(ExpressiveMediumShape)
+            .clickable(onClick = onClick)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Circular artist photo avatar
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center
-            ) {
-                if (!artistThumbnail.isNullOrBlank()) {
-                    SmartImage(
-                        model = artistThumbnail,
-                        contentDescription = artistName,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
+        Box(modifier = Modifier.size(136.dp)) {
+            if (!artistThumbnail.isNullOrBlank()) {
+                SmartImage(
+                    model = artistThumbnail,
+                    contentDescription = artistName,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(colorScheme.surfaceContainerHighest),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         painter = painterResource(R.drawable.rounded_music_note_24),
                         contentDescription = artistName,
                         tint = colorScheme.primary,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(48.dp)
                     )
                 }
             }
 
-            // Artist details
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = artistName,
-                    style = nameTextStyle,
-                    color = colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = "Artist",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            // Clean action buttons row (Play + Radio) matching M3 Expressive style
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = {
-                        playerViewModel?.playRadio(
-                            endpoint = playEndpoint,
-                            title = "${artistName} Mix",
-                            artistName = artistName
-                        )
-                    },
+            if (playerViewModel != null) {
+                Box(
                     modifier = Modifier
-                        .size(34.dp)
-                        .background(colorScheme.primary, CircleShape)
+                        .align(Alignment.BottomEnd)
+                        .padding(6.dp)
+                        .size(32.dp)
+                        .background(
+                            color = colorScheme.primary,
+                            shape = CircleShape
+                        )
+                        .clickable {
+                            playerViewModel.playRadio(
+                                endpoint = playEndpoint,
+                                title = "$artistName Mix",
+                                artistName = artistName
+                            )
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.PlayArrow,
@@ -1673,28 +1612,36 @@ fun ArtistCardItem(
                         modifier = Modifier.size(18.dp)
                     )
                 }
-
-                IconButton(
-                    onClick = {
-                        playerViewModel?.playRadio(
-                            endpoint = radioEndpoint,
-                            title = "${artistName} Radio",
-                            artistName = artistName
-                        )
-                    },
-                    modifier = Modifier
-                        .size(34.dp)
-                        .background(colorScheme.secondaryContainer, CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Radio,
-                        contentDescription = "Artist Radio",
-                        tint = colorScheme.onSecondaryContainer,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
             }
         }
+
+        Spacer(modifier = Modifier.height(7.dp))
+
+        Text(
+            text = artistName,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontFamily = GoogleSansRounded
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+
+        val subtitle = if (!artist.subscriberCountText.isNullOrBlank()) {
+            "Artist • ${artist.subscriberCountText}"
+        } else {
+            "Artist"
+        }
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
     }
 }
 
