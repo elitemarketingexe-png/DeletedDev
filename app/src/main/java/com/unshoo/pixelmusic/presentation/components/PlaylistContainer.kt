@@ -473,27 +473,21 @@ fun PlaylistItem(
                     else -> formatSongCount(playlist.songIds.size)
                 }
 
+                val sourceLabel = when (playlist.source?.uppercase()) {
+                    "YOUTUBE" -> "YouTube"
+                    "TELEGRAM", "TELEGRAM_TOPIC" -> "Telegram"
+                    "NETEASE" -> "Netease"
+                    "QQMUSIC" -> "QQ Music"
+                    "NAVIDROME" -> "Navidrome"
+                    "LOCAL", "", null -> "Local"
+                    else -> playlist.source?.lowercase()?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.ROOT) else it.toString() } ?: "Local"
+                }
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.padding(top = 2.dp)
                 ) {
-                    Text(
-                        text = playlistCountText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    val sourceLabel = when (playlist.source?.uppercase()) {
-                        "YOUTUBE" -> "YouTube"
-                        "TELEGRAM", "TELEGRAM_TOPIC" -> "Telegram"
-                        "NETEASE" -> "Netease"
-                        "QQMUSIC" -> "QQ Music"
-                        "NAVIDROME" -> "Navidrome"
-                        "LOCAL", "", null -> "Local"
-                        else -> playlist.source?.lowercase()?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.ROOT) else it.toString() } ?: "Local"
-                    }
-
                     Surface(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
@@ -514,6 +508,12 @@ fun PlaylistItem(
                             )
                         }
                     }
+
+                    Text(
+                        text = playlistCountText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
