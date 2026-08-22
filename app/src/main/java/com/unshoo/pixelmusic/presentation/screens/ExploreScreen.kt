@@ -888,22 +888,39 @@ fun SongCardItem(
 ) {
     Column(
         modifier = Modifier
-            .width(124.dp)
+            .width(136.dp)
+            .clip(ExpressiveMediumShape)
             .clickable(onClick = onClick)
     ) {
-        SmartImage(
-            model = song.albumArtUriString,
-            contentDescription = song.title,
-            modifier = Modifier
-                .size(124.dp)
-                .clip(ExpressiveMediumShape),
-            contentScale = ContentScale.Crop
-        )
+        Box(modifier = Modifier.size(136.dp)) {
+            SmartImage(
+                model = song.albumArtUriString,
+                contentDescription = song.title,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(AbsoluteSmoothCornerShape(22.dp, 80)),
+                contentScale = ContentScale.Crop
+            )
+            Surface(
+                shape = ExpressiveSmallShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(6.dp)
+            ) {
+                Text(
+                    text = "Song",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
         Spacer(modifier = Modifier.height(7.dp))
         Text(
             text = song.title,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.Bold,
                 fontFamily = GoogleSansRounded
             ),
             maxLines = 1,
@@ -911,9 +928,10 @@ fun SongCardItem(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 4.dp)
         )
+        val subtitle = if (song.artist.isNotBlank()) "Song • ${song.artist}" else "Song"
         Text(
-            text = song.artist,
-            style = MaterialTheme.typography.labelSmall,
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -927,9 +945,6 @@ fun AnimatedSparklesIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // OPTIMIZED: Removed rememberInfiniteTransition (2 continuous animations running in top bar)
-    // Previous version had scale + rotation infinite loops constantly invalidating composition.
-    // Now static gradient button with simple click, zero background work.
     val colors = MaterialTheme.colorScheme
     val gradientBrush = remember(colors) {
         Brush.linearGradient(
@@ -953,12 +968,136 @@ fun AnimatedSparklesIconButton(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Rounded.AutoAwesome,
-                contentDescription = "Smart Mix",
-                modifier = Modifier.size(20.dp),
-                tint = colors.onPrimary
+                painter = painterResource(R.drawable.gemini_ai),
+                contentDescription = "Smart Mix Studio",
+                tint = colors.onPrimary,
+                modifier = Modifier.size(22.dp)
             )
         }
+    }
+}
+
+@Composable
+fun AlbumCarouselItem(
+    album: AlbumItem,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(136.dp)
+            .clip(ExpressiveMediumShape)
+            .clickable(onClick = onClick)
+    ) {
+        Box(modifier = Modifier.size(136.dp)) {
+            SmartImage(
+                model = album.thumbnail,
+                contentDescription = album.title,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(AbsoluteSmoothCornerShape(22.dp, 80)),
+                contentScale = ContentScale.Crop
+            )
+            val isSingle = album.releaseType == unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumReleaseType.SINGLE
+            val typeLabel = if (isSingle) "Single" else if (album.releaseType == unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumReleaseType.EP) "EP" else "Album"
+            Surface(
+                shape = ExpressiveSmallShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(6.dp)
+            ) {
+                Text(
+                    text = typeLabel,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(7.dp))
+        Text(
+            text = album.title,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontFamily = GoogleSansRounded
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        val artistText = album.artists?.joinToString { it.name }
+        val isSingle = album.releaseType == unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumReleaseType.SINGLE
+        val type = if (isSingle) "Single" else if (album.releaseType == unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumReleaseType.EP) "EP" else "Album"
+        val subtitle = if (!artistText.isNullOrBlank()) "$type • $artistText" else type
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+    }
+}
+
+@Composable
+fun PlaylistCardItem(
+    playlist: PlaylistItem,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .width(136.dp)
+            .clip(ExpressiveMediumShape)
+            .clickable(onClick = onClick)
+    ) {
+        Box(modifier = Modifier.size(136.dp)) {
+            SmartImage(
+                model = playlist.thumbnail,
+                contentDescription = playlist.title,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(AbsoluteSmoothCornerShape(22.dp, 80)),
+                contentScale = ContentScale.Crop
+            )
+            Surface(
+                shape = ExpressiveSmallShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(6.dp)
+            ) {
+                Text(
+                    text = "Playlist",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(7.dp))
+        Text(
+            text = playlist.title,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontFamily = GoogleSansRounded
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        val authorName = playlist.author?.name
+        val subtitle = if (!authorName.isNullOrBlank()) "Playlist • $authorName" else "Playlist"
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
     }
 }
 
@@ -1406,63 +1545,6 @@ fun SectionHeader(
     }
 }
 
-@Composable
-fun AlbumCarouselItem(
-    album: AlbumItem,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .width(136.dp)
-            .clickable(onClick = onClick)
-    ) {
-        Box(modifier = Modifier.size(136.dp)) {
-            SmartImage(
-                model = album.thumbnail,
-                contentDescription = album.title,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(AbsoluteSmoothCornerShape(22.dp, 80)),
-                contentScale = ContentScale.Crop
-            )
-            val isSingle = album.releaseType == unshoo.ianshulyadav.pixelmusic.innertube.models.AlbumReleaseType.SINGLE
-            Surface(
-                shape = ExpressiveSmallShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(6.dp)
-            ) {
-                Text(
-                    text = if (isSingle) "Single" else "Album",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(7.dp))
-        Text(
-            text = album.title,
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontWeight = FontWeight.Bold,
-                fontFamily = GoogleSansRounded
-            ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-        Text(
-            text = album.artists?.joinToString { it.name } ?: "",
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-    }
-}
 
 @Composable
 fun ArtistCardItem(
@@ -1617,46 +1699,6 @@ fun ArtistCardItem(
 }
 
 
-@Composable
-fun PlaylistCardItem(
-    playlist: PlaylistItem,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .width(136.dp)
-            .clickable(onClick = onClick)
-    ) {
-        SmartImage(
-            model = playlist.thumbnail,
-            contentDescription = playlist.title,
-            modifier = Modifier
-                .size(136.dp)
-                .clip(ExpressiveMediumShape),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.height(7.dp))
-        Text(
-            text = playlist.title,
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontWeight = FontWeight.Bold,
-                fontFamily = GoogleSansRounded
-            ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-        Text(
-            text = playlist.author?.name ?: "",
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
-    }
-}
 
 @Composable
 fun SimilarArtistsCarousel(
