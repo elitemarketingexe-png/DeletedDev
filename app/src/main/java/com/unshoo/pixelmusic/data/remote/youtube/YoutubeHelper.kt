@@ -1321,7 +1321,7 @@ object YoutubeHelper {
             suffix.contains("webm") || name.contains("webm") -> "audio/webm"
             else -> null
         }
-        Triple(selectedStream.content, mime, selectedStream.averageBitrate.toInt())
+        Triple(selectedStream.content, mime, selectedStream.averageBitrate)
     }
 
     // ════════════════════════════════════════════════════════════════════════════════════

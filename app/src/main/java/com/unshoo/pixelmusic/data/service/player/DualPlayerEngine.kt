@@ -1305,6 +1305,8 @@ class DualPlayerEngine @Inject constructor(
         }
         if (::playerA.isInitialized) {
             playerA.volume = 1f
+            // Re-publish master player so MediaSession/notification never stays attached to abandoned playerB
+            onPlayerSwappedListeners.forEach { it(playerA) }
         }
         incomingTrackReplayGainVolume = null
         setPauseAtEndOfMediaItems(false)

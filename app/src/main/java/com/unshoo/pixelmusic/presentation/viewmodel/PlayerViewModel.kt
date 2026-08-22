@@ -2582,6 +2582,11 @@ class PlayerViewModel @Inject constructor(
 
     private fun syncCurrentPlayerState(playerCtrl: MediaController) {
         val mediaItem = playerCtrl.currentMediaItem
+        val preparingSongId = _playerUiState.value.preparingSongId
+        if (preparingSongId != null && mediaItem?.mediaId != preparingSongId) {
+            return
+        }
+
         if (mediaItem != null) {
             val song = resolveSongFromMediaItem(mediaItem)
             val readyPosition = playerCtrl.currentPosition.coerceAtLeast(0L)
@@ -4839,6 +4844,18 @@ class PlayerViewModel @Inject constructor(
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 if (isRemoteSessionControllingPlayback()) return
+
+                // If user manually skipped/seeked (REASON_SEEK), clear the preparing guard immediately
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+                    clearPreparingSongIfMatching()
+                } else {
+                    // While preparingSongId is set, ignore transitions to any other item
+                    val preparingSongId = _playerUiState.value.preparingSongId
+                    if (preparingSongId != null && mediaItem?.mediaId != preparingSongId) {
+                        return
+                    }
+                }
+
                 playbackStateHolder.onPlaybackOccurrenceTransition(mediaItem?.mediaId)
                 preparePlaybackAudioMetadataForMedia(mediaItem?.mediaId)
                 transitionSchedulerJob?.cancel()
@@ -5115,6 +5132,7 @@ class PlayerViewModel @Inject constructor(
                           throwIfDirectPlaybackRequestIsStale(requestToken)
                           if (!isCached) {
                               Timber.w("Blocked playback: Offline and not cached.")
+                              clearPreparingSongIfMatching()
                               _showNoInternetDialog.tryEmit(Unit)
                               return@launch
                           }
