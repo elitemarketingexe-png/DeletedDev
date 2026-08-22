@@ -16,7 +16,6 @@ import kotlin.math.absoluteValue
 
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
 import unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint
-import unshoo.ianshulyadav.pixelmusic.innertube.models.filterVideo
 import com.unshoo.pixelmusic.data.model.Song
 import com.unshoo.pixelmusic.data.database.MusicDao
 import com.unshoo.pixelmusic.data.database.RelatedSongMap
@@ -188,8 +187,8 @@ object AutoQueueManager {
                 Pair(mediaId, vid)
             } ?: return@launch
 
-            // Resolve YouTube ID for local songs via DB or YouTube search fallback
-            var resolvedVideoId = videoId ?: run {
+            // Resolve YouTube ID for local songs via DB
+            val resolvedVideoId = videoId ?: run {
                 val longId = currentId.toLongOrNull()
                 if (longId != null) {
                     val dbSong = musicDaoRef?.getSongByIdOnce(longId)
@@ -197,30 +196,6 @@ object AutoQueueManager {
                         dbSong.contentUriString.startsWith("youtube://")
                     }
                 } else null
-            }
-
-            if (resolvedVideoId == null) {
-                resolvedVideoId = synchronized(localToYoutubeIdMap) { localToYoutubeIdMap[currentId] }
-            }
-
-            if (resolvedVideoId == null) {
-                val (title, artist) = withContext(Dispatchers.Main) {
-                    val item = player.currentMediaItem
-                    Pair(item?.mediaMetadata?.title?.toString()?.trim(), item?.mediaMetadata?.artist?.toString()?.trim())
-                }
-                if (!title.isNullOrBlank()) {
-                    val query = if (!artist.isNullOrBlank()) "$title $artist" else title
-                    try {
-                        val searchResult = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
-                        val songItem = searchResult?.items?.firstOrNull { it is unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem } as? unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem
-                        if (songItem != null) {
-                            resolvedVideoId = songItem.id
-                            synchronized(localToYoutubeIdMap) {
-                                localToYoutubeIdMap[currentId] = songItem.id
-                            }
-                        }
-                    } catch (_: Exception) {}
-                }
             }
 
             val seedId = resolvedVideoId ?: currentId
@@ -233,9 +208,10 @@ object AutoQueueManager {
                 currentWatchEndpoint = endpoint
                 continuationToken = null
             }
-            // Trigger refill immediately so the queue builds without delay
+            // Trigger deferred refill (allows 1.5s for initial audio buffer to stream cleanly)
             fetchJob = currentScope.launch(Dispatchers.IO) {
-                refillQueueLoop(currentId, forceRefresh = true)
+                kotlinx.coroutines.delay(1500)
+                refillQueueLoop(currentId, forceRefresh = false)
             }
         }
     }
@@ -366,7 +342,18 @@ object AutoQueueManager {
             } ?: return@launch
 
             val remaining = playerState[0] as Int
-            val currentId = playerState[1] as? String ?: return@launch
+            val currentId = playerState[1] as? String
+            val isLocalOrFile = playerState[3] as Boolean
+            if (currentId == null) return@launch
+
+            val ctx = contextRef ?: return@launch
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            val activeNet = cm?.activeNetwork
+            val caps = cm?.getNetworkCapabilities(activeNet)
+            val hasInternet = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+
+            if (isLocalOrFile || !hasInternet) return@launch
+
             if (forceRefresh) {
                 fetchJob?.cancel()
                 synchronized(addedVideoIds) {
@@ -956,23 +943,11 @@ object AutoQueueManager {
         }
 
         if (rawVideoId == null) {
-            rawVideoId = synchronized(localToYoutubeIdMap) { localToYoutubeIdMap[currentId] }
-        }
-        if (rawVideoId == null) {
-            val title = currentMediaItem?.mediaMetadata?.title?.toString()?.trim()
-            val artist = currentMediaItem?.mediaMetadata?.artist?.toString()?.trim()
-            if (!title.isNullOrBlank()) {
-                val query = if (!artist.isNullOrBlank()) "$title $artist" else title
-                try {
-                    val searchResult = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
-                    val songItem = searchResult?.items?.firstOrNull { it is unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem } as? unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem
-                    if (songItem != null) {
-                        rawVideoId = songItem.id
-                        synchronized(localToYoutubeIdMap) {
-                            localToYoutubeIdMap[currentId] = songItem.id
-                        }
-                    }
-                } catch (_: Exception) {
+            val songId = currentId.toLongOrNull()
+            if (songId != null) {
+                val dbSong = dao.getSongByIdOnce(songId)
+                if (dbSong?.contentUriString?.startsWith("youtube://") == true) {
+                    rawVideoId = dbSong.contentUriString.removePrefix("youtube://")
                 }
             }
         }
@@ -1378,19 +1353,7 @@ object AutoQueueManager {
                 val addedVideoIdsLocal = synchronized(addedVideoIds) {
                     addedVideoIds.toSet()
                 }
-                val pureYtMusicOnly = try {
-                    val entry = contextRef?.let {
-                        dagger.hilt.android.EntryPointAccessors.fromApplication(
-                            it,
-                            YoutubeHelperEntryPoint::class.java
-                        )
-                    }
-                    entry?.userPreferencesRepository()?.pureYtMusicOnlyFlow?.first() ?: false
-                } catch (_: Exception) {
-                    false
-                }
                 val filteredItems = nextResult.items
-                    .filterVideo(pureYtMusicOnly)
                     .filter { it.id !in addedVideoIdsLocal }
 
                 if (filteredItems.isEmpty()) {
