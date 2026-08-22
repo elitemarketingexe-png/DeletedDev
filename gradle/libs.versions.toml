@@ -71,7 +71,7 @@ commons-lang3 = "3.20.0"
 jdom2 = "2.0.6.1"
 jose4j = "0.9.6"
 httpclient = "4.5.14"
-newpipeextractor = "v0.26.5"
+newpipeextractor = "v0.26.3"
 fuel = "2.3.1"
 
 # DI
@@ -202,7 +202,7 @@ ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", 
 ktor-client-encoding = { module = "io.ktor:ktor-client-encoding", version.ref = "ktor" }
 okhttp-dnsoverhttps = { module = "com.squareup.okhttp3:okhttp-dnsoverhttps", version.ref = "okhttp" }
 brotli = { module = "org.brotli:dec", version = "0.1.2" }
-newpipe-extractor = { module = "com.github.TeamNewPipe:NewPipeExtractor", version.ref = "newpipeextractor" }
+newpipe-extractor = { module = "com.github.TeamNewPipe:NewPipeExtractor", version = "v0.26.3" }
 re2j = { module = "com.google.re2j:re2j", version = "1.8" }
 rhino = { module = "org.mozilla:rhino", version = "1.9.1" }
 material = { module = "com.google.android.material:material", version.ref = "material" }

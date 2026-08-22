@@ -3739,8 +3739,10 @@ class PlayerViewModel @Inject constructor(
         if (!isAlreadyPlaying) {
             directPlaybackJob = viewModelScope.launch {
                 if (isDirectPlaybackRequestStale(requestToken)) return@launch
-                withContext(Dispatchers.IO) {
-                    saveYoutubeSongsToDb(listOf(song))
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        saveYoutubeSongsToDb(listOf(song))
+                    } catch (_: Exception) {}
                 }
                 if (isDirectPlaybackRequestStale(requestToken)) return@launch
                 // Pass the already-minted requestToken directly into internalPlaySongs
@@ -3754,10 +3756,10 @@ class PlayerViewModel @Inject constructor(
         }
 
         // 2. Fetch related recommendations in the background and update the player's queue.
-        // BUGFIX: Store in directPlaybackApplyJob so beginDirectPlaybackRequest() on the next
-        // tap cancels it — previously this was also fire-and-forget and could overwrite the
-        // new song's queue with old recommendations after the user had already moved on.
+        // Wait 1.5s so the seed song's initial playback stream connects with zero network contention.
         directPlaybackApplyJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(1500)
+            if (isDirectPlaybackRequestStale(requestToken)) return@launch
             val videoId = resolveQuickPicksVideoId(song)
             if (videoId.isNullOrBlank()) {
                 Timber.w("ArchiveTune Queue Builder: Could not resolve videoId for seed song '${song.title}'")
@@ -5479,14 +5481,11 @@ class PlayerViewModel @Inject constructor(
             return
         }
         val effectiveStartSong = songsToPlay.firstOrNull { it.id == startSong.id } ?: songsToPlay.first()
-        saveYoutubeSongsToDb(listOf(effectiveStartSong))
-        if (songsToPlay.size > 1) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    saveYoutubeSongsToDb(songsToPlay)
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to save YouTube songs to DB in background")
-                }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                saveYoutubeSongsToDb(songsToPlay)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to save YouTube songs to DB in background")
             }
         }
         com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
