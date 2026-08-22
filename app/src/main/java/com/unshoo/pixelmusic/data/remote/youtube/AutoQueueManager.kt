@@ -208,9 +208,8 @@ object AutoQueueManager {
                 currentWatchEndpoint = endpoint
                 continuationToken = null
             }
-            // Trigger deferred refill (allows 1.5s for initial audio buffer to stream cleanly)
+            // Trigger immediate refill from the current song
             fetchJob = currentScope.launch(Dispatchers.IO) {
-                kotlinx.coroutines.delay(1500)
                 refillQueueLoop(currentId, forceRefresh = false)
             }
         }
@@ -343,16 +342,12 @@ object AutoQueueManager {
 
             val remaining = playerState[0] as Int
             val currentId = playerState[1] as? String
-            val isLocalOrFile = playerState[3] as Boolean
             if (currentId == null) return@launch
-
             val ctx = contextRef ?: return@launch
             val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
             val activeNet = cm?.activeNetwork
             val caps = cm?.getNetworkCapabilities(activeNet)
             val hasInternet = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-
-            if (isLocalOrFile || !hasInternet) return@launch
 
             if (forceRefresh) {
                 fetchJob?.cancel()

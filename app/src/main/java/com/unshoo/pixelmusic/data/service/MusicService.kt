@@ -1018,6 +1018,7 @@ class MusicService : MediaLibraryService() {
                                 val totalCount = player.mediaItemCount
                                 if (totalCount > currentIndex + 1) {
                                     player.removeMediaItems(currentIndex + 1, totalCount)
+                                    engine.forceRefreshQueueSnapshot()
                                 }
                             }
                         }
