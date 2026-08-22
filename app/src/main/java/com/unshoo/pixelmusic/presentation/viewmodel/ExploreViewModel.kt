@@ -9,6 +9,7 @@ import com.unshoo.pixelmusic.data.database.MusicDao
 import com.unshoo.pixelmusic.data.model.Playlist
 import com.unshoo.pixelmusic.data.model.Song
 import com.unshoo.pixelmusic.data.preferences.PlaylistPreferencesRepository
+import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
 import com.unshoo.pixelmusic.data.remote.youtube.toNativeSong
 import com.unshoo.pixelmusic.data.stats.PlaybackStatsRepository
 import com.unshoo.pixelmusic.presentation.model.ExploreChipUiModel
@@ -21,6 +22,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -58,6 +62,7 @@ data class ExploreUiState(
 class ExploreViewModel @Inject constructor(
     private val playbackStatsRepository: PlaybackStatsRepository,
     private val playlistPreferencesRepository: PlaylistPreferencesRepository,
+    private val userPreferencesRepository: UserPreferencesRepository,
     private val musicDao: MusicDao,
     private val listeningStatsTracker: ListeningStatsTracker,
     @ApplicationContext private val context: Context
@@ -116,6 +121,14 @@ class ExploreViewModel @Inject constructor(
                     .sortedByDescending { it.lastModified }
                 _uiState.update { it.copy(recentMixes = mixes, libraryPlaylists = libPlaylists) }
             }
+        }
+        viewModelScope.launch {
+            userPreferencesRepository.advancedExplorePageFlow
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    loadData(forceRefresh = true)
+                }
         }
     }
 
@@ -195,12 +208,13 @@ class ExploreViewModel @Inject constructor(
             }
 
             if (home != null) {
+                val isAdvancedExploreEnabled = userPreferencesRepository.advancedExplorePageFlow.first()
                 val collectedSections = home.sections.toMutableList()
-                var currentContinuation = home.continuation
+                var currentContinuation = if (isAdvancedExploreEnabled) home.continuation else null
 
-                // Fetch initial 2 additional batches of continuation to gather a rich feed from user's YouTube Music homepage
+                // Fetch initial 2 additional batches of continuation if advanced explore page is enabled
                 var continuationBatches = 0
-                while (!currentContinuation.isNullOrBlank() && continuationBatches < 2) {
+                while (isAdvancedExploreEnabled && !currentContinuation.isNullOrBlank() && continuationBatches < 2) {
                     continuationBatches++
                     val continuationPage = withContext(Dispatchers.IO) {
                         runCatching { YouTube.home(continuation = currentContinuation).getOrNull() }.getOrNull()
@@ -361,6 +375,7 @@ class ExploreViewModel @Inject constructor(
         if (_uiState.value.isContinuationLoading || _uiState.value.isLoading || _uiState.value.isRefreshing) return
 
         viewModelScope.launch {
+            if (!userPreferencesRepository.advancedExplorePageFlow.first()) return@launch
             _uiState.update { it.copy(isContinuationLoading = true) }
             val continuationHome = withContext(Dispatchers.IO) {
                 runCatching { YouTube.home(continuation = continuation).getOrNull() }.getOrNull()

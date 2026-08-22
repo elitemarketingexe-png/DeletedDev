@@ -809,6 +809,44 @@ fun ExperimentalSettingsScreen(
                 }
             }
 
+            item(key = "explore_experiments_section") {
+                SettingsSection(
+                    title = "Explore & Discovery",
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.ViewCarousel,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.Transparent,
+                        modifier = Modifier.padding(horizontal = 0.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            SwitchSettingItem(
+                                title = "Advanced Explore Page",
+                                subtitle = "Fetch multiple continuous batches of personalized recommendations, mixes, and artist feeds from YouTube Music homepage",
+                                checked = uiState.advancedExplorePage,
+                                onCheckedChange = settingsViewModel::setAdvancedExplorePage,
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.ViewCarousel,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
             item(key = "experimental_bottom_spacer") {
                 Spacer(modifier = Modifier.height(MiniPlayerHeight + 36.dp))
             }

@@ -109,6 +109,7 @@ data class SettingsUiState(
     val immersiveLyricsEnabled: Boolean = false,
     val immersiveLyricsTimeout: Long = 4000L,
     val useAnimatedLyrics: Boolean = false,
+    val advancedExplorePage: Boolean = false,
     val animatedLyricsBlurEnabled: Boolean = true,
     val animatedLyricsBlurStrength: Float = 2.5f,
     val floatingHeaderBarEnabled: Boolean = false,
@@ -760,6 +761,12 @@ class SettingsViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            userPreferencesRepository.advancedExplorePageFlow.collect { enabled ->
+                _uiState.update { it.copy(advancedExplorePage = enabled) }
+            }
+        }
+
+        viewModelScope.launch {
             userPreferencesRepository.backupInfoDismissedFlow.collect { dismissed ->
                 _uiState.update { it.copy(backupInfoDismissed = dismissed) }
             }
@@ -1391,6 +1398,12 @@ class SettingsViewModel @Inject constructor(
     fun setUseAnimatedLyrics(enabled: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setUseAnimatedLyrics(enabled)
+        }
+    }
+
+    fun setAdvancedExplorePage(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setAdvancedExplorePage(enabled)
         }
     }
 

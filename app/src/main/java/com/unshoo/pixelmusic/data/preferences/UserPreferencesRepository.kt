@@ -225,6 +225,7 @@ constructor(
         val FULL_PLAYER_CLOSE_THRESHOLD = intPreferencesKey("full_player_close_threshold_percent")
         // Deprecated experiment key kept only for one-time cleanup after removing the legacy player sheet.
         val USE_PLAYER_SHEET_V2 = booleanPreferencesKey("use_player_sheet_v2")
+        val ADVANCED_EXPLORE_PAGE = booleanPreferencesKey("advanced_explore_page")
 
         // Multi-Artist Settings
         val ARTIST_DELIMITERS = stringPreferencesKey("artist_delimiters")
@@ -1812,6 +1813,17 @@ constructor(
     suspend fun setAnimatedLyricsBlurStrength(strength: Float) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.ANIMATED_LYRICS_BLUR_STRENGTH] = strength
+        }
+    }
+
+    val advancedExplorePageFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.ADVANCED_EXPLORE_PAGE] ?: false
+        }.distinctUntilChanged()
+
+    suspend fun setAdvancedExplorePage(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ADVANCED_EXPLORE_PAGE] = enabled
         }
     }
 
