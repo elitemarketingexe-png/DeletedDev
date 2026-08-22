@@ -2,7 +2,6 @@ package com.unshoo.pixelmusic.data.remote.youtube
 
 import android.content.Context
 import android.util.LruCache
-import android.widget.Toast
 import androidx.core.net.toUri
 import com.unshoo.pixelmusic.data.database.youtube.AppDatabase
 import com.unshoo.pixelmusic.data.model.youtube.PlaylistInfo
@@ -31,28 +30,30 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import org.schabi.newpipe.extractor.ServiceList
 import java.io.File
 import java.util.Locale
+import unshoo.ianshulyadav.pixelmusic.innertube.NewPipeUtils
+import unshoo.ianshulyadav.pixelmusic.innertube.PlaybackAuthState
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient
-import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.ANDROID_VR_NO_AUTH
-import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.ANDROID_VR_1_61_48
-import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.ANDROID_VR_1_43_32
-import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.WEB_REMIX
+import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.ANDROID_CREATOR
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.ANDROID_MUSIC
+import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.ANDROID_VR_1_43_32
+import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.ANDROID_VR_1_61_48
+import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.ANDROID_VR_NO_AUTH
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.IOS
+import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.IPADOS
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.MOBILE
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.TVHTML5
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.TVHTML5_SIMPLY_EMBEDDED_PLAYER
+import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.VISIONOS
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.WEB
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.WEB_CREATOR
+import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.WEB_REMIX
 import unshoo.ianshulyadav.pixelmusic.innertube.utils.StreamClientUtils
-import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
-import unshoo.ianshulyadav.pixelmusic.innertube.NewPipeUtils
-import unshoo.ianshulyadav.pixelmusic.innertube.PlaybackAuthState
-import unshoo.ianshulyadav.pixelmusic.innertube.models.response.PlayerResponse
 import com.unshoo.pixelmusic.data.preferences.PlayerStreamClient
+import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
+import unshoo.ianshulyadav.pixelmusic.innertube.models.response.PlayerResponse
 import java.util.concurrent.ConcurrentHashMap
 
 
@@ -62,11 +63,12 @@ object YoutubeHelper {
     )
     val client = OkHttpClient.Builder()
         .connectionPool(okhttp3.ConnectionPool(10, 5, java.util.concurrent.TimeUnit.MINUTES))
-        // SpatialFlow-style tight timeouts: fail fast on weak links instead of hanging the tap-to-play path.
-        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-        .writeTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-        .callTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+        // Fail fast on connect, but no callTimeout: a hard 12s whole-call cap killed
+        // slow-but-working Innertube resolves on weak links, after which the quality-fallback
+        // pass re-ran the ENTIRE multi-client resolution — doubling worst-case tap-to-play time.
+        .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
         .build()
 
@@ -95,11 +97,37 @@ object YoutubeHelper {
     /** Register a locally-available file path for a YouTube video ID so playback is instant. */
     private val localFilePathCache = LruCache<String, String>(200)
 
-    private val failedStreamClientsUntil = ConcurrentHashMap<String, Long>()
     val playbackTrackingCache = ConcurrentHashMap<String, String>()
     val watchtimeTrackingCache = ConcurrentHashMap<String, String>()
-    private const val FAILED_CLIENT_BACKOFF_MS = 10 * 60 * 1000L
+
+    // ── ArchiveTune-style resolved-candidate cache ─────────────────────────────────
+    // Key: videoId|itag|clientName|authFp → (url, expiresAtMs). Lets a second resolution of the
+    // same song skip NewPipe's signature/n-throttle deobfuscation entirely (ArchiveTune parity).
+    private val resolvedCandidateUrlCache = ConcurrentHashMap<String, Pair<String, Long>>()
+    private const val CANDIDATE_URL_EXPIRY_SAFETY_MS = 60_000L
+    private const val DEFAULT_STREAM_EXPIRE_SECONDS = 300
     @Volatile private var lastSuccessfulClientKey: String? = null
+
+    /**
+     * ArchiveTune STREAM_FALLBACK_CLIENTS order: ANDROID_VR variants first (plain URLs = zero
+     * decipher work), then the Web/TV family, then native mobile clients.
+     */
+    private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
+        ANDROID_VR_NO_AUTH,
+        ANDROID_VR_1_61_48,
+        ANDROID_VR_1_43_32,
+        TVHTML5,
+        WEB_CREATOR,
+        WEB_REMIX,
+        WEB,
+        IOS,
+        MOBILE,
+        ANDROID_MUSIC,
+        ANDROID_CREATOR,
+        IPADOS,
+        VISIONOS,
+        TVHTML5_SIMPLY_EMBEDDED_PLAYER,
+    )
 
     suspend fun extractGenre(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
@@ -682,11 +710,20 @@ object YoutubeHelper {
         val maxBitrate = plan.maxBitrateKbps
         val preferLowFirst = plan.preferLowFirst
         val targetCacheKey = if (plan.quality == StreamingAudioQuality.AUTO) {
-            val preferredKey = if (maxBitrate > 0) "${videoId}_q$maxBitrate" else "${videoId}_high"
-            if (streamUrlLruCache.get(preferredKey)?.let { isYoutubeUrlValid(it) } == true) {
-                preferredKey
+            if (preferLowFirst) {
+                // Weak/unstable link: start on the lowest stream for fastest first-byte.
+                val preferredKey = if (maxBitrate > 0) "${videoId}_q$maxBitrate" else "${videoId}_high"
+                if (streamUrlLruCache.get(preferredKey)?.let { isYoutubeUrlValid(it) } == true) {
+                    preferredKey
+                } else {
+                    "${videoId}_low"
+                }
             } else {
-                "${videoId}_low"
+                // Fast & stable link: resolve the REAL target quality directly. Forcing
+                // low-first here (the pre-fix behavior) made every uncached AUTO song do
+                // a low-quality resolve followed by a second full background re-resolve that
+                // competed with the actual stream download during first buffering.
+                if (maxBitrate > 0) "${videoId}_q$maxBitrate" else "${videoId}_high"
             }
         } else {
             when {
@@ -729,7 +766,7 @@ object YoutubeHelper {
         // MEDIUM→ lowQuality=false, maxBitrate=128 → best under ceiling
         // LOW   → lowQuality=true                  → lowest available
         val useLowQuality = if (plan.quality == StreamingAudioQuality.AUTO) {
-            targetCacheKey == "${videoId}_low"
+            preferLowFirst && targetCacheKey == "${videoId}_low"
         } else {
             preferLowFirst
         }
@@ -790,7 +827,7 @@ object YoutubeHelper {
         }
 
         // Trigger background warming for the actual desired target quality if we had to start on LOW first
-        if (plan.quality == StreamingAudioQuality.AUTO && targetCacheKey == "${videoId}_low") {
+        if (plan.quality == StreamingAudioQuality.AUTO && preferLowFirst && targetCacheKey == "${videoId}_low") {
             warmHigherQualityInBackground(context, song, maxBitrate)
         }
 
@@ -812,6 +849,11 @@ object YoutubeHelper {
         // Fire-and-forget on OkHttp's dispatcher via a cheap coroutine scope-less launch
         backgroundScope.launch(Dispatchers.IO) {
             try {
+                // Wait for initial buffering to finish before spending bandwidth + an Innertube
+                // request on the upgrade path — running it immediately after playback start
+                // competes with the very stream the user is listening to on weak links.
+                delay(8_000L)
+                if (streamUrlLruCache.get(cacheKey) != null) return@launch
                 val result = getSongUrlFromYoutube(
                     context = context,
                     song = song,
@@ -1043,66 +1085,406 @@ object YoutubeHelper {
         return ""
     }
 
-    private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
-        IOS,
-        MOBILE,
-        ANDROID_MUSIC,
-        ANDROID_VR_NO_AUTH,
-        ANDROID_VR_1_61_48,
-        ANDROID_VR_1_43_32,
-        TVHTML5,
-        TVHTML5_SIMPLY_EMBEDDED_PLAYER,
-        WEB,
-        WEB_CREATOR,
-        WEB_REMIX
-    )
+    /**
+     * Resolves the playable stream URL for [song].
+     *
+     * Strategy ported 1:1 from umihi-music (measurably the fastest resolver):
+     *  1. ONE unauthenticated Innertube `player` POST with the ANDROID_VR client — it returns
+     *     PLAIN (non-ciphered) audio URLs, so there is no signature deciphering, no n-throttle
+     *     deobfuscation, no BotGuard/PoToken minting and no byte-range validation probe.
+     *     Retries only when the server rotates visitorData (bot check), mirroring umihi.
+     *  2. Fallback: the original NewPipe extractor (watch-page scrape), RETRY_COUNT attempts
+     *     with linear back-off.
+     */
+    private suspend fun getSongUrlFromYoutube(
+        context: Context,
+        song: Song,
+        retries: Int = Constants.YoutubeApi.RETRY_COUNT,
+        lowQuality: Boolean = false,
+        maxBitrateKbps: Int = 0
+    ): Triple<String, String?, Int?> {
+        val videoId = song.youtubeId
+        var lastError: Throwable? = null
 
-    private fun isCipheredFormat(format: PlayerResponse.StreamingData.Format): Boolean {
-        return format.url == null && (format.signatureCipher != null || format.cipher != null)
+        // Stage 1 — umihi pure: single ANDROID_VR shot.
+        resolveAndroidVrStreamUrl(videoId, lowQuality, maxBitrateKbps, retries)?.let { return it }
+
+        // Stage 2 — ArchiveTune: full multi-client Innertube resolution as the ROBUST middle
+        // layer (only runs when the umihi fast path fails — bot-throttles, region/age gates,
+        // premium formats). Direct-url candidates first, zero validation probes.
+        resolveArchiveTuneStreamUrl(context, videoId, lowQuality, maxBitrateKbps)?.let { return it }
+
+        // Stage 3 — NewPipe extractor (both apps' final fallback).
+        PixelMusicHelper.printd("$videoId : Falling back to NewPipe extractor")
+        repeat(Constants.YoutubeApi.RETRY_COUNT) { attempt ->
+            try {
+                return resolveNewPipeStreamUrl(song, lowQuality, maxBitrateKbps)
+            } catch (e: Throwable) {
+                lastError = e
+                PixelMusicHelper.printe(
+                    "$videoId : NewPipe attempt ${attempt + 1}/${Constants.YoutubeApi.RETRY_COUNT} failed: " +
+                        "${e::class.simpleName}: ${e.message ?: "no message"}"
+                )
+                if (attempt < Constants.YoutubeApi.RETRY_COUNT - 1) {
+                    delay(Constants.YoutubeApi.RETRY_DELAY * (attempt + 1))
+                }
+            }
+        }
+
+        throw Exception(
+            "$videoId : Fatal fail. Could not get stream URL after ${Constants.YoutubeApi.RETRY_COUNT} attempts",
+            lastError
+        )
     }
 
-    private fun shouldSkipCipheredWebCandidate(
-        client: YouTubeClient,
-        format: PlayerResponse.StreamingData.Format,
+    /**
+     * umihi-music fast path: a single Innertube player request with the ANDROID_VR client.
+     * BotGuard minting is explicitly skipped for this call (copy of the auth state with
+     * webClientPoTokenEnabled=false): ANDROID_VR plain URLs need no PoToken, and the synchronous
+     * BotGuardTokenGenerator.mintToken() inside YouTube.player() was adding seconds per request.
+     */
+    private suspend fun resolveAndroidVrStreamUrl(
+        videoId: String,
+        lowQuality: Boolean,
+        maxBitrateKbps: Int,
+        retries: Int
+    ): Triple<String, String?, Int?>? = withContext(Dispatchers.IO) {
+        repeat(retries) { attempt ->
+            val previousVisitorData = YouTube.visitorData
+
+            val response = try {
+                YouTube.player(
+                    videoId = videoId,
+                    client = ANDROID_VR_1_61_48,
+                    authState = YouTube.currentPlaybackAuthState()
+                        .copy(webClientPoTokenEnabled = false),
+                ).getOrNull()
+            } catch (e: Exception) {
+                null
+            } ?: run {
+                PixelMusicHelper.printe("$videoId : ANDROID_VR player request failed (attempt ${attempt + 1}/$retries)")
+                return@withContext null
+            }
+
+            val status = response.playabilityStatus.status
+            val reason = response.playabilityStatus.reason.orEmpty()
+
+            if (status == "OK") {
+                val picked = pickDirectAudioFormat(response, lowQuality, maxBitrateKbps)
+                if (picked != null) {
+                    response.playbackTracking?.videostatsPlaybackUrl?.baseUrl?.let {
+                        playbackTrackingCache[videoId] = it
+                    }
+                    response.playbackTracking?.videostatsWatchtimeUrl?.baseUrl?.let {
+                        watchtimeTrackingCache[videoId] = it
+                    }
+                    PixelMusicHelper.printd(
+                        "$videoId : INSTANT stream via ANDROID_VR (bitrate=${picked.bitrate} low=$lowQuality)"
+                    )
+                    return@withContext Triple(picked.url!!, normalizeMimeType(picked.mimeType), picked.bitrate)
+                }
+
+                PixelMusicHelper.printe("$videoId : ANDROID_VR returned no direct audio formats")
+                return@withContext null
+            }
+
+            PixelMusicHelper.printe("$videoId : ANDROID_VR playability failed status=$status reason=$reason")
+
+            // umihi parity: on bot checks, rotate visitorData once and retry the same fast client;
+            // anything else is not recoverable here, so bail to the NewPipe fallback.
+            val lowerReason = reason.lowercase(Locale.US)
+            val isBot = "bot" in lowerReason || "unusual traffic" in lowerReason || "automated" in lowerReason
+            if (isBot && attempt < retries - 1) {
+                val refreshedVisitorData = try {
+                    YouTube.visitorData().getOrNull()
+                } catch (_: Exception) {
+                    null
+                }
+                if (!refreshedVisitorData.isNullOrBlank() && refreshedVisitorData != previousVisitorData) {
+                    YouTube.visitorData = refreshedVisitorData
+                    PixelMusicHelper.printd("$videoId : Retrying ANDROID_VR with rotated visitorData (${attempt + 2}/$retries)")
+                } else {
+                    return@withContext null
+                }
+            } else {
+                return@withContext null
+            }
+        }
+        null
+    }
+
+    /**
+     * umihi's selection rule, parameterised by our quality ceiling: among the PLAIN-url audio
+     * formats pick the highest bitrate (best under the ceiling when configured; lowest first
+     * only for the weak-link LOW path). Direct `url` formats only — never ciphered signatures.
+     */
+    private fun pickDirectAudioFormat(
+        response: PlayerResponse,
+        lowQuality: Boolean,
+        maxBitrateKbps: Int
+    ): PlayerResponse.StreamingData.Format? {
+        val directAudio = response.streamingData?.adaptiveFormats.orEmpty()
+            .filter { !it.url.isNullOrBlank() }
+            .filter { it.mimeType.startsWith("audio/", ignoreCase = true) }
+            .filter {
+                !it.mimeType.contains("mp3", ignoreCase = true) &&
+                    !it.mimeType.contains("mpeg", ignoreCase = true) &&
+                    !it.mimeType.contains("mpga", ignoreCase = true)
+            }
+        if (directAudio.isEmpty()) return null
+
+        return when {
+            lowQuality -> directAudio.minByOrNull { it.bitrate }
+            maxBitrateKbps > 0 -> {
+                val bpsCeiling = maxBitrateKbps * 1000
+                directAudio.filter { it.bitrate <= bpsCeiling }.maxByOrNull { it.bitrate }
+                    ?: directAudio.maxByOrNull { it.bitrate }
+            }
+            else -> directAudio.maxByOrNull { it.bitrate }
+        }
+    }
+
+    /**
+     * umihi fallback: NewPipe extractor (watch-page scrape) best audio stream, with the same
+     * quality-cap parameterisation and zero cipher handling.
+     */
+    private suspend fun resolveNewPipeStreamUrl(
+        song: Song,
+        lowQuality: Boolean,
+        maxBitrateKbps: Int
+    ): Triple<String, String?, Int?> = withContext(Dispatchers.IO) {
+        val service = ServiceList.YouTube
+        val extractor = service.getStreamExtractor(song.youtubeUrl)
+        extractor.fetchPage()
+
+        val streams = extractor.audioStreams.filter { stream ->
+            val suffix = stream.format?.suffix?.lowercase().orEmpty()
+            val name = stream.format?.name?.lowercase().orEmpty()
+            stream.content.isNotBlank() &&
+                !suffix.contains("mp3") && !suffix.contains("mpeg") && !suffix.contains("mpga") &&
+                !name.contains("mp3") && !name.contains("mpeg") && !name.contains("mpga")
+        }
+
+        val opusStreams = streams.filter { stream ->
+            val suffix = stream.format?.suffix?.lowercase().orEmpty()
+            val name = stream.format?.name?.lowercase().orEmpty()
+            suffix.contains("opus") || name.contains("opus")
+        }
+        val m4aStreams = streams.filter { stream ->
+            val suffix = stream.format?.suffix?.lowercase().orEmpty()
+            val name = stream.format?.name?.lowercase().orEmpty()
+            (suffix.contains("m4a") || name.contains("m4a") || suffix.contains("mp4") || name.contains("mp4")) &&
+                !(suffix.contains("opus") || name.contains("opus"))
+        }
+        val webmStreams = streams.filter { stream ->
+            val suffix = stream.format?.suffix?.lowercase().orEmpty()
+            val name = stream.format?.name?.lowercase().orEmpty()
+            (suffix.contains("webm") || name.contains("webm")) &&
+                !(suffix.contains("opus") || name.contains("opus"))
+        }
+        val otherStreams = streams.filter { stream ->
+            val suffix = stream.format?.suffix?.lowercase().orEmpty()
+            val name = stream.format?.name?.lowercase().orEmpty()
+            !(suffix.contains("opus") || name.contains("opus")) &&
+                !(suffix.contains("m4a") || name.contains("m4a") || suffix.contains("mp4") || name.contains("mp4")) &&
+                !(suffix.contains("webm") || name.contains("webm"))
+        }
+
+        fun sortNewPipeGroup(group: List<org.schabi.newpipe.extractor.stream.AudioStream>): List<org.schabi.newpipe.extractor.stream.AudioStream> {
+            if (group.isEmpty()) return emptyList()
+            return when {
+                lowQuality -> group.sortedBy { it.averageBitrate }
+                maxBitrateKbps > 0 -> {
+                    val bpsCeiling = maxBitrateKbps * 1000
+                    val withinCeiling = group.filter { it.averageBitrate <= bpsCeiling }
+                    if (withinCeiling.isNotEmpty()) {
+                        withinCeiling.sortedByDescending { it.averageBitrate }
+                    } else {
+                        group.sortedBy { it.averageBitrate }
+                    }
+                }
+                else -> group.sortedByDescending { it.averageBitrate }
+            }
+        }
+
+        val orderedStreams = sortNewPipeGroup(opusStreams) + sortNewPipeGroup(m4aStreams) +
+            sortNewPipeGroup(webmStreams) + sortNewPipeGroup(otherStreams)
+        val selectedStream = orderedStreams.firstOrNull()
+            ?: streams.firstOrNull()
+            ?: throw Exception("No valid audio streams found")
+
+        val suffix = selectedStream.format?.suffix?.lowercase().orEmpty()
+        val name = selectedStream.format?.name?.lowercase().orEmpty()
+        val mime = when {
+            suffix.contains("opus") || name.contains("opus") -> "audio/opus"
+            suffix.contains("m4a") || name.contains("m4a") -> "audio/mp4"
+            suffix.contains("webm") || name.contains("webm") -> "audio/webm"
+            else -> null
+        }
+        Triple(selectedStream.content, mime, selectedStream.averageBitrate.toInt())
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════════════
+    //  Stage 2 — ArchiveTune (rukamori/ArchiveTune YTPlayerUtils) robust multi-client fallback
+    //  Ported faithfully, with the PixelMusic-slowdown pieces REMOVED:
+    //   ✗ no per-candidate byte-range validateStatus probe (ArchiveTune trusts direct URLs)
+    //   ✗ no double full-resolution on failure
+    //   ✓ direct-url formats tried FIRST (zero decipher work on the common path)
+    //   ✓ per-(videoId|itag|client) resolved URL cache — skips repeat n-throttle deobfuscation
+    //   ✓ single BotGuard/visitorData repair on bot-detection, then same-client retry
+    //   ✓ login-context-aware client ordering + loginRequired gating
+    // ════════════════════════════════════════════════════════════════════════════════════
+
+    private suspend fun resolveArchiveTuneStreamUrl(
+        context: Context,
+        videoId: String,
+        lowQuality: Boolean,
+        maxBitrateKbps: Int,
+    ): Triple<String, String?, Int?>? = withContext(Dispatchers.IO) {
+        val entryPoint = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            YoutubeHelperEntryPoint::class.java
+        )
+        val preferredClient = try {
+            entryPoint.userPreferencesRepository().playerStreamClientFlow.first()
+        } catch (_: Exception) {
+            PlayerStreamClient.WEB_REMIX
+        }
+
+        var authState = YouTube.currentPlaybackAuthState()
+        // Signature timestamp once per resolve (NewPipe caches per videoId) — ArchiveTune parity.
+        val signatureTimestamp = try {
+            NewPipeUtils.getSignatureTimestamp(videoId).getOrNull()
+        } catch (_: Exception) {
+            null
+        }
+
+        val clients = buildStreamClientOrder(preferredClient, authState)
+        var didRepairAuthAfterBotDetection = false
+
+        for (client in clients) {
+            // ArchiveTune rule: never burn a request on a login-required client when anonymous.
+            if (client.loginRequired && !(authState.hasPlaybackLoginContext && client.loginSupported)) {
+                continue
+            }
+
+            val response = try {
+                YouTube.player(
+                    videoId = videoId,
+                    client = client,
+                    signatureTimestamp = signatureTimestamp,
+                    authState = authState,
+                ).getOrNull()
+            } catch (e: Exception) {
+                PixelMusicHelper.printe("$videoId : ${client.clientName} player request failed: ${e.message}")
+                null
+            } ?: continue
+
+            var status = response.playabilityStatus.status
+            var streamResponse = response
+
+            if (status != "OK") {
+                val reason = response.playabilityStatus.reason.orEmpty()
+                PixelMusicHelper.printe("$videoId : ${client.clientName} playability status=$status reason=$reason")
+
+                // ArchiveTune bot-detection repair: invalidate BotGuard session + rotate
+                // visitorData once per resolve, then retry the SAME client a single time.
+                if (isBotDetectionReason(reason) && !didRepairAuthAfterBotDetection) {
+                    didRepairAuthAfterBotDetection = true
+                    repairPlaybackAuthAfterBotDetection()?.let { repaired ->
+                        authState = repaired
+                    }
+                    val retried = try {
+                        YouTube.player(
+                            videoId = videoId,
+                            client = client,
+                            signatureTimestamp = signatureTimestamp,
+                            authState = authState,
+                        ).getOrNull()
+                    } catch (_: Exception) {
+                        null
+                    } ?: continue
+                    status = retried.playabilityStatus.status
+                    streamResponse = retried
+                }
+                if (status != "OK") continue
+            }
+
+            val candidates = selectArchiveTuneCandidates(streamResponse, lowQuality, maxBitrateKbps)
+            if (candidates.isEmpty()) continue
+
+            var resolved: Triple<String, String?, Int?>? = null
+            for (candidate in candidates) {
+                if (shouldSkipCipheredWebCandidate(client, candidate, authState)) continue
+
+                val cacheKey = "$videoId|${candidate.itag}|${client.clientName}|${authState.fingerprint.hashCode()}"
+                val cached = resolvedCandidateUrlCache[cacheKey]
+                val url: String? = if (
+                    cached != null && cached.second > System.currentTimeMillis() + CANDIDATE_URL_EXPIRY_SAFETY_MS
+                ) {
+                    cached.first
+                } else {
+                    // ArchiveTune findUrl: direct URL → client-version patch; ciphered → NewPipe
+                    // deobfuscation; n-parameter only when the URL actually carries one.
+                    NewPipeUtils.getStreamUrl(candidate, videoId, client, authState).getOrNull()
+                        ?.let { StreamClientUtils.patchClientVersion(it, client.clientVersion) }
+                        ?.also { resolvedCandidateUrlCache[cacheKey] = it to expiryFromStreamUrl(it) }
+                }
+
+                // ArchiveTune purity: NO byte-range validation probe before accepting.
+                if (url != null) {
+                    resolved = Triple(url, normalizeMimeType(candidate.mimeType), candidate.bitrate)
+                    break
+                }
+            }
+
+            if (resolved != null) {
+                streamResponse.playbackTracking?.videostatsPlaybackUrl?.baseUrl?.let {
+                    playbackTrackingCache[videoId] = it
+                }
+                streamResponse.playbackTracking?.videostatsWatchtimeUrl?.baseUrl?.let {
+                    watchtimeTrackingCache[videoId] = it
+                }
+                lastSuccessfulClientKey = StreamClientUtils.buildClientKey(client)
+                PixelMusicHelper.printd(
+                    "$videoId : stream via ArchiveTune fallback client ${client.clientName} (bitrate=${resolved.third})"
+                )
+                return@withContext resolved
+            }
+        }
+
+        PixelMusicHelper.printe("$videoId : ArchiveTune fallback could not resolve a playable stream")
+        null
+    }
+
+    /**
+     * ArchiveTune client order: last-successful first, the user's preferred client next,
+     * then the fallback list (ANDROID_VR family first). Login-capable clients ordered first
+     * when a YouTube Music session exists.
+     */
+    private fun buildStreamClientOrder(
+        preferredStreamClient: PlayerStreamClient,
         authState: PlaybackAuthState,
-    ): Boolean {
-        val isWebClient = StreamClientUtils.isWebClient(client.clientName)
-        val isCiphered = isCipheredFormat(format)
-        val hasGvsPoToken = !authState.resolveGvsPoToken(client).isNullOrBlank()
-        if (authState.webClientPoTokenEnabled && isWebClient && isCiphered && !hasGvsPoToken) {
-            PixelMusicHelper.printd("Skipping ciphered ${client.clientName} stream candidate because Web PoToken playback is enabled but no GVS token is available")
-            return true
+    ): List<YouTubeClient> {
+        val preferredYouTubeClient = resolvePreferredPlaybackClient(preferredStreamClient, authState)
+        val lastSuccessfulClient = lastSuccessfulClientKey?.let { key ->
+            STREAM_FALLBACK_CLIENTS.find { StreamClientUtils.buildClientKey(it) == key }
         }
-        return false
-    }
 
-    private fun isStreamClientTemporarilyBlocked(
-        videoId: String,
-        clientKey: String?,
-        authFingerprint: String,
-    ): Boolean {
-        val normalizedClientKey = StreamClientUtils.normalizeClientKey(clientKey)
-        if (normalizedClientKey.isEmpty()) return false
-        val key = "$authFingerprint:$videoId:$normalizedClientKey"
-        val until = failedStreamClientsUntil[key] ?: return false
-        if (until <= System.currentTimeMillis()) {
-            failedStreamClientsUntil.remove(key)
-            return false
-        }
-        return true
-    }
+        val orderedFallbackClients =
+            if (authState.hasPlaybackLoginContext) {
+                STREAM_FALLBACK_CLIENTS.filter { it.loginSupported } +
+                    STREAM_FALLBACK_CLIENTS.filterNot { it.loginSupported }
+            } else {
+                STREAM_FALLBACK_CLIENTS.toList()
+            }
 
-    private fun markStreamClientFailed(
-        videoId: String,
-        clientKey: String?,
-        httpStatusCode: Int,
-        authFingerprint: String
-    ) {
-        if (httpStatusCode !in setOf(403, 404, 410, 416)) return
-        val normalizedClientKey = StreamClientUtils.normalizeClientKey(clientKey)
-        if (normalizedClientKey.isEmpty()) return
-        val key = "$authFingerprint:$videoId:$normalizedClientKey"
-        failedStreamClientsUntil[key] = System.currentTimeMillis() + FAILED_CLIENT_BACKOFF_MS
+        return buildList {
+            lastSuccessfulClient?.let { add(it) }
+            add(preferredYouTubeClient)
+            addAll(orderedFallbackClients)
+            if (preferredYouTubeClient != WEB_REMIX) add(WEB_REMIX)
+        }.distinct()
     }
 
     private fun resolvePreferredPlaybackClient(
@@ -1128,429 +1510,112 @@ object YoutubeHelper {
         }
     }
 
-    private fun buildStreamClientOrder(
-        preferredStreamClient: PlayerStreamClient,
-        authState: PlaybackAuthState,
-    ): List<YouTubeClient> {
-        val preferredYouTubeClient = resolvePreferredPlaybackClient(preferredStreamClient, authState)
-        val lastSuccessfulClient = lastSuccessfulClientKey?.let { key ->
-            STREAM_FALLBACK_CLIENTS.find { StreamClientUtils.buildClientKey(it) == key }
-        }
-
-        val orderedFallbackClients =
-            if (authState.hasPlaybackLoginContext) {
-                STREAM_FALLBACK_CLIENTS.filter { it.loginSupported } + STREAM_FALLBACK_CLIENTS.filterNot { it.loginSupported }
-            } else {
-                STREAM_FALLBACK_CLIENTS.toList()
-            }
-
-        return buildList {
-            lastSuccessfulClient?.let { add(it) }
-            add(preferredYouTubeClient)
-            addAll(orderedFallbackClients)
-            if (preferredYouTubeClient != WEB_REMIX) add(WEB_REMIX)
-            if (preferredStreamClient == PlayerStreamClient.WEB_REMIX) {
-                addAll(STREAM_FALLBACK_CLIENTS)
-            }
-        }.distinct()
+    private fun isCipheredFormat(format: PlayerResponse.StreamingData.Format): Boolean {
+        return format.url == null && (format.signatureCipher != null || format.cipher != null)
     }
 
-    /**
-     * Validates a YouTube stream URL.
-     *
-     * Fast path: YouTube CDN URLs contain an `expire=<unix_seconds>` query parameter.
-     * If the URL is still fresh (more than 60 s until expiry) we trust it immediately
-     * without hitting the network — saving one full HTTP round-trip per candidate.
-     *
-     * Slow path: Only performed when the URL has no expiry param or is about to expire.
-     * Makes a minimal `bytes=0-0` range probe to confirm the server returns media bytes.
-     */
-    private fun validateStatus(url: String): Boolean {
-        // ── Fast path: trust unexpired YouTube CDN URLs ──────────────────────────────
-        val expireParam = url.substringAfter("expire=", "").substringBefore("&")
-        if (expireParam.isNotEmpty()) {
-            val expireSecs = expireParam.toLongOrNull()
-            if (expireSecs != null) {
-                val currentSecs = System.currentTimeMillis() / 1000
-                if (expireSecs > currentSecs + 60) {
-                    PixelMusicHelper.printd("validateStatus: URL fresh (expires in ${expireSecs - currentSecs}s) — skipping HTTP probe")
-                    return true
-                }
-            }
-        }
-
-        // ── Slow path: live byte-range probe (bounded, low-connectivity safe) ────────
-        // On weak networks this probe is the #1 source of multi-second click-to-play lag.
-        // Prefer trusting googlevideo URLs that still have an expire param over hanging.
-        if (url.contains("googlevideo.com", ignoreCase = true) && expireParam.isNotEmpty()) {
-            PixelMusicHelper.printd("validateStatus: trusting googlevideo URL without probe (low-latency path)")
+    private fun shouldSkipCipheredWebCandidate(
+        client: YouTubeClient,
+        format: PlayerResponse.StreamingData.Format,
+        authState: PlaybackAuthState,
+    ): Boolean {
+        val isWebClient = StreamClientUtils.isWebClient(client.clientName)
+        val isCiphered = isCipheredFormat(format)
+        val hasGvsPoToken = !authState.resolveGvsPoToken(client).isNullOrBlank()
+        if (authState.webClientPoTokenEnabled && isWebClient && isCiphered && !hasGvsPoToken) {
+            PixelMusicHelper.printd(
+                "Skipping ciphered ${client.clientName} stream candidate because Web PoToken playback is enabled but no GVS token is available"
+            )
             return true
-        }
-        PixelMusicHelper.printd("validateStatus: URL near/past expiry — performing HTTP probe")
-        try {
-            val requestProfile = StreamClientUtils.resolveRequestProfile(url)
-            val rangeRequest = StreamClientUtils
-                .applyRequestProfile(
-                    okhttp3.Request.Builder()
-                        .get()
-                        .header("Range", "bytes=0-0")
-                        .url(url),
-                    requestProfile
-                ).build()
-            val streamProxy = unshoo.ianshulyadav.pixelmusic.innertube.YouTube.streamProxy
-            val httpClient = if (streamProxy != null) {
-                OkHttpClient.Builder()
-                    .connectionPool(okhttp3.ConnectionPool(10, 5, java.util.concurrent.TimeUnit.MINUTES))
-                    .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
-                    .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
-                    .callTimeout(4, java.util.concurrent.TimeUnit.SECONDS)
-                    .proxy(streamProxy)
-                    .build()
-            } else {
-                client
-            }
-            return httpClient.newCall(rangeRequest).execute().use { response ->
-                val code = response.code
-                if (code == 403) return@use false
-                if (code !in 200..399 && code != 416) return@use false
-
-                val contentType = response.header("Content-Type").orEmpty().lowercase(Locale.US)
-                if (
-                    contentType.startsWith("text/html") ||
-                    contentType.startsWith("text/plain") ||
-                    contentType.startsWith("application/json") ||
-                    contentType.startsWith("application/xml") ||
-                    contentType.startsWith("text/xml")
-                ) {
-                    PixelMusicHelper.printd("validateStatus: Rejecting — non-media Content-Type: $contentType")
-                    return@use false
-                }
-
-                if (code == 416) return@use true  // server says range not satisfiable but URL exists
-                response.body.source().request(1)
-            }
-        } catch (e: Exception) {
-            PixelMusicHelper.printe("validateStatus: probe failed: ${e.message}")
         }
         return false
     }
 
     /**
-     * Returns the cached MIME type (e.g. "audio/opus") for a URL cache key, or null.
-     * Used by callers to set an accurate MIME hint on the MediaItem so ExoPlayer skips
-     * slow container sniffing.
+     * ArchiveTune `selectAudioFormatCandidates`: DIRECT-URL formats first (they need zero
+     * decipher work), then bitrate under the quality ceiling, then codec rank (opus > mp4a),
+     * then sample rate.
      */
-    fun getMimeTypeForCachedUrl(cacheKey: String): String? = streamMimeTypeLruCache.get(cacheKey)
-
-    /** Returns the cached stream bitrate in bps (e.g. 160000) for a URL cache key, or null. */
-    fun getBitrateForCachedUrl(cacheKey: String): Int? = streamBitrateLruCache.get(cacheKey)
-
-
-    /**
-     * Resolves a stream URL from YouTube.
-     * @param lowQuality If true, picks the lowest-bitrate audio stream for fastest startup.
-     *                   If false (default), picks the highest bitrate for best quality.
-     * @param maxBitrateKbps If > 0, caps the selected stream to this bitrate ceiling (in kbps).
-     *                       Picks the highest bitrate stream that doesn't exceed the ceiling.
-     *                       If no stream is within the ceiling, falls back to the lowest available.
-     */
-    private fun selectCandidates(
-        playerResponse: PlayerResponse,
+    private fun selectArchiveTuneCandidates(
+        response: PlayerResponse,
         lowQuality: Boolean,
-        maxBitrateKbps: Int
+        maxBitrateKbps: Int,
     ): List<PlayerResponse.StreamingData.Format> {
-        val formats = playerResponse.streamingData?.adaptiveFormats
-            ?.filter { 
-                it.mimeType.contains("audio", ignoreCase = true) && 
-                it.bitrate > 0 &&
-                !it.mimeType.contains("mp3", ignoreCase = true) &&
-                !it.mimeType.contains("mpeg", ignoreCase = true) &&
-                !it.mimeType.contains("mpga", ignoreCase = true)
+        val formats = response.streamingData?.adaptiveFormats.orEmpty()
+            .filter {
+                it.mimeType.contains("audio", ignoreCase = true) &&
+                    it.bitrate > 0 &&
+                    !it.mimeType.contains("mp3", ignoreCase = true) &&
+                    !it.mimeType.contains("mpeg", ignoreCase = true) &&
+                    !it.mimeType.contains("mpga", ignoreCase = true)
             }
-            .orEmpty()
         if (formats.isEmpty()) return emptyList()
 
-        val opusFormats = formats.filter { it.mimeType.contains("opus", ignoreCase = true) }
-        val m4aFormats = formats.filter { (it.mimeType.contains("mp4", ignoreCase = true) || it.mimeType.contains("m4a", ignoreCase = true) || it.mimeType.contains("mp4a", ignoreCase = true)) && !it.mimeType.contains("opus", ignoreCase = true) }
-        val webmFormats = formats.filter { it.mimeType.contains("webm", ignoreCase = true) && !it.mimeType.contains("opus", ignoreCase = true) }
-        val otherFormats = formats.filter {
-            !it.mimeType.contains("opus", ignoreCase = true) &&
-            !it.mimeType.contains("mp4", ignoreCase = true) &&
-            !it.mimeType.contains("m4a", ignoreCase = true) &&
-            !it.mimeType.contains("mp4a", ignoreCase = true) &&
-            !it.mimeType.contains("webm", ignoreCase = true)
+        fun codecRank(mimeType: String): Int = when {
+            mimeType.contains("opus", ignoreCase = true) -> 3
+            mimeType.contains("mp4a", ignoreCase = true) || mimeType.contains("mp4", ignoreCase = true) -> 2
+            else -> 1
         }
 
-        fun sortGroup(group: List<PlayerResponse.StreamingData.Format>): List<PlayerResponse.StreamingData.Format> {
-            if (group.isEmpty()) return emptyList()
-            return when {
-                lowQuality -> group.sortedBy { it.bitrate }
-                maxBitrateKbps > 0 -> {
-                    val bpsCeiling = maxBitrateKbps * 1000
-                    val withinCeiling = group.filter { it.bitrate <= bpsCeiling }
-                    if (withinCeiling.isNotEmpty()) {
-                        withinCeiling.sortedByDescending { it.bitrate }
-                    } else {
-                        group.sortedBy { it.bitrate }
-                    }
-                }
-                else -> group.sortedByDescending { it.bitrate }
+        val directFirst = compareByDescending<PlayerResponse.StreamingData.Format> { it.url != null }
+        val preferHigher = directFirst
+            .thenByDescending { it.bitrate }
+            .thenByDescending { codecRank(it.mimeType) }
+            .thenByDescending { it.audioSampleRate ?: 0 }
+        val preferLower = directFirst
+            .thenBy { it.bitrate }
+            .thenByDescending { codecRank(it.mimeType) }
+            .thenByDescending { it.audioSampleRate ?: 0 }
+
+        val bpsCeiling = maxBitrateKbps * 1000
+        return when {
+            lowQuality -> formats.sortedWith(preferLower)
+            bpsCeiling > 0 -> {
+                val withinCeiling = formats.filter { it.bitrate <= bpsCeiling }.sortedWith(preferHigher)
+                val aboveCeiling = formats.filter { it.bitrate > bpsCeiling }.sortedWith(preferLower)
+                withinCeiling + aboveCeiling
             }
+            else -> formats.sortedWith(preferHigher)
         }
+    }
 
-        return sortGroup(opusFormats) + sortGroup(m4aFormats) + sortGroup(webmFormats) + sortGroup(otherFormats)
+    private fun isBotDetectionReason(reason: String): Boolean {
+        val lower = reason.lowercase(Locale.US)
+        return "bot" in lower ||
+            "unusual traffic" in lower ||
+            "automated" in lower ||
+            ("confirm" in lower && "not a" in lower) ||
+            "not a robot" in lower
     }
 
     /**
-     * Resolves a stream URL from YouTube using premium client fallbacks and validation ranges.
+     * ArchiveTune `repairAuthStateAfterBotDetection`: drop the poisoned BotGuard session so the
+     * next request remints, and rotate visitorData. Returns the repaired auth state when it
+     * actually changed.
      */
-    private suspend fun getSongUrlFromYoutube(
-        context: Context,
-        song: Song,
-        retries: Int = Constants.YoutubeApi.RETRY_COUNT,
-        lowQuality: Boolean = false,
-        maxBitrateKbps: Int = 0
-    ): Triple<String, String?, Int?> {
-        val videoId = song.youtubeId
-
-        val entryPoint = EntryPointAccessors.fromApplication(context.applicationContext, YoutubeHelperEntryPoint::class.java)
-        val preferredClient = entryPoint.userPreferencesRepository().playerStreamClientFlow.first()
-        var authState = YouTube.currentPlaybackAuthState()
-
-        val clients = buildStreamClientOrder(preferredClient, authState).filterNot { client ->
-            isStreamClientTemporarilyBlocked(videoId, client.clientName, authState.fingerprint)
-        }.let { ordered ->
-            if (!lowQuality) ordered
-            else {
-                // LOW / weak-network path: try clients that return plain (non-cipher) audio URLs first.
-                // Skipping WEB_* cipher clients first cuts multi-second signature work on slow links.
-                val fast = ordered.filter { c ->
-                    val n = c.clientName.uppercase(java.util.Locale.US)
-                    n.contains("ANDROID_VR") || n == "IOS" || n == "ANDROID_MUSIC" || n == "MOBILE"
-                }
-                val rest = ordered.filterNot { it in fast }
-                (fast + rest).distinct()
+    private suspend fun repairPlaybackAuthAfterBotDetection(): PlaybackAuthState? {
+        return try {
+            com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.invalidateAll()
+            val refreshed = YouTube.visitorData().getOrNull()
+            if (!refreshed.isNullOrBlank()) {
+                YouTube.visitorData = refreshed
             }
+            YouTube.currentPlaybackAuthState()
+        } catch (_: Exception) {
+            null
         }
-
-        var signatureTimestamp: Int? = null
-        try {
-            signatureTimestamp = NewPipeUtils.getSignatureTimestamp(videoId).getOrNull()
-        } catch (e: Exception) {
-            PixelMusicHelper.printe("Failed to get signature timestamp: ${e.message}")
-        }
-
-        var didRefreshVisitorData = false
-        val playerResponseCache = mutableMapOf<String, PlayerResponse>()
-
-        // Single-pass client-by-client resolution.
-        // selectCandidates() already returns formats in Opus → M4A → WebM → other priority
-        // order, so no separate Opus-first scan is needed. Removed the old "Phase 1" that
-        // iterated all clients twice, doubling API call count for no quality benefit.
-        val clientsToTry = if (lowQuality) clients.take(4) else clients
-        for (clientObj in clientsToTry) {
-            try {
-                PixelMusicHelper.printd("Trying playback client: ${clientObj.clientName}")
-                var playerResponse = playerResponseCache[clientObj.clientName]
-                if (playerResponse == null) {
-                    var playerResResult = YouTube.player(
-                        videoId = videoId,
-                        playlistId = null,
-                        client = clientObj,
-                        signatureTimestamp = signatureTimestamp,
-                        setLogin = authState.hasPlaybackLoginContext,
-                        authState = authState
-                    )
-
-                    playerResponse = playerResResult.getOrNull()
-                    if (playerResponse != null) {
-                        var status = playerResponse.playabilityStatus.status
-                        var reason = playerResponse.playabilityStatus.reason.orEmpty()
-                        val isBot = "bot" in reason.lowercase(Locale.US) || "unusual traffic" in reason.lowercase(Locale.US) || "automated" in reason.lowercase(Locale.US)
-
-                        if (status != "OK" && isBot && !didRefreshVisitorData) {
-                            PixelMusicHelper.printd("Bot detection triggered. Refreshing visitorData and invalidating PoToken...")
-                            // Invalidate the stale BotGuard session so the next mint gets a fresh token.
-                            try {
-                                com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.invalidateAll()
-                            } catch (_: Exception) {}
-                            val refreshedVisitorData = YouTube.visitorData().getOrNull()
-                            if (!refreshedVisitorData.isNullOrBlank()) {
-                                YouTube.visitorData = refreshedVisitorData
-                                authState = authState.copy(visitorData = refreshedVisitorData).normalized()
-                                didRefreshVisitorData = true
-
-                                playerResResult = YouTube.player(
-                                    videoId = videoId,
-                                    playlistId = null,
-                                    client = clientObj,
-                                    signatureTimestamp = signatureTimestamp,
-                                    setLogin = authState.hasPlaybackLoginContext,
-                                    authState = authState
-                                )
-                                playerResponse = playerResResult.getOrNull()
-                                if (playerResponse != null) {
-                                    status = playerResponse.playabilityStatus.status
-                                    reason = playerResponse.playabilityStatus.reason.orEmpty()
-                                }
-                            }
-                        }
-                    }
-                    if (playerResponse != null) {
-                        playerResponseCache[clientObj.clientName] = playerResponse
-                    }
-                }
-
-                if (playerResponse == null) {
-                    PixelMusicHelper.printe("Player response was null for client ${clientObj.clientName}")
-                    continue
-                }
-
-                var status = playerResponse.playabilityStatus.status
-                var reason = playerResponse.playabilityStatus.reason.orEmpty()
-
-                if (status != "OK") {
-                    PixelMusicHelper.printe("Playability check failed for client ${clientObj.clientName}: status=$status, reason=$reason")
-                    continue
-                }
-
-                val candidates = selectCandidates(playerResponse, lowQuality, maxBitrateKbps)
-                if (candidates.isEmpty()) {
-                    PixelMusicHelper.printe("No audio formats found for client ${clientObj.clientName}")
-                    continue
-                }
-
-                var resolvedUrl: String? = null
-                var resolvedMimeType: String? = null
-                var resolvedBitrate: Int? = null
-                // On lowQuality path only evaluate the cheapest few formats for speed.
-                val candidateList = if (lowQuality) candidates.take(3) else candidates
-                for (candidate in candidateList) {
-                    if (shouldSkipCipheredWebCandidate(clientObj, candidate, authState)) continue
-                    val deobfuscated = NewPipeUtils.getStreamUrl(candidate, videoId, clientObj, authState).getOrNull() ?: continue
-                    val patched = StreamClientUtils.patchClientVersion(deobfuscated, clientObj.clientVersion)
-
-                    // Fast accept: googlevideo URLs with a future expire are trusted immediately
-                    // (validateStatus already does this; call it for non-fast cases too).
-                    val accepted = if (lowQuality && patched.contains("googlevideo.com") &&
-                        patched.contains("expire=")
-                    ) {
-                        true
-                    } else {
-                        validateStatus(patched)
-                    }
-
-                    if (accepted) {
-                        resolvedUrl = patched
-                        resolvedMimeType = normalizeMimeType(candidate.mimeType)
-                        resolvedBitrate = candidate.bitrate
-                        lastSuccessfulClientKey = StreamClientUtils.buildClientKey(clientObj)
-                        PixelMusicHelper.printd(
-                            "Successfully resolved stream with client: ${clientObj.clientName} " +
-                                "mime=$resolvedMimeType low=$lowQuality bitrate=$resolvedBitrate"
-                        )
-                        break
-                    } else {
-                        PixelMusicHelper.printe("Stream URL validation failed for client ${clientObj.clientName}")
-                    }
-                }
-
-                if (resolvedUrl != null) {
-                    playerResponse.playbackTracking?.videostatsPlaybackUrl?.baseUrl?.let { baseUrl ->
-                        playbackTrackingCache[videoId] = baseUrl
-                    }
-                    playerResponse.playbackTracking?.videostatsWatchtimeUrl?.baseUrl?.let { baseUrl ->
-                        watchtimeTrackingCache[videoId] = baseUrl
-                    }
-                    return Triple(resolvedUrl, resolvedMimeType, resolvedBitrate)
-                }
-
-            } catch (e: Exception) {
-                PixelMusicHelper.printe("Error with client ${clientObj.clientName}: ${e.message}")
-            }
-        }
-
-        // Failsafe: Original NewPipe Extractor fallback
-        PixelMusicHelper.printd("All premium stream clients failed. Using failsafe NewPipe extractor...")
-        @Suppress("UNUSED_VARIABLE")
-        val service = ServiceList.YouTube
-        var attempts = 0
-        repeat(retries) { attempt ->
-            try {
-                attempts++
-                val streamUrl = withContext(Dispatchers.IO) {
-                    val extractor = service.getStreamExtractor(song.youtubeUrl)
-                    extractor.fetchPage()
-                    val streams = extractor.audioStreams.filter { stream ->
-                        val suffix = stream.format?.suffix?.lowercase().orEmpty()
-                        val name = stream.format?.name?.lowercase().orEmpty()
-                        !suffix.contains("mp3") && !suffix.contains("mpeg") && !suffix.contains("mpga") &&
-                        !name.contains("mp3") && !name.contains("mpeg") && !name.contains("mpga")
-                    }
-                    val opusStreams = streams.filter { stream ->
-                        val suffix = stream.format?.suffix?.lowercase().orEmpty()
-                        val name = stream.format?.name?.lowercase().orEmpty()
-                        suffix.contains("opus") || name.contains("opus")
-                    }
-                    val m4aStreams = streams.filter { stream ->
-                        val suffix = stream.format?.suffix?.lowercase().orEmpty()
-                        val name = stream.format?.name?.lowercase().orEmpty()
-                        (suffix.contains("m4a") || name.contains("m4a") || suffix.contains("mp4") || name.contains("mp4")) &&
-                        !(suffix.contains("opus") || name.contains("opus"))
-                    }
-                    val webmStreams = streams.filter { stream ->
-                        val suffix = stream.format?.suffix?.lowercase().orEmpty()
-                        val name = stream.format?.name?.lowercase().orEmpty()
-                        (suffix.contains("webm") || name.contains("webm")) &&
-                        !(suffix.contains("opus") || name.contains("opus"))
-                    }
-                    val otherStreams = streams.filter { stream ->
-                        val suffix = stream.format?.suffix?.lowercase().orEmpty()
-                        val name = stream.format?.name?.lowercase().orEmpty()
-                        !(suffix.contains("opus") || name.contains("opus")) &&
-                        !(suffix.contains("m4a") || name.contains("m4a") || suffix.contains("mp4") || name.contains("mp4")) &&
-                        !(suffix.contains("webm") || name.contains("webm"))
-                    }
-
-                    fun sortNewPipeGroup(group: List<org.schabi.newpipe.extractor.stream.AudioStream>): List<org.schabi.newpipe.extractor.stream.AudioStream> {
-                        if (group.isEmpty()) return emptyList()
-                        return when {
-                            lowQuality -> group.sortedBy { it.averageBitrate }
-                            maxBitrateKbps > 0 -> {
-                                val bpsCeiling = maxBitrateKbps * 1000
-                                val withinCeiling = group.filter { it.averageBitrate <= bpsCeiling }
-                                if (withinCeiling.isNotEmpty()) {
-                                    withinCeiling.sortedByDescending { it.averageBitrate }
-                                } else {
-                                    group.sortedBy { it.averageBitrate }
-                                }
-                            }
-                            else -> group.sortedByDescending { it.averageBitrate }
-                        }
-                    }
-
-                    val orderedStreams = sortNewPipeGroup(opusStreams) + sortNewPipeGroup(m4aStreams) + sortNewPipeGroup(webmStreams) + sortNewPipeGroup(otherStreams)
-                    val selectedStream = orderedStreams.firstOrNull() ?: streams.firstOrNull() ?: throw Exception("No audio streams found after filtering")
-                    // Infer MIME from format name/suffix
-                    val suffix = selectedStream.format?.suffix?.lowercase().orEmpty()
-                    val name = selectedStream.format?.name?.lowercase().orEmpty()
-                    val mime = when {
-                        suffix.contains("opus") || name.contains("opus") -> "audio/opus"
-                        suffix.contains("m4a") || name.contains("m4a") -> "audio/mp4"
-                        suffix.contains("webm") || name.contains("webm") -> "audio/webm"
-                        else -> null
-                    }
-                    Triple(selectedStream.content, mime, selectedStream.averageBitrate.toInt())
-                }
-                return streamUrl
-            } catch (e: Exception) {
-                PixelMusicHelper.printe("Failsafe NewPipe extraction failed: ${e.message}")
-                if (!lowQuality) delay(Constants.YoutubeApi.RETRY_DELAY * (attempt + 1))
-            }
-        }
-
-        throw Exception("Fatal fail for song ${song.youtubeId}. Could not get it after $attempts failsafe attempts")
     }
+
+    private fun expiryFromStreamUrl(url: String): Long {
+        val expireSeconds = url.substringAfter("expire=", "").substringBefore("&").toLongOrNull()
+        val nowMs = System.currentTimeMillis()
+        return if (expireSeconds != null) {
+            expireSeconds * 1000L
+        } else {
+            nowMs + DEFAULT_STREAM_EXPIRE_SECONDS * 1000L
+        }
+    }
+
 
     /**
      * Normalises a raw MIME type string from the YouTube player response into a simple

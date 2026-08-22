@@ -173,6 +173,13 @@ private const val ENABLE_FOLDERS_SOURCE_SWITCHING = true
 private const val MAX_ALBUM_BATCH_SELECTION = 6
 private const val SONG_ID_QUERY_CHUNK_SIZE = 900
 private const val HOME_MIX_PREVIEW_LIMIT = 48
+/**
+ * Tap-to-play optimistic pre-resolve budget. Stream resolution almost always completes within
+ * this window on warm caches / healthy networks, giving ExoPlayer a ready http(s) URL up front.
+ * When it doesn't, playback proceeds with the unresolved URI and the engine's cooperative
+ * resolver finishes on the load thread — prepare() is never held hostage by network latency.
+ */
+private const val OPTIMISTIC_RESOLVE_BUDGET_MS = 1_500L
 
 private fun List<Song>.toPlaybackQueue(): ImmutableList<Song> = when (this) {
     is PersistentList<Song> -> this
@@ -5559,44 +5566,17 @@ class PlayerViewModel @Inject constructor(
                         val resolvedStart = if (startItem != null) {
                             try {
                                 withContext(Dispatchers.IO) {
-                                    // 5s hard budget for click-to-play on weak networks.
-                                    kotlinx.coroutines.withTimeoutOrNull(5_000L) {
+                                    // Optimistic budget only: covers warm-cache and fast Innertube
+                                    // resolutions. If it lapses we proceed with the ORIGINAL item —
+                                    // the pre-resolve stays in flight (scope.async, deduped) and the
+                                    // engine's ResolvingDataSource now cooperatively awaits it on the
+                                    // load thread, so audio starts the moment resolution completes.
+                                    // The old code waited up to 5s here and then ran a SECOND full
+                                    // serial resolution before prepare() even began — the main
+                                    // tap-to-play stall on anything but instant resolves.
+                                    kotlinx.coroutines.withTimeoutOrNull(OPTIMISTIC_RESOLVE_BUDGET_MS) {
                                         dualPlayerEngine.preResolveForPlayback(startItem)
-                                    } ?: run {
-                                        // Timeout fallback: query user preference and resolve accordingly
-                                        val uri = startItem.localConfiguration?.uri
-                                        if (uri?.scheme == "youtube") {
-                                            val videoId = uri.toString().removePrefix("youtube://")
-                                            val ytSong = com.unshoo.pixelmusic.data.model.youtube.Song(
-                                                youtubeId = videoId
-                                            )
-                                            
-                                            // Dynamic stream resolution optimized for user preference
-                                            val url = try {
-                                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
-                                                    .getSongPlayerUrl(context, ytSong, allowLocal = true)
-                                            } catch (_: Exception) {
-                                                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
-                                                    .getLowestQualityStreamUrl(context, ytSong)
-                                            }
-                                            if (url.startsWith("http")) {
-                                                dualPlayerEngine.resolvedUriCache.put(
-                                                    uri.toString(),
-                                                    android.net.Uri.parse(url)
-                                                )
-                                                dualPlayerEngine.preCacheFirstChunk(url)
-                                                startItem.buildUpon().setUri(android.net.Uri.parse(url)).build()
-                                            } else if (url.isNotBlank() && java.io.File(url).exists()) {
-                                                startItem.buildUpon()
-                                                    .setUri(android.net.Uri.fromFile(java.io.File(url)))
-                                                    .build()
-                                            } else {
-                                                startItem
-                                            }
-                                        } else {
-                                            startItem
-                                        }
-                                    }
+                                    } ?: startItem
                                 }
                             } catch (e: Exception) {
                                 Timber.w(e, "instant start resolve failed")
@@ -5764,7 +5744,19 @@ class PlayerViewModel @Inject constructor(
             ensureTelegramPlaybackObserversStarted()
         }
 
-        val resolvedUri = dualPlayerEngine.resolveCloudUri(finalUri)
+        val resolvedUri = if (finalUri.scheme == "youtube") {
+            // Don't serialize the tap on a full Innertube resolution: give it the optimistic
+            // budget, then hand ExoPlayer the original URI — the scope.async resolve inside
+            // resolveCloudUri keeps running in the background (cancellation of await() does not
+            // stop it) and the engine's cooperative resolver picks up the result on load.
+            withContext(Dispatchers.IO) {
+                kotlinx.coroutines.withTimeoutOrNull(OPTIMISTIC_RESOLVE_BUDGET_MS) {
+                    dualPlayerEngine.resolveCloudUri(finalUri)
+                }
+            } ?: originalUri
+        } else {
+            dualPlayerEngine.resolveCloudUri(finalUri)
+        }
 
         return if (resolvedUri == originalUri) {
             mediaItem

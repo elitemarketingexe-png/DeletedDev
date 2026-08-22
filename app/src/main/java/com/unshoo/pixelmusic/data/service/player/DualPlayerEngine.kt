@@ -91,6 +91,15 @@ class DualPlayerEngine @Inject constructor(
         private const val MAX_AUXILIARY_TIMELINE_ITEMS = 200
         private const val STREAM_RESOLVE_TIMEOUT_MS = 8_000L
         private const val STREAM_RESOLVE_TIMEOUT_LOW_CONNECTIVITY_MS = 5_000L
+        /**
+         * How long the ExoPlayer load thread may cooperatively wait for a stream resolve to
+         * finish before giving up. Must exceed [STREAM_RESOLVE_TIMEOUT_MS] so the load thread
+         * never aborts while a legitimate resolution is still making progress. ExoPlayer runs
+         * data-source opens on its background Loader thread, so waiting here does NOT touch the
+         * UI thread — whereas throwing early pushed ProgressiveMediaSource into exponential
+         * retry back-off (1s → 2s → 4s), which was the multi-second audio-start regression.
+         */
+        private const val LOAD_THREAD_RESOLVE_AWAIT_MS = 12_000L
         // SpatialFlow uses 5s HTTP timeouts for snappy fail/retry on weak links.
         private const val HTTP_CONNECT_TIMEOUT_MS = 5_000
         private const val HTTP_READ_TIMEOUT_MS = 5_000
@@ -871,25 +880,37 @@ class DualPlayerEngine @Inject constructor(
                         }
                     }
 
-                    // Prefer a short cooperative wait if a resolve is already in-flight
-                    // (started by preResolve/play path). Cap at 800ms so we never freeze
-                    // the process — a real resolution takes <400ms when pre-warmed.
+                    // Cooperatively await the in-flight (or freshly kicked) resolve instead of
+                    // erroring after a short poll. resolveCloudUri() dedupes concurrent resolves
+                    // via activeResolutions, so awaiting here shares the preResolve work already
+                    // started on tap. Throwing early sent ProgressiveMediaSource into exponential
+                    // retry back-off (≈1s/2s/4s) and fired MusicService's full re-prepare recovery
+                    // loop — the root cause of multi-second tap/skip-to-audio delays on cold cache.
+                    // This waits on ExoPlayer's background Loader thread, never the UI thread.
                     kickBackgroundResolve(uri)
-                    val deadline = android.os.SystemClock.elapsedRealtime() + 800L
-                    while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                    try {
+                        val awaited = kotlinx.coroutines.runBlocking {
+                            kotlinx.coroutines.withTimeoutOrNull(LOAD_THREAD_RESOLVE_AWAIT_MS) {
+                                resolveCloudUri(uri)
+                            }
+                        }
                         val ready = resolvedUriCache.get(originalUri)
                             ?: activePlaybackResolvedUris[originalUri]
-                        if (ready != null && isResolvedUriFresh(originalUri, ready)) {
+                        if (awaited != null && ready != null && ready != uri &&
+                            isResolvedUriFresh(originalUri, ready)
+                        ) {
+                            activePlaybackResolvedUris[originalUri] = ready
                             return dataSpec.buildUpon().setUri(ready).build()
                         }
-                        try {
-                            Thread.sleep(40L)
-                        } catch (_: InterruptedException) {
-                            break
-                        }
+                    } catch (e: Exception) {
+                        Timber.tag("DualPlayerEngine").w(
+                            e, "resolveDataSpec: cooperative resolve failed for %s", originalUri
+                        )
                     }
+                    // Genuine failure (offline / all clients blocked): surface once so the
+                    // service-level recovery can re-resolve with fresh state.
                     throw java.io.IOException(
-                        "Stream URL not pre-resolved for $scheme://… after short wait"
+                        "Stream URL could not be resolved for $scheme://…"
                     )
                 }
                 return dataSpec
@@ -927,11 +948,16 @@ class DualPlayerEngine @Inject constructor(
         val bandwidthKbps = connectivityStateHolder.linkDownstreamBandwidthKbps.value
         val isRecentlyUnstable = connectivityStateHolder.isNetworkRecentlyUnstable.value
         data class BufferProfile(val minMs: Int, val maxMs: Int, val forPlaybackMs: Int, val afterRebufferMs: Int)
+        // Startup-latency-first profiles: forPlaybackMs is the amount of audio REQUIRED before
+        // first sound. The earlier revision raised this to 1.2–3s (over-eager startup buffering),
+        // directly adding that latency to every tap-to-play. Keep startup buffers tight (the
+        // stream cache + pre-resolved URL make underruns rare) and only grow buffers for links
+        // that have ACTUALLY rebuffed recently or are genuinely slow.
         val profile = when {
-            isRecentlyUnstable -> BufferProfile(30_000, 60_000, 3_000, 5_000)
-            bandwidthKbps < 1_000 -> BufferProfile(25_000, 50_000, 2_500, 4_000)
-            bandwidthKbps < 5_000 -> BufferProfile(20_000, 45_000, 1_800, 3_000)
-            else -> BufferProfile(15_000, 35_000, 1_200, 2_000)
+            isRecentlyUnstable -> BufferProfile(30_000, 60_000, 2_000, 4_000)
+            bandwidthKbps < 1_000 -> BufferProfile(25_000, 50_000, 1_200, 3_000)
+            bandwidthKbps < 5_000 -> BufferProfile(20_000, 45_000, 800, 2_500)
+            else -> BufferProfile(15_000, 35_000, 500, 2_000)
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(profile.minMs, profile.maxMs, profile.forPlaybackMs, profile.afterRebufferMs)

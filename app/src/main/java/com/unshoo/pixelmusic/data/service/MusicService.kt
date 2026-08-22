@@ -1654,17 +1654,35 @@ class MusicService : MediaLibraryService() {
                 currentUri?.contains("googlevideo.com") == true ||
                 currentItem?.mediaId?.startsWith("youtube_") == true
 
+            // Compute the attempt number for this media item BEFORE deciding how much state to
+            // throw away — the first failure is far more often a transient network blip than a
+            // bad URL/token, and recovering from it must stay cheap to keep audio gaps short.
+            val mediaId = currentItem?.mediaId
+            val now = android.os.SystemClock.elapsedRealtime()
+            val isRepeatFailure = mediaId != null && mediaId == lastStreamRecoveryMediaId &&
+                now - lastStreamRecoveryAtMs < 15_000L
+            val effectiveAttempt = if (isRepeatFailure) streamRecoveryAttempts + 1 else 0
+
             // Invalidate any stale resolved stream so the next attempt re-fetches a fresh URL.
             if (!currentUri.isNullOrBlank()) {
                 engine.invalidateResolvedUri(currentUri)
-                if (currentUri.startsWith("youtube://")) {
-                    val videoId = currentUri.removePrefix("youtube://")
-                    // Use invalidateStreamCache which sweeps _low, _high, AND all _q* entries.
-                    com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.invalidateStreamCache(videoId)
-                    // Also purge the per-video PoToken so the next resolve gets a fresh mint.
+                val youtubeVideoId = when {
+                    currentUri.startsWith("youtube://") -> currentUri.removePrefix("youtube://")
+                    currentUri.contains("googlevideo.com") -> currentItem?.mediaId
+                        ?.takeIf { it.startsWith("youtube_") }
+                        ?.removePrefix("youtube_")
+                        ?.also { engine.invalidateResolvedUri("youtube://$it") }
+                    else -> null
+                }
+                if (youtubeVideoId != null && effectiveAttempt >= 1) {
+                    // Only on REPEATED failures do a deep reset: sweep the whole stream cache AND
+                    // re-mint the PoToken. Doing this on a first (usually transient) error forced a
+                    // full multi-client Innertube re-resolve plus an expensive BotGuard re-mint,
+                    // adding seconds to what should be a sub-second recovery.
+                    com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.invalidateStreamCache(youtubeVideoId)
                     serviceScope.launch {
                         try {
-                            com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.invalidatePlayerToken(videoId)
+                            com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.invalidatePlayerToken(youtubeVideoId)
                         } catch (_: Exception) {}
                     }
                 }
@@ -1681,9 +1699,7 @@ class MusicService : MediaLibraryService() {
                 (error.cause is java.io.IOException)
 
             if (isYoutube || isNetworkish) {
-                val mediaId = currentItem?.mediaId
-                val now = android.os.SystemClock.elapsedRealtime()
-                if (mediaId != null && mediaId == lastStreamRecoveryMediaId && now - lastStreamRecoveryAtMs < 15_000L) {
+                if (isRepeatFailure) {
                     streamRecoveryAttempts += 1
                 } else {
                     streamRecoveryAttempts = 0
@@ -1712,7 +1728,24 @@ class MusicService : MediaLibraryService() {
                         }
 
                         val position = player.currentPosition.coerceAtLeast(0L)
-                        val item = currentItem ?: return@launch
+                        val rawItem = currentItem ?: return@launch
+                        // If the previous recovery already replaced the item with a resolved
+                        // googlevideo URL, preResolveForPlayback would skip it (https is loadable
+                        // as-is) and we'd retry the SAME expired URL forever. Map the mediaId back
+                        // to its youtube:// form so this cycle performs a real re-resolve.
+                        val rawUriString = rawItem.localConfiguration?.uri?.toString().orEmpty()
+                        val ytVideoId = rawItem.mediaId
+                            .takeIf { it.startsWith("youtube_") }
+                            ?.removePrefix("youtube_")
+                        val item = if (
+                            rawUriString.contains("googlevideo.com") && !ytVideoId.isNullOrBlank()
+                        ) {
+                            rawItem.buildUpon()
+                                .setUri(android.net.Uri.parse("youtube://$ytVideoId"))
+                                .build()
+                        } else {
+                            rawItem
+                        }
                         val resolved = engine.preResolveForPlayback(item)
                         withContext(Dispatchers.Main.immediate) {
                             val master = engine.masterPlayer
