@@ -1130,13 +1130,14 @@ class DualPlayerEngine @Inject constructor(
             uriString.contains("googlevideo.com", ignoreCase = true) ||
             currentItem.mediaId.startsWith("youtube_")
 
-        if (!isYoutube) return
-
-        val isFresh = if (uriString.contains("googlevideo.com")) {
-            isResolvedUriFresh(currentItem.mediaId, currentUri)
-        } else {
-            activePlaybackResolvedUris[uriString]?.let { isResolvedUriFresh(uriString, it) } ?: false
+        // Only check and refresh if the mediaItem already has a resolved HTTP/googlevideo stream URL
+        // that became expired after hours of pause. Unresolved youtube:// URIs are already in-flight
+        // being resolved by preResolveForPlayback and must not be pre-empted or invalidated here.
+        if (!uriString.contains("googlevideo.com", ignoreCase = true) && !uriString.startsWith("http")) {
+            return
         }
+
+        val isFresh = isResolvedUriFresh(currentItem.mediaId, currentUri)
 
         if (!isFresh) {
             Timber.tag("DualPlayerEngine").i("Current playing track URL is stale or expired after pause/sleep; refreshing in background")
