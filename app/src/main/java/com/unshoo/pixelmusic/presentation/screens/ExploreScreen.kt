@@ -784,9 +784,10 @@ fun ExploreScreen(
                                         key = "home_section_${section.title}_${index}_carousel",
                                         contentType = "yt_item_carousel"
                                     ) {
-                                        if (isSimilar) {
+                                        val artistItems = section.items.filterIsInstance<ArtistItem>()
+                                        if (isSimilar && artistItems.isNotEmpty() && artistItems.size == section.items.size) {
                                             SimilarArtistsCarousel(
-                                                artists = section.items.filterIsInstance<ArtistItem>(),
+                                                artists = artistItems,
                                                 navController = navController,
                                                 playerViewModel = playerViewModel
                                             )

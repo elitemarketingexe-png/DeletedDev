@@ -214,7 +214,7 @@ class ExploreViewModel @Inject constructor(
 
                 // Fetch initial additional batches of continuation if advanced explore page is enabled (expanding rich personalized categories)
                 var continuationBatches = 0
-                while (isAdvancedExploreEnabled && !currentContinuation.isNullOrBlank() && continuationBatches < 4) {
+                while (isAdvancedExploreEnabled && !currentContinuation.isNullOrBlank() && continuationBatches < 2) {
                     continuationBatches++
                     val continuationPage = withContext(Dispatchers.IO) {
                         runCatching { YouTube.home(continuation = currentContinuation).getOrNull() }.getOrNull()
