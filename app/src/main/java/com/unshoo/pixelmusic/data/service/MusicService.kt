@@ -1675,16 +1675,15 @@ class MusicService : MediaLibraryService() {
                         ?.also { engine.invalidateResolvedUri("youtube://$it") }
                     else -> null
                 }
-                if (youtubeVideoId != null && effectiveAttempt >= 1) {
-                    // Only on REPEATED failures do a deep reset: sweep the whole stream cache AND
-                    // re-mint the PoToken. Doing this on a first (usually transient) error forced a
-                    // full multi-client Innertube re-resolve plus an expensive BotGuard re-mint,
-                    // adding seconds to what should be a sub-second recovery.
+                if (youtubeVideoId != null) {
                     com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.invalidateStreamCache(youtubeVideoId)
-                    serviceScope.launch {
-                        try {
-                            com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.invalidatePlayerToken(youtubeVideoId)
-                        } catch (_: Exception) {}
+                    if (effectiveAttempt >= 1) {
+                        // Only on REPEATED failures do a deep reset of PoToken / BotGuard.
+                        serviceScope.launch {
+                            try {
+                                com.unshoo.pixelmusic.utils.potoken.BotGuardTokenGenerator.invalidatePlayerToken(youtubeVideoId)
+                            } catch (_: Exception) {}
+                        }
                     }
                 }
             }

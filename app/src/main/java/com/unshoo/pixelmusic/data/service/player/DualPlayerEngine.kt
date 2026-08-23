@@ -201,6 +201,8 @@ class DualPlayerEngine @Inject constructor(
             if (playWhenReady) {
                 lastPlayWhenReadyAtMs = SystemClock.elapsedRealtime()
                 requestAudioFocus()
+                // Proactively detect and re-resolve stale/expired stream URLs when resuming after long pauses
+                checkAndRefreshCurrentItemIfStale(playerA)
             } else {
                 cancelAudioOffloadFallback()
                 // Keep focus across user pauses so a quick resume doesn't have to re-acquire it.
@@ -1117,6 +1119,62 @@ class DualPlayerEngine @Inject constructor(
         // YouTube URLs expire in 6 hours. If the app hasn't been used in 5.5+ hours,
         // force a silent refresh in the background BEFORE playback starts to guarantee zero lag/retries.
         return expireSeconds > (nowSeconds + 900L)
+    }
+
+    private fun checkAndRefreshCurrentItemIfStale(player: Player) {
+        val currentItem = player.currentMediaItem ?: return
+        val currentUri = currentItem.localConfiguration?.uri ?: return
+        val uriString = currentUri.toString()
+
+        val isYoutube = uriString.startsWith("youtube://") ||
+            uriString.contains("googlevideo.com", ignoreCase = true) ||
+            currentItem.mediaId.startsWith("youtube_")
+
+        if (!isYoutube) return
+
+        val isFresh = if (uriString.contains("googlevideo.com")) {
+            isResolvedUriFresh(currentItem.mediaId, currentUri)
+        } else {
+            activePlaybackResolvedUris[uriString]?.let { isResolvedUriFresh(uriString, it) } ?: false
+        }
+
+        if (!isFresh) {
+            Timber.tag("DualPlayerEngine").i("Current playing track URL is stale or expired after pause/sleep; refreshing in background")
+            val rawVideoId = when {
+                uriString.startsWith("youtube://") -> uriString.removePrefix("youtube://")
+                currentItem.mediaId.startsWith("youtube_") -> currentItem.mediaId.removePrefix("youtube_")
+                else -> null
+            }
+            if (rawVideoId != null) {
+                invalidateResolvedUri("youtube://$rawVideoId")
+                invalidateResolvedUri(uriString)
+                com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.invalidateStreamCache(rawVideoId)
+            }
+
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val rawItem = if (uriString.contains("googlevideo.com") && rawVideoId != null) {
+                        currentItem.buildUpon()
+                            .setUri(Uri.parse("youtube://$rawVideoId"))
+                            .build()
+                    } else {
+                        currentItem
+                    }
+                    val resolved = preResolveForPlayback(rawItem)
+                    withContext(Dispatchers.Main) {
+                        val index = player.currentMediaItemIndex
+                        if (index != C.INDEX_UNSET && player.currentMediaItem?.mediaId == currentItem.mediaId) {
+                            val pos = player.currentPosition.coerceAtLeast(0L)
+                            player.replaceMediaItem(index, resolved)
+                            player.seekTo(index, pos)
+                            player.prepare()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("DualPlayerEngine").w(e, "checkAndRefreshCurrentItemIfStale background refresh failed")
+                }
+            }
+        }
     }
 
     private suspend fun resolveTelegramUriAsync(uri: Uri, uriString: String): Uri? = withContext(Dispatchers.IO) {
