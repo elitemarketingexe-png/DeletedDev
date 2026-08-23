@@ -100,9 +100,21 @@ object AutoQueueManager {
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == Player.STATE_ENDED) {
+            if (playbackState == Player.STATE_ENDED || playbackState == Player.STATE_READY) {
                 checkAndRefillQueue()
             }
+        }
+
+        override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+            checkAndRefillQueue()
+        }
+
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int
+        ) {
+            checkAndRefillQueue()
         }
     }
 
@@ -1360,26 +1372,20 @@ object AutoQueueManager {
 
                 if (filteredItems.isEmpty()) {
                     // All items in this continuation batch are already added.
-                    // If we also have no continuation left, reset addedVideoIds
-                    // (keeping only current song) and try a fresh endpoint so we
-                    // don't get permanently stuck returning 0 songs.
-                    if (nextResult.continuation == null) {
-                        printd("AutoQueueManager: Continuation exhausted and all items filtered — resetting addedVideoIds for fresh fetch")
-                        // Compute retained set without holding the lock during isSameSong evaluation
-                        val retainedSet = synchronized(addedVideoIds) {
-                            addedVideoIds.filter { isSameSong(it, videoId) }.toMutableSet()
-                        }
-                        retainedSet.add(videoId)
-                        synchronized(addedVideoIds) {
-                            addedVideoIds.clear()
-                            addedVideoIds.addAll(retainedSet)
-                        }
-                        continuationToken = null
-                        currentWatchEndpoint = WatchEndpoint(videoId = videoId, playlistId = "RDAMVM$videoId")
-                    } else {
-                        // More continuation available — just return empty to try next page
-                        printd("AutoQueueManager: All fetched items already added, will try next continuation")
+                    // If continuation is exhausted or returning empty results,
+                    // reset addedVideoIds (retaining only current song) and seed a fresh endpoint
+                    // so the auto-queue never stalls.
+                    printd("AutoQueueManager: Batch filtered or exhausted — refreshing endpoint to ensure continuous playback")
+                    val retainedSet = synchronized(addedVideoIds) {
+                        addedVideoIds.filter { isSameSong(it, videoId) }.toMutableSet()
                     }
+                    retainedSet.add(videoId)
+                    synchronized(addedVideoIds) {
+                        addedVideoIds.clear()
+                        addedVideoIds.addAll(retainedSet)
+                    }
+                    continuationToken = null
+                    currentWatchEndpoint = WatchEndpoint(videoId = videoId, playlistId = "RDAMVM$videoId")
                     return@onSuccess
                 }
 
