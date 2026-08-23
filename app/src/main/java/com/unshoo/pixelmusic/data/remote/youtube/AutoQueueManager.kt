@@ -163,8 +163,8 @@ object AutoQueueManager {
 
     /**
      * Called when auto-queue is re-enabled (toggle OFF→ON).
-     * Fully resets state and re-seeds from the currently playing song so that
-     * a fresh related-songs queue is built from scratch.
+     * Fully resets state, clears appended queue items after current, and re-seeds from the
+     * currently playing song so that a fresh, highest-affinity related-songs queue is built.
      */
     fun resetAndReseedFromCurrentSong() {
         reset()
@@ -199,18 +199,25 @@ object AutoQueueManager {
             }
 
             val seedId = resolvedVideoId ?: currentId
-            synchronized(addedVideoIds) { addedVideoIds.add(seedId) }
+            synchronized(addedVideoIds) { 
+                addedVideoIds.clear()
+                addedVideoIds.add(seedId) 
+            }
             lastFetchedVideoId = seedId
 
-            if (resolvedVideoId != null) {
-                // Online song — create a fresh endpoint and pre-fetch first batch
+            if (resolvedVideoId != null && resolvedVideoId.isNotBlank()) {
+                // Online song — create a fresh endpoint with automix preview to get optimal similar songs
                 val endpoint = WatchEndpoint(videoId = resolvedVideoId, playlistId = "RDAMVM$resolvedVideoId")
                 currentWatchEndpoint = endpoint
                 continuationToken = null
+            } else {
+                currentWatchEndpoint = null
+                continuationToken = null
             }
+
             // Trigger immediate refill from the current song
             fetchJob = currentScope.launch(Dispatchers.IO) {
-                refillQueueLoop(currentId, forceRefresh = false)
+                refillQueueLoop(currentId, forceRefresh = true)
             }
         }
     }
