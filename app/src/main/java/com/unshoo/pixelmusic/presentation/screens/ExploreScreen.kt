@@ -326,7 +326,7 @@ fun ExploreScreen(
                     }
                     val (fromYourLibraryAlbums, remainingSections) = remember(homeSectionsRaw) {
                         var libraryAlbums = emptyList<AlbumItem>()
-                        val remaining = mutableListOf<HomePage.Section>()
+                        val remaining = ArrayList<HomePage.Section>(homeSectionsRaw.size)
 
                         for (section in homeSectionsRaw) {
                             val title = section.title.lowercase()
@@ -334,8 +334,16 @@ fun ExploreScreen(
                                 libraryAlbums = section.items.filterIsInstance<AlbumItem>()
                                 continue
                             }
-                            val isLocalDuplicate = title.contains("local")
-                            if (!isLocalDuplicate && section.items.isNotEmpty()) {
+                            if (title.contains("trending") || 
+                                title.contains("long listens") ||
+                                title.contains("local") ||
+                                title.contains("new music videos") ||
+                                title.contains("quick picks") ||
+                                title.contains("quickpicks")
+                            ) {
+                                continue
+                            }
+                            if (section.items.isNotEmpty()) {
                                 remaining.add(section)
                             }
                         }
@@ -728,15 +736,6 @@ fun ExploreScreen(
                         if (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") {
 
                             remainingSections.forEachIndexed { index, section ->
-                                val titleLower = section.title.lowercase()
-                                if (titleLower.contains("trending") || 
-                                    titleLower.contains("long listens") ||
-                                    titleLower.contains("local") ||
-                                    titleLower.contains("new music videos") ||
-                                    titleLower.contains("quick picks") ||
-                                    titleLower.contains("quickpicks")
-                                ) return@forEachIndexed
-
                                 val isSimilar = section.title.startsWith("Similar to", ignoreCase = true) || 
                                                 section.title.contains("Fans also like", ignoreCase = true) ||
                                                 section.title.contains("Similar", ignoreCase = true)

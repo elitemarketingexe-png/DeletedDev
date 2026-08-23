@@ -193,7 +193,8 @@ class ExploreViewModel @Inject constructor(
         if (forceRefresh) {
             _isRefreshingState.value = true
             _errorState.value = null
-            _uiState.update { it.copy(isRefreshing = true, error = null) }
+            _uiState.update { it.copy(isRefreshing = true, error = null, chartsPage = null) }
+            try { cacheFile.delete() } catch (_: Exception) {}
         } else {
             val hasData = _sectionsState.value.isNotEmpty()
             _isLoadingState.value = !hasData
@@ -202,6 +203,42 @@ class ExploreViewModel @Inject constructor(
         }
 
         try {
+            val activeChip = _uiState.value.activeMoodChip
+            val endpoint = activeChip?.endpoint
+            if (endpoint != null) {
+                withContext(Dispatchers.IO) {
+                    YouTube.explore(browseId = endpoint.browseId, params = endpoint.params).onSuccess { exp ->
+                        val rawSections = exp.sections
+                        val uiSections = rawSections.map { it.toUiModel() }
+                        _sectionsState.value = uiSections
+                        _isLoadingState.value = false
+                        _isRefreshingState.value = false
+
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                isRefreshing = false,
+                                explorePageSections = rawSections
+                            )
+                        }
+                        prefetchThumbnails(rawSections)
+                    }.onFailure { e ->
+                        val msg = "Failed to fetch mood feed: ${e.message}"
+                        _errorState.value = msg
+                        _isLoadingState.value = false
+                        _isRefreshingState.value = false
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                isRefreshing = false,
+                                error = msg
+                            )
+                        }
+                    }
+                }
+                return
+            }
+
             // Stage 1: Single fast fetch for YouTube Home (personalized by user session)
             val home = withContext(Dispatchers.IO) {
                 runCatching { YouTube.home().getOrNull() }.getOrNull()
