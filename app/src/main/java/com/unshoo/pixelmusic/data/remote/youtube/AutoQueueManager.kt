@@ -334,7 +334,7 @@ object AutoQueueManager {
     }
 
 
-    private fun checkAndRefillQueue() {
+    fun checkAndRefillQueue() {
         forceRefill(forceRefresh = false)
     }
 
@@ -1357,8 +1357,20 @@ object AutoQueueManager {
     private suspend fun fetchOnlineRelated(videoId: String): List<Song> {
         try {
             val endpoint = currentWatchEndpoint ?: WatchEndpoint(videoId = videoId, playlistId = "RDAMVM$videoId")
-            val result = YouTube.next(endpoint = endpoint, continuation = continuationToken, followAutomixPreview = true)
+            var result = YouTube.next(endpoint = endpoint, continuation = continuationToken, followAutomixPreview = true)
             
+            // If RDAMVM playlist returns empty or failure on first attempt, fallback to pure videoId endpoint
+            if (result.isFailure || (result.getOrNull()?.items?.isEmpty() == true && continuationToken == null)) {
+                if (endpoint.playlistId != null) {
+                    val fallbackEndpoint = WatchEndpoint(videoId = videoId)
+                    val fallbackResult = YouTube.next(endpoint = fallbackEndpoint, continuation = null, followAutomixPreview = true)
+                    if (fallbackResult.isSuccess && fallbackResult.getOrNull()?.items?.isNotEmpty() == true) {
+                        result = fallbackResult
+                        currentWatchEndpoint = fallbackEndpoint
+                    }
+                }
+            }
+
             var fetchedSongs = emptyList<Song>()
             result.onSuccess { nextResult ->
                 continuationToken = nextResult.continuation

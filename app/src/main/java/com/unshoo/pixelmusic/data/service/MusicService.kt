@@ -1009,22 +1009,28 @@ class MusicService : MediaLibraryService() {
                 .distinctUntilChanged()
                 .collect { enabled ->
                     val wasDisabled = lastAutoQueueEnabled == false
+                    val isFirstEmission = lastAutoQueueEnabled == null
                     lastAutoQueueEnabled = enabled
-                    if (enabled && wasDisabled) {
-                        withContext(Dispatchers.Main) {
-                            val player = mediaSession?.player
-                            if (player != null && player.mediaItemCount > 0) {
-                                val currentIndex = player.currentMediaItemIndex
-                                val totalCount = player.mediaItemCount
-                                if (totalCount > currentIndex + 1) {
-                                    player.removeMediaItems(currentIndex + 1, totalCount)
-                                    engine.forceRefreshQueueSnapshot()
+                    if (enabled) {
+                        if (wasDisabled) {
+                            withContext(Dispatchers.Main) {
+                                val player = mediaSession?.player ?: engine.masterPlayer
+                                if (player.mediaItemCount > 0) {
+                                    val currentIndex = player.currentMediaItemIndex
+                                    val totalCount = player.mediaItemCount
+                                    if (totalCount > currentIndex + 1) {
+                                        player.removeMediaItems(currentIndex + 1, totalCount)
+                                        engine.forceRefreshQueueSnapshot()
+                                    }
                                 }
                             }
+                            AutoQueueManager.resetAndReseedFromCurrentSong()
+                        } else {
+                            // If enabled and already has a current song playing or queue is small, verify and fill
+                            AutoQueueManager.checkAndRefillQueue()
                         }
-                        // resetAndReseedFromCurrentSong clears addedVideoIds fully,
-                        // then seeds a fresh related-songs queue from the current song.
-                        AutoQueueManager.resetAndReseedFromCurrentSong()
+                    } else {
+                        AutoQueueManager.reset()
                     }
                 }
         }
