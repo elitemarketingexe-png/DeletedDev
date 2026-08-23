@@ -104,6 +104,10 @@ object AutoQueueManager {
                 checkAndRefillQueue()
             }
         }
+
+        override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+            checkAndRefillQueue()
+        }
     }
 
     fun attach(

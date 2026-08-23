@@ -361,8 +361,8 @@ class ExploreViewModel @Inject constructor(
         }
     }
 
-    fun loadChartsIfNeeded() {
-        if (_uiState.value.chartsPage != null || _uiState.value.isChartsLoading) return
+    fun loadChartsIfNeeded(forceRefresh: Boolean = false) {
+        if (!forceRefresh && (_uiState.value.chartsPage != null || _uiState.value.isChartsLoading)) return
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isChartsLoading = true) }
             val charts = runCatching { YouTube.getChartsPage().getOrNull() }.getOrNull()

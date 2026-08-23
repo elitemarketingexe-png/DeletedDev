@@ -260,6 +260,7 @@ fun ExploreScreen(
                 scope.launch {
                     isManualRefreshing = true
                     exploreViewModel.loadData(forceRefresh = true)
+                    exploreViewModel.loadChartsIfNeeded(forceRefresh = true)
                     quickPicksViewModel.refresh(force = true)
                     kotlinx.coroutines.delay(1000)
                     isManualRefreshing = false
@@ -324,9 +325,15 @@ fun ExploreScreen(
                     } else {
                         uiState.homePageSections
                     }
+                    data class ProcessedSection(
+                        val section: HomePage.Section,
+                        val isSimilar: Boolean,
+                        val isBento: Boolean
+                    )
+
                     val (fromYourLibraryAlbums, remainingSections) = remember(homeSectionsRaw) {
                         var libraryAlbums = emptyList<AlbumItem>()
-                        val remaining = mutableListOf<HomePage.Section>()
+                        val remaining = ArrayList<ProcessedSection>(homeSectionsRaw.size)
 
                         for (section in homeSectionsRaw) {
                             val title = section.title.lowercase()
@@ -336,7 +343,19 @@ fun ExploreScreen(
                             }
                             val isLocalDuplicate = title.contains("local")
                             if (!isLocalDuplicate && section.items.isNotEmpty()) {
-                                remaining.add(section)
+                                if (title.contains("trending") ||
+                                    title.contains("long listens") ||
+                                    title.contains("new music videos") ||
+                                    title.contains("quick picks") ||
+                                    title.contains("quickpicks")
+                                ) {
+                                    continue
+                                }
+                                val isSimilar = section.title.startsWith("Similar to", ignoreCase = true) ||
+                                        section.title.contains("Fans also like", ignoreCase = true) ||
+                                        section.title.contains("Similar", ignoreCase = true)
+                                val isBento = !isSimilar && isBentoSection(section.title, section.items.size)
+                                remaining.add(ProcessedSection(section, isSimilar, isBento))
                             }
                         }
                         Pair(libraryAlbums, remaining)
@@ -727,21 +746,10 @@ fun ExploreScreen(
 
                         if (uiState.selectedFilter == "All" || uiState.selectedFilter == "For You") {
 
-                            remainingSections.forEachIndexed { index, section ->
-                                val titleLower = section.title.lowercase()
-                                if (titleLower.contains("trending") || 
-                                    titleLower.contains("long listens") ||
-                                    titleLower.contains("local") ||
-                                    titleLower.contains("new music videos") ||
-                                    titleLower.contains("quick picks") ||
-                                    titleLower.contains("quickpicks")
-                                ) return@forEachIndexed
-
-                                val isSimilar = section.title.startsWith("Similar to", ignoreCase = true) || 
-                                                section.title.contains("Fans also like", ignoreCase = true) ||
-                                                section.title.contains("Similar", ignoreCase = true)
-
-                                val isBento = !isSimilar && isBentoSection(section.title, section.items.size)
+                            remainingSections.forEachIndexed { index, processed ->
+                                val section = processed.section
+                                val isSimilar = processed.isSimilar
+                                val isBento = processed.isBento
 
                                 if (isBento) {
                                     item(

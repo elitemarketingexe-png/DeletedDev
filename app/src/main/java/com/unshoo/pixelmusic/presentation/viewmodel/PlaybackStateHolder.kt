@@ -403,7 +403,11 @@ class PlaybackStateHolder @Inject constructor(
             if (controller.isPlaying) {
                 controller.pause()
             } else {
-                controller.play()
+                _stablePlayerState.update { it.copy(isBuffering = true) }
+                scope?.launch {
+                    dualPlayerEngine.ensureFreshStreamForResume()
+                    controller.play()
+                } ?: controller.play()
             }
         }
     }

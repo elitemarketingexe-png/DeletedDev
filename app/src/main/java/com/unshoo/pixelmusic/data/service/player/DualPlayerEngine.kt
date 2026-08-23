@@ -436,7 +436,20 @@ class DualPlayerEngine @Inject constructor(
     suspend fun preResolveForPlayback(mediaItem: MediaItem): MediaItem {
         val uri = mediaItem.localConfiguration?.uri ?: return mediaItem
         val scheme = uri.scheme
-        if (scheme !in REMOTE_MEDIA_SCHEMES || scheme == "http" || scheme == "https") {
+        val uriString = uri.toString()
+        val originalUriString = mediaItem.mediaMetadata.extras?.getString("com.unshoo.pixelmusic.external.CONTENT_URI") ?: uriString
+        if (scheme == "http" || scheme == "https") {
+            if (isResolvedUriFresh(originalUriString, uri)) {
+                return mediaItem
+            }
+            // If the URL has expired or is nearing expiration (<15m left), re-resolve from source URI
+            val sourceUri = Uri.parse(originalUriString)
+            if (sourceUri.scheme in REMOTE_MEDIA_SCHEMES) {
+                return resolveMediaItem(mediaItem.buildUpon().setUri(sourceUri).build())
+            }
+            return mediaItem
+        }
+        if (scheme !in REMOTE_MEDIA_SCHEMES) {
             return mediaItem
         }
         return resolveMediaItem(mediaItem)
@@ -1029,6 +1042,47 @@ class DualPlayerEngine @Inject constructor(
             absoluteIndex = targetIndex,
             queueSize = snapshot.size
         )
+    }
+
+    /**
+     * Checks if the currently loaded item in the master player has an expired or stale stream URL
+     * (e.g. after a long pause or app reopening) and proactively re-resolves it in-place.
+     */
+    suspend fun ensureFreshStreamForResume() {
+        val currentItem = if (::playerA.isInitialized) playerA.currentMediaItem else null
+        if (currentItem == null) return
+
+        val currentUri = currentItem.localConfiguration?.uri ?: return
+        val currentUriStr = currentUri.toString()
+        val originalUriStr = currentItem.mediaMetadata.extras?.getString("com.unshoo.pixelmusic.external.CONTENT_URI") ?: currentUriStr
+
+        if (currentUri.scheme == "http" || currentUri.scheme == "https") {
+            if (isResolvedUriFresh(originalUriStr, currentUri)) {
+                return // Fast path: already fresh
+            }
+            Timber.tag("DualPlayerEngine").i("Stream URL stale on resume for %s, re-resolving...", originalUriStr)
+            invalidateResolvedUri(originalUriStr)
+            val sourceUri = Uri.parse(originalUriStr)
+            if (sourceUri.scheme in REMOTE_MEDIA_SCHEMES) {
+                val freshItem = withContext(Dispatchers.IO) {
+                    val resolved = resolveMediaItem(currentItem.buildUpon().setUri(sourceUri).build())
+                    resolved.localConfiguration?.uri?.toString()?.let { u ->
+                        if (u.startsWith("http")) preCacheFirstChunk(u)
+                    }
+                    resolved
+                }
+                withContext(Dispatchers.Main.immediate) {
+                    if (::playerA.isInitialized && playerA.currentMediaItem?.mediaId == currentItem.mediaId) {
+                        val pos = playerA.currentPosition
+                        val idx = playerA.currentMediaItemIndex
+                        val playWhenReady = playerA.playWhenReady
+                        playerA.replaceMediaItem(idx, freshItem)
+                        playerA.seekTo(idx, pos)
+                        playerA.playWhenReady = playWhenReady
+                    }
+                }
+            }
+        }
     }
 
     fun setHiFiMode(enabled: Boolean) {
