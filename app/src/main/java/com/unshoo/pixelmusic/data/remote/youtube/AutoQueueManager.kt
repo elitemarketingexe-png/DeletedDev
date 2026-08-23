@@ -33,8 +33,19 @@ object AutoQueueManager {
     private const val TARGET_QUEUE_SIZE = 45
     private const val MAX_HISTORY = 60
     private const val DECAY_LAMBDA = 1.15e-9
+    /**
+     * How long to wait after a PLAYLIST_CHANGED before topping up the auto-queue.
+     * setMediaItems() (i.e. tapping a song) fires PLAYLIST_CHANGED synchronously,
+     * exactly when the tapped track's stream URL is being resolved + its first chunk
+     * cached. Refilling right then raced that work (a concurrent YouTube "next" call
+     * + heavy DB queries) and regressed tap-to-play latency. 2.5s comfortably clears
+     * the ~250–400ms stream-resolve window so the refill never contends with playback
+     * start, while still keeping the queue topped up between track changes.
+     */
+    private const val TIMELINE_REFILL_DEBOUNCE_MS = 2_500L
 
     private var fetchJob: Job? = null
+    private var timelineRefillJob: Job? = null
     private var lastFetchedVideoId: String? = null
     private var continuationToken: String? = null
     private var currentWatchEndpoint: WatchEndpoint? = null
@@ -106,7 +117,21 @@ object AutoQueueManager {
         }
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
-            checkAndRefillQueue()
+            // A PLAYLIST_CHANGED fires synchronously inside setMediaItems() the moment a
+            // user taps a song — right when that track's stream URL is being resolved and
+            // its first chunk cached. Eagerly refilling here raced that work (concurrent
+            // YouTube "next" network call + heavy DB queries) and was the tap-to-play
+            // latency regression. Debounce it out of the critical path instead: the refill
+            // runs only after playback has settled. Track changes are still refilled
+            // promptly via onMediaItemTransition / onPlaybackStateChanged, and the auto-
+            // queue toggle via resetAndReseedFromCurrentSong(), so top-up is preserved.
+            if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
+            timelineRefillJob?.cancel()
+            val currentScope = scope ?: return
+            timelineRefillJob = currentScope.launch(Dispatchers.IO) {
+                kotlinx.coroutines.delay(TIMELINE_REFILL_DEBOUNCE_MS)
+                forceRefill(forceRefresh = false)
+            }
         }
     }
 
@@ -144,6 +169,7 @@ object AutoQueueManager {
         player?.removeListener(playerListener)
         playerRef = null
         fetchJob?.cancel()
+        timelineRefillJob?.cancel()
         scope = null
         contextRef = null
         datastoreRepository = null
@@ -163,6 +189,8 @@ object AutoQueueManager {
         }
         fetchJob?.cancel()
         fetchJob = null
+        timelineRefillJob?.cancel()
+        timelineRefillJob = null
     }
 
     /**
