@@ -1014,16 +1014,6 @@ class MusicService : MediaLibraryService() {
                     val wasDisabled = lastAutoQueueEnabled == false
                     lastAutoQueueEnabled = enabled
                     if (enabled && wasDisabled) {
-                        withContext(Dispatchers.Main) {
-                            val player = mediaSession?.player
-                            if (player != null && player.mediaItemCount > 0) {
-                                val currentIndex = player.currentMediaItemIndex
-                                val totalCount = player.mediaItemCount
-                                if (totalCount > currentIndex + 1) {
-                                    player.removeMediaItems(currentIndex + 1, totalCount)
-                                }
-                            }
-                        }
                         // resetAndReseedFromCurrentSong clears addedVideoIds fully,
                         // then seeds a fresh related-songs queue from the current song.
                         AutoQueueManager.resetAndReseedFromCurrentSong()

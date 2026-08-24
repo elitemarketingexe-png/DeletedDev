@@ -5988,6 +5988,16 @@ class PlayerViewModel @Inject constructor(
                 com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.resetAndReseedFromCurrentSong()
             } else {
                 com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.stopRefill()
+                withContext(Dispatchers.Main) {
+                    val ctrl = mediaController
+                    if (ctrl != null && ctrl.mediaItemCount > 0) {
+                        val currentIndex = ctrl.currentMediaItemIndex
+                        val totalCount = ctrl.mediaItemCount
+                        if (totalCount > currentIndex + 1) {
+                            ctrl.removeMediaItems(currentIndex + 1, totalCount)
+                        }
+                    }
+                }
             }
         }
     }
