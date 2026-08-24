@@ -26,6 +26,15 @@ interface EngagementDao {
     @Query("SELECT * FROM song_engagements")
     suspend fun getAllEngagements(): List<SongEngagementEntity>
 
+    @Query("SELECT song_id FROM song_engagements WHERE play_count > :minPlayCount")
+    suspend fun getHighlyRotatedSongIds(minPlayCount: Int): List<String>
+
+    @Query("SELECT * FROM song_engagements WHERE play_count >= :minPlayCount")
+    suspend fun getEngagementsWithMinPlayCount(minPlayCount: Int): List<SongEngagementEntity>
+
+    @Query("SELECT * FROM song_engagements WHERE song_id IN (:songIds)")
+    suspend fun getEngagementsForSongs(songIds: List<String>): List<SongEngagementEntity>
+
     @Query("SELECT * FROM song_engagements")
     fun getAllEngagementsFlow(): Flow<List<SongEngagementEntity>>
 

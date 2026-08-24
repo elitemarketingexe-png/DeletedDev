@@ -164,20 +164,24 @@ object QueuePreloadManager {
     }
 
     private fun resolveYoutubeVideoId(mediaItem: MediaItem): String? {
-        val mediaId = mediaItem.mediaId
-        if (mediaId.startsWith("youtube_")) return mediaId.removePrefix("youtube_").takeIf { it.isNotBlank() }
-        mediaItem.localConfiguration?.uri?.toString()
-            ?.takeIf { it.startsWith("youtube://") }
-            ?.substringAfter("youtube://")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { return it }
-        mediaItem.mediaMetadata.extras
+        val uri = mediaItem.localConfiguration?.uri
+        val uriString = uri?.toString().orEmpty()
+        val extrasUri = mediaItem.mediaMetadata.extras
             ?.getString(com.unshoo.pixelmusic.utils.MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI)
-            ?.takeIf { it.startsWith("youtube://") }
-            ?.substringAfter("youtube://")
-            ?.takeIf { it.isNotBlank() }
-            ?.let { return it }
-        return mediaId.takeIf { it.isNotBlank() && !it.startsWith("-") }
+            .orEmpty()
+        return when {
+            uri?.scheme == "youtube" ->
+                uriString.removePrefix("youtube://").substringBefore('?').takeIf { it.isNotBlank() }
+            extrasUri.startsWith("youtube://") ->
+                extrasUri.removePrefix("youtube://").substringBefore('?').takeIf { it.isNotBlank() }
+            mediaItem.mediaId.startsWith("youtube_") ->
+                mediaItem.mediaId.removePrefix("youtube_").takeIf { it.isNotBlank() }
+            uriString.contains("youtu") ->
+                YoutubeHelper.extractYouTubeVideoId(uriString)
+            extrasUri.contains("youtu") ->
+                YoutubeHelper.extractYouTubeVideoId(extrasUri)
+            else -> null
+        }
     }
 
     private suspend fun prefetchAudioBytes(ctx: Context, videoId: String, streamUrl: String) {

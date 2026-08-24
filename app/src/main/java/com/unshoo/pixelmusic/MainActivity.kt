@@ -6,7 +6,6 @@ import com.unshoo.pixelmusic.presentation.navigation.navigateSafely
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
-import android.content.ComponentName
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -89,14 +88,11 @@ import androidx.compose.ui.unit.lerp
 import androidx.core.net.toUri
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.google.common.util.concurrent.ListenableFuture
 import com.unshoo.pixelmusic.data.github.GitHubAnnouncementPropertiesService
 import com.unshoo.pixelmusic.data.github.PlayStoreAnnouncementRemoteConfig
 import com.unshoo.pixelmusic.data.preferences.AppThemeMode
@@ -106,7 +102,6 @@ import com.unshoo.pixelmusic.data.preferences.sanitizeNavBarCornerRadius
 import com.unshoo.pixelmusic.data.preferences.ThemePreferencesRepository
 import com.unshoo.pixelmusic.data.preferences.ThemePreference
 import com.unshoo.pixelmusic.data.preferences.UserPreferencesRepository
-import com.unshoo.pixelmusic.data.service.MusicService
 import com.unshoo.pixelmusic.data.worker.SyncManager
 
 import com.unshoo.pixelmusic.presentation.components.AllFilesAccessDialog
@@ -172,7 +167,6 @@ class MainActivity : ComponentActivity() {
     private val playerViewModel: PlayerViewModel by viewModels()
     private val mainViewModel: MainViewModel by viewModels()
     private var isUIVisiblyReady = false
-    private var mediaControllerFuture: ListenableFuture<MediaController>? = null
     @Inject
     lateinit var userPreferencesRepository: UserPreferencesRepository // Inject here
     @Inject
@@ -1263,25 +1257,11 @@ class MainActivity : ComponentActivity() {
             // Benchmark mode no longer loads dummy data - uses real library data instead
         }
 
-        val sessionToken = SessionToken(this, ComponentName(this, MusicService::class.java))
-        mediaControllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
-        // BUGFIX (was: empty lambda + directExecutor): the previous
-        // addListener passed an empty lambda. The whole point of the
-        // listener is to react to the future completing, but with no
-        // action the call was dead weight, and directExecutor meant
-        // the future completion ran inline on the binder thread — which
-        // is fine, but the addListener call itself is unused and the
-        // MediaController is only needed in onStop() (where it's
-        // released). The PlayerViewModel connects its own controller
-        // for runtime state. We drop the dead listener entirely.
     }
 
     override fun onStop() {
         super.onStop()
         LogUtils.d(this, "onStop")
-        mediaControllerFuture?.let {
-            MediaController.releaseFuture(it)
-        }
     }
 }
 

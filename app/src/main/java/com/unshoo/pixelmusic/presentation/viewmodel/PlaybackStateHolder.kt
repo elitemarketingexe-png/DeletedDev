@@ -295,6 +295,20 @@ class PlaybackStateHolder @Inject constructor(
             pausedPositionOverrideMediaId == safeMediaId &&
                 pausedPositionOverrideToken == activeToken
         val pausedOverrideActive = pausedOverride != null
+        // Re-prepare after stream resolve reports 0-2s while the snapshot is much
+        // later. Treat that as loader noise, not a real seek to the start.
+        val looksLikeResolveNoise = !pausedOverrideActive &&
+            preferredPosition > 2_000L &&
+            safeReportedPosition < 2_000L &&
+            drift > DURATION_MISMATCH_TOLERANCE_MS
+        if (looksLikeResolveNoise ||
+            (!pausedOverrideActive &&
+                dualPlayerEngine.isResolvingStream.value &&
+                preferredPosition > 0L &&
+                safeReportedPosition < 2_000L)
+        ) {
+            return preferredPosition
+        }
         // Stale override fallback: if the player never converges on a freshly-issued seek
         // we don't want to pin the UI on the requested position forever. After this window
         // we trust the reported position again.
@@ -357,9 +371,9 @@ class PlaybackStateHolder @Inject constructor(
         pausedPositionOverrideMs = null
         pausedPositionOverrideSetAtMs = 0L
 
-        if (coldStartSnapshotToken != null) {
-            clearColdStartSnapshot()
-        } else if (coldStartSnapshotMediaId == safeMediaId && coldStartSnapshotPositionMs != null) {
+        if (coldStartSnapshotMediaId == safeMediaId && coldStartSnapshotPositionMs != null) {
+            // Same song: re-prepare after resolve advances the occurrence token.
+            // Rebind the seed instead of dropping a multi-minute resume position.
             coldStartSnapshotToken = activePositionOccurrenceToken
         } else if (coldStartSnapshotMediaId != null) {
             clearColdStartSnapshot()

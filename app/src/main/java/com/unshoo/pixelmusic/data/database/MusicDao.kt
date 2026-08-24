@@ -1883,11 +1883,15 @@ interface MusicDao {
         applyDirectoryFilter: Boolean
     ): List<ArtistEntity>
 
-    /**
-     * Unfiltered list of all artists (one-shot).
-     */
     @Query("SELECT * FROM artists ORDER BY name ASC")
     suspend fun getAllArtistsListRaw(): List<ArtistEntity>
+
+    /** Channel IDs only — Explore personalization does not need full artist rows. */
+    @Query("SELECT DISTINCT channel_id FROM artists WHERE channel_id IS NOT NULL AND channel_id != ''")
+    suspend fun getArtistChannelIds(): List<String>
+
+    @Query("SELECT content_uri_string FROM songs WHERE id = :songId LIMIT 1")
+    suspend fun getContentUriBySongId(songId: Long): String?
 
     @Query("""
         SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri,

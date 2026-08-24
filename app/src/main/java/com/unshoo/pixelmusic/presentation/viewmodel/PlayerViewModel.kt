@@ -1203,16 +1203,34 @@ class PlayerViewModel @Inject constructor(
             } ?: return@launch
 
             val uriStr = currentItem.uri
-            if (uriStr.isNotBlank() && (
+            val recoveredCloudUri = when {
                 uriStr.startsWith("youtube://") ||
-                uriStr.startsWith("telegram:") ||
-                uriStr.startsWith("gdrive:")
-            )) {
+                    uriStr.startsWith("telegram:") ||
+                    uriStr.startsWith("gdrive:") -> uriStr.toUri()
+                uriStr.startsWith("http://") || uriStr.startsWith("https://") -> {
+                    val fromMediaId = currentItem.mediaId
+                        .removePrefix("external:")
+                        .let { id ->
+                            when {
+                                id.startsWith("youtube_") -> id.removePrefix("youtube_")
+                                id.startsWith("youtube://") -> id.removePrefix("youtube://")
+                                else -> null
+                            }
+                        }
+                        ?.substringBefore('?')
+                        ?.takeIf { it.isNotBlank() }
+                    val videoId = fromMediaId
+                        ?: com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.extractYouTubeVideoId(uriStr)
+                    videoId?.takeIf { it.isNotBlank() }?.let { "youtube://$it".toUri() }
+                }
+                else -> null
+            }
+            if (recoveredCloudUri != null) {
                 launch(Dispatchers.IO) {
                     try {
-                        dualPlayerEngine.resolveCloudUri(uriStr.toUri())
+                        dualPlayerEngine.resolveCloudUri(recoveredCloudUri)
                     } catch (e: Exception) {
-                        Timber.w(e, "Pre-fetching startup cloud URI failed for: $uriStr")
+                        Timber.w(e, "Pre-fetching startup cloud URI failed for: $recoveredCloudUri")
                     }
                 }
             }
@@ -1555,7 +1573,15 @@ class PlayerViewModel @Inject constructor(
     val autoQueueEnabled: StateFlow<Boolean> = youtubeDatastoreRepository.settings
         .map { it.autoQueueEnabled }
         .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    private val persistentShuffleEnabled: StateFlow<Boolean> =
+        userPreferencesRepository.persistentShuffleEnabledFlow
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val preferTelegramAlternative: StateFlow<Boolean> =
+        userPreferencesRepository.preferTelegramAlternativeFlow
+            .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val isCurrentSongFavorite: StateFlow<Boolean> = combine(
         stablePlayerState.map { it.currentSong?.id }.distinctUntilChanged(),
@@ -2368,6 +2394,14 @@ class PlayerViewModel @Inject constructor(
             getUiState = { _playerUiState.value },
             onHideDismissUndoBar = { hideDismissUndoBar() }
         )
+
+        viewModelScope.launch {
+            dualPlayerEngine.isResolvingStream.collect { isResolving ->
+                if (isResolving) {
+                    playbackStateHolder.updateStablePlayerState { it.copy(isBuffering = true) }
+                }
+            }
+        }
 
         Trace.endSection() // End PlayerViewModel.init
     }
@@ -5943,17 +5977,9 @@ class PlayerViewModel @Inject constructor(
                 target
             )
             if (target) {
-                withContext(Dispatchers.Main) {
-                    val player = dualPlayerEngine.masterPlayer
-                    if (player.mediaItemCount > 0) {
-                        val currentIndex = player.currentMediaItemIndex
-                        val totalCount = player.mediaItemCount
-                        if (totalCount > currentIndex + 1) {
-                            player.removeMediaItems(currentIndex + 1, totalCount)
-                        }
-                    }
-                }
                 com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.resetAndReseedFromCurrentSong()
+            } else {
+                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.stopRefill()
             }
         }
     }

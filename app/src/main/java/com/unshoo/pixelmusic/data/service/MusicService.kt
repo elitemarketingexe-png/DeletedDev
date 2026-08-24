@@ -162,6 +162,8 @@ class MusicService : MediaLibraryService() {
     lateinit var exoCache: ExoCache
     @Inject
     lateinit var engagementDao: com.unshoo.pixelmusic.data.database.EngagementDao
+    @Inject
+    lateinit var playbackSessionWarmer: com.unshoo.pixelmusic.data.remote.youtube.PlaybackSessionWarmer
 
     // FIXED: Proper auth provider for telemetry
     private lateinit var telemetryManager: com.unshoo.pixelmusic.data.remote.youtube.YouTubeTelemetryManager
@@ -472,6 +474,7 @@ class MusicService : MediaLibraryService() {
         // which is the main thread for a foreground service, so this has
         // to stay here.
         engine.initialize()
+        playbackSessionWarmer.scheduleBackgroundWarmup(delayMs = 0L)
         engine.setOnPlayerAboutToBeReleasedListener { oldPlayer ->
             oldPlayer.removeListener(playerListener)
         }

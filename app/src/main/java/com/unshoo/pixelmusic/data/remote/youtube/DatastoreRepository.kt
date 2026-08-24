@@ -42,6 +42,7 @@ open class DatastoreRepository(private val context: Context) {
         val YT_USERNAME = stringPreferencesKey("yt_username")
         val YT_HANDLE = stringPreferencesKey("yt_handle")
         val YT_AVATAR_URL = stringPreferencesKey("yt_avatar_url")
+        val VISITOR_DATA = stringPreferencesKey("yt_visitor_data")
         val SYNC_ENABLED = booleanPreferencesKey("sync_enabled")
         val CUSTOM_DOWNLOAD_PATH = stringPreferencesKey("custom_download_path")
     }
@@ -73,8 +74,11 @@ open class DatastoreRepository(private val context: Context) {
         val avoidRepetitiveSongs = it[PreferenceKeys.AVOID_REPETITIVE_SONGS] ?: false
         val preloadQueueEnabled = it[PreferenceKeys.PRELOAD_QUEUE_ENABLED] ?: true
         val preloadQueueSize = it[PreferenceKeys.PRELOAD_QUEUE_SIZE] ?: 5
-        val cookies = cookies.first()
-        val dataSyncId = dataSyncId.first()
+        // Read cookies / dataSyncId from THIS Preferences snapshot. Nested
+        // cookies.first() / dataSyncId.first() inside a DataStore map{} can
+        // deadlock the single-threaded DataStore actor.
+        val cookies = Cookies(it[PreferenceKeys.COOKIES] ?: "")
+        val dataSyncId = it[PreferenceKeys.DATA_SYNC_ID] ?: ""
 
         PixelMusicSettings(
             updateChannel = updateChannel,
@@ -107,6 +111,10 @@ open class DatastoreRepository(private val context: Context) {
 
     val dataSyncId = context.youtubeDataStore.data.map {
         it[PreferenceKeys.DATA_SYNC_ID] ?: ""
+    }
+
+    val visitorData = context.youtubeDataStore.data.map {
+        it[PreferenceKeys.VISITOR_DATA] ?: ""
     }
 
     val ytUsername = context.youtubeDataStore.data.map {

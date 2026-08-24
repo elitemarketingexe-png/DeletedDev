@@ -1840,6 +1840,8 @@ class SettingsViewModel @Inject constructor(
             datastoreRepository.save(DatastoreRepository.PreferenceKeys.AUTO_QUEUE_ENABLED, enabled)
             if (enabled) {
                 com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.resetAndReseedFromCurrentSong()
+            } else {
+                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.stopRefill()
             }
         }
     }

@@ -14,6 +14,7 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -1096,7 +1097,33 @@ object YoutubeHelper {
      *  2. Fallback: the original NewPipe extractor (watch-page scrape), RETRY_COUNT attempts
      *     with linear back-off.
      */
+    private val inFlightResolutions = ConcurrentHashMap<String, CompletableDeferred<Triple<String, String?, Int?>>>()
+
     private suspend fun getSongUrlFromYoutube(
+        context: Context,
+        song: Song,
+        retries: Int = Constants.YoutubeApi.RETRY_COUNT,
+        lowQuality: Boolean = false,
+        maxBitrateKbps: Int = 0
+    ): Triple<String, String?, Int?> {
+        val coalesceKey = "${song.youtubeId}|$lowQuality|$maxBitrateKbps"
+        inFlightResolutions[coalesceKey]?.let { return it.await() }
+        val deferred = CompletableDeferred<Triple<String, String?, Int?>>()
+        val winner = inFlightResolutions.putIfAbsent(coalesceKey, deferred)
+        if (winner != null) return winner.await()
+        try {
+            val res = getSongUrlFromYoutubeInternal(context, song, retries, lowQuality, maxBitrateKbps)
+            deferred.complete(res)
+            return res
+        } catch (error: Throwable) {
+            deferred.completeExceptionally(error)
+            throw error
+        } finally {
+            inFlightResolutions.remove(coalesceKey, deferred)
+        }
+    }
+
+    private suspend fun getSongUrlFromYoutubeInternal(
         context: Context,
         song: Song,
         retries: Int = Constants.YoutubeApi.RETRY_COUNT,
@@ -1873,4 +1900,5 @@ data class ArtistItem(
 interface YoutubeHelperEntryPoint {
     fun connectivityStateHolder(): ConnectivityStateHolder
     fun userPreferencesRepository(): UserPreferencesRepository
+    fun youtubeDatastoreRepository(): DatastoreRepository
 }

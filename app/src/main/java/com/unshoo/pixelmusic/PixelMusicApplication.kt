@@ -67,6 +67,9 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
     @Inject
     lateinit var userPreferencesRepository: dagger.Lazy<UserPreferencesRepository>
 
+    @Inject
+    lateinit var playbackSessionWarmer: dagger.Lazy<com.unshoo.pixelmusic.data.remote.youtube.PlaybackSessionWarmer>
+
     // BUGFIX (slow first playback): ExoCache.cache is a `by lazy` SimpleCache. SimpleCache's
     // constructor synchronously scans/reconciles its on-disk index - cheap when the cache is
     // small, but it grows slower as more audio gets cached over time. Because ExoCache is a
@@ -242,6 +245,11 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
             if (savedLimit != null) {
                 AlbumArtCacheManager.configuredCacheLimitMb = savedLimit.toLong()
             }
+        }
+
+        startupScope.launch {
+            kotlinx.coroutines.delay(400L)
+            playbackSessionWarmer.get().scheduleBackgroundWarmup(delayMs = 0L)
         }
 
         // Initialize Last.fm client defaults

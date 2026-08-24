@@ -111,7 +111,7 @@ internal fun MiniPlayerContentInternal(
                     strokeWidth = 2.dp,
                     color = LocalMaterialTheme.current.onPrimaryContainer
                 )
-            } else if (isPreparingPlayback) {
+            } else if (isPreparingPlayback || isBuffering) {
                 CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
             }
         }
@@ -137,13 +137,14 @@ internal fun MiniPlayerContentInternal(
             AutoScrollingText(
                 text = when {
                     isCastConnecting -> "Connecting to device…"
+                    isPreparingPlayback || isBuffering -> "Preparing playback…"
                     else -> song.title
                 },
                 style = titleStyle,
                 gradientEdgeColor = LocalMaterialTheme.current.primaryContainer
             )
             AutoScrollingText(
-                text = song.displayArtist,
+                text = if (isPreparingPlayback || isBuffering) "Loading audio…" else song.displayArtist,
                 style = artistStyle,
                 gradientEdgeColor = LocalMaterialTheme.current.primaryContainer
             )

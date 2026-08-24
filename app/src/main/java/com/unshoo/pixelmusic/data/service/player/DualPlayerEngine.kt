@@ -145,6 +145,10 @@ class DualPlayerEngine @Inject constructor(
     private val _activeAudioSessionId = MutableStateFlow(0)
     val activeAudioSessionId: StateFlow<Int> = _activeAudioSessionId.asStateFlow()
 
+    private val resolvingCount = java.util.concurrent.atomic.AtomicInteger(0)
+    private val _isResolvingStream = MutableStateFlow(false)
+    val isResolvingStream: StateFlow<Boolean> = _isResolvingStream.asStateFlow()
+
     private val _activeDecoderInfo = MutableStateFlow<ActiveDecoderInfo?>(null)
     val activeDecoderInfo: StateFlow<ActiveDecoderInfo?> = _activeDecoderInfo.asStateFlow()
 
@@ -405,10 +409,44 @@ class DualPlayerEngine @Inject constructor(
 
     fun getAudioSessionId(): Int = playerA.audioSessionId
 
+    fun hasFreshResolvedUri(uriString: String): Boolean = cachedResolvedUri(uriString) != null
+
     fun invalidateResolvedUri(uriString: String) {
+        if (uriString.isBlank()) return
         resolvedUriCache.remove(uriString)
         activePlaybackResolvedUris.remove(uriString)
         activeResolutions.remove(uriString)?.cancel()
+    }
+
+    private fun markResolving(active: Boolean) {
+        if (active) {
+            if (resolvingCount.incrementAndGet() == 1) {
+                _isResolvingStream.value = true
+            }
+        } else {
+            val remaining = resolvingCount.decrementAndGet()
+            if (remaining <= 0) {
+                resolvingCount.set(0)
+                _isResolvingStream.value = false
+            }
+        }
+    }
+
+    private fun isResolvedUriReusable(uri: Uri): Boolean {
+        val expire = uri.getQueryParameter("expire")?.toLongOrNull() ?: return true
+        return expire > (System.currentTimeMillis() / 1000L) + 30L
+    }
+
+    private fun cachedResolvedUri(uriString: String): Uri? {
+        activePlaybackResolvedUris[uriString]?.let { locked ->
+            if (isResolvedUriReusable(locked)) return locked
+            activePlaybackResolvedUris.remove(uriString)
+        }
+        resolvedUriCache.get(uriString)?.let { cached ->
+            if (isResolvedUriReusable(cached)) return cached
+            resolvedUriCache.remove(uriString)
+        }
+        return null
     }
 
     private var isReleased = false
@@ -1114,6 +1152,7 @@ class DualPlayerEngine @Inject constructor(
             resolvedUriCache.remove(uriString)
         }
 
+        markResolving(true)
         val deferred = activeResolutions.getOrPut(uriString) {
             scope.async(Dispatchers.IO) {
                 try {
@@ -1152,8 +1191,10 @@ class DualPlayerEngine @Inject constructor(
             deferred.await()
         } catch (e: Exception) {
             Timber.tag("DualPlayerEngine").e(e, "Error awaiting resolution for %s", uriString)
-            activeResolutions.remove(uriString)
+            activeResolutions.remove(uriString, deferred)
             uri
+        } finally {
+            markResolving(false)
         }
     }
 
@@ -1267,23 +1308,11 @@ class DualPlayerEngine @Inject constructor(
     suspend fun resolveMediaItem(mediaItem: MediaItem): MediaItem {
         val uri = mediaItem.localConfiguration?.uri ?: return mediaItem
         val scheme = uri.scheme
-        if (scheme !in REMOTE_MEDIA_SCHEMES) return mediaItem
-        val resolvedUri = resolveCloudUri(uri)
-        if (resolvedUri == uri) return mediaItem
-        
-        val builder = mediaItem.buildUpon().setUri(resolvedUri)
-        if (scheme == "youtube") {
-            val videoId = uri.toString().removePrefix("youtube://")
-            val cachedMime = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.streamMimeTypeLruCache.let { cache ->
-                cache.get("${videoId}_high")
-                    ?: cache.get("${videoId}_low")
-                    ?: cache.snapshot().keys.find { it.startsWith("${videoId}_") }?.let { cache.get(it) }
-            }
-            if (cachedMime != null) {
-                builder.setMimeType(cachedMime)
-            }
-        }
-        return builder.build()
+        if (scheme != "youtube" && scheme != "telegram" && scheme != "gdrive") return mediaItem
+        // Warm the stream cache only. Keep the custom-scheme URI on the timeline
+        // so snapshots persist youtube:// instead of an expiring googlevideo URL.
+        resolveCloudUri(uri)
+        return mediaItem
     }
 
     suspend fun prepareNext(target: TransitionTarget, startPositionMs: Long = 0L) {

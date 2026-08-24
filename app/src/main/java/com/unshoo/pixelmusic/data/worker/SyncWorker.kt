@@ -1443,9 +1443,10 @@ constructor(
             }
 
             // 1. Pre-load Local Data for Merging
-            val existingArtists = musicDao.getAllArtistsListRaw().associate { it.name.trim().lowercase() to it.id }
+            val existingArtistsRaw = musicDao.getAllArtistsListRaw()
+            val existingArtists = existingArtistsRaw.associate { it.name.trim().lowercase() to it.id }
             val existingAlbums = musicDao.getAllAlbumsList(emptyList(), false, 0).associate { "${it.title.trim().lowercase()}_${it.artistName.trim().lowercase()}" to it.id }
-            val existingArtistImageUrls = musicDao.getAllArtistsListRaw().associate { it.id to it.imageUrl }
+            val existingArtistImageUrls = existingArtistsRaw.associate { it.id to it.imageUrl }
             val nextArtistId = AtomicLong((musicDao.getMaxArtistId() ?: 0L) + 1)
             val delimiters = userPreferencesRepository.artistDelimitersFlow.first()
             val wordDelims = userPreferencesRepository.artistWordDelimitersFlow.first()

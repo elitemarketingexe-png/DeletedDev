@@ -69,6 +69,10 @@ class ConnectivityStateHolder @Inject constructor(
     private val _isOnline = MutableStateFlow(false)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
 
+    // INTERNET transport present, even if not yet VALIDATED (captive / weak signal).
+    private val _hasNetwork = MutableStateFlow(false)
+    val hasNetwork: StateFlow<Boolean> = _hasNetwork.asStateFlow()
+
     // Metered Network State — single source of truth for all network-aware features
     // Defaults to true (metered/mobile data) as a safe assumption until we know otherwise
     private val _isMeteredNetwork = MutableStateFlow(true)
@@ -173,8 +177,10 @@ class ConnectivityStateHolder @Inject constructor(
             updateWifiInfo()
         }
         
-        _isOnline.value = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
-                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        val hasInternet = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        _hasNetwork.value = hasInternet
+        _isOnline.value = hasInternet &&
+                capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
         _isMeteredNetwork.value = capabilities?.hasCapability(
             NetworkCapabilities.NET_CAPABILITY_NOT_METERED
         ) != true
@@ -204,6 +210,12 @@ class ConnectivityStateHolder @Inject constructor(
                     availableNetworks.remove(network)
                 }
                 
+                _hasNetwork.value = hasInternet ||
+                    connectivityManager.activeNetwork?.let { active ->
+                        connectivityManager.getNetworkCapabilities(active)
+                            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+                    } ?: false
+                
                 checkConnectivity()
                 
                 // Update metered state based on current network capabilities
@@ -229,6 +241,7 @@ class ConnectivityStateHolder @Inject constructor(
                 
                 val currentNetwork = connectivityManager.activeNetwork
                 val caps = connectivityManager.getNetworkCapabilities(currentNetwork)
+                _hasNetwork.value = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
                 _isWifiEnabled.value = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
                 if (!_isWifiEnabled.value) _wifiName.value = null
                 // Default to metered when network is lost or fallback to cellular
