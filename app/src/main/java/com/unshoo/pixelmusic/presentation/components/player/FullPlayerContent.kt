@@ -2078,7 +2078,7 @@ private fun SongMetadataDisplaySection(
         }
         
         val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
-        val isBuffering = stablePlayerState.isBuffering
+        val isBuffering = stablePlayerState.isBuffering && !stablePlayerState.isPlaying
 
 
         AnimatedVisibility(

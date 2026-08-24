@@ -74,7 +74,7 @@ internal fun MiniPlayerContentInternal(
     modifier: Modifier = Modifier
 ) {
     val hapticFeedback = LocalHapticFeedback.current
-    val controlsEnabled = !isCastConnecting && !isPreparingPlayback && !isBuffering
+    val controlsEnabled = !isCastConnecting && !isPreparingPlayback && (!isBuffering || isPlaying)
 
     val previousInteraction = remember { MutableInteractionSource() }
     val playPauseInteraction = remember { MutableInteractionSource() }
@@ -111,7 +111,7 @@ internal fun MiniPlayerContentInternal(
                     strokeWidth = 2.dp,
                     color = LocalMaterialTheme.current.onPrimaryContainer
                 )
-            } else if (isPreparingPlayback || isBuffering) {
+            } else if (isPreparingPlayback || (isBuffering && !isPlaying)) {
                 CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
             }
         }
@@ -137,14 +137,15 @@ internal fun MiniPlayerContentInternal(
             AutoScrollingText(
                 text = when {
                     isCastConnecting -> "Connecting to device…"
-                    isPreparingPlayback || isBuffering -> "Preparing playback…"
+                    isPreparingPlayback -> "Preparing playback…"
+                    isBuffering && !isPlaying -> "Buffering audio…"
                     else -> song.title
                 },
                 style = titleStyle,
                 gradientEdgeColor = LocalMaterialTheme.current.primaryContainer
             )
             AutoScrollingText(
-                text = if (isPreparingPlayback || isBuffering) "Loading audio…" else song.displayArtist,
+                text = if (isPreparingPlayback || (isBuffering && !isPlaying)) "Loading audio…" else song.displayArtist,
                 style = artistStyle,
                 gradientEdgeColor = LocalMaterialTheme.current.primaryContainer
             )
@@ -191,7 +192,7 @@ internal fun MiniPlayerContentInternal(
                 },
             contentAlignment = Alignment.Center
         ) {
-            if (isPreparingPlayback || isBuffering) {
+            if (isPreparingPlayback || (isBuffering && !isPlaying)) {
                 CircularWavyProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     color = LocalMaterialTheme.current.onPrimary

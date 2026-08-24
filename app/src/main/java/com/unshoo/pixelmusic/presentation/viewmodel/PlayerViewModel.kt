@@ -2398,7 +2398,15 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             dualPlayerEngine.isResolvingStream.collect { isResolving ->
                 if (isResolving) {
-                    playbackStateHolder.updateStablePlayerState { it.copy(isBuffering = true) }
+                    val isPlaying = playbackStateHolder.stablePlayerState.value.isPlaying
+                    if (!isPlaying) {
+                        playbackStateHolder.updateStablePlayerState { it.copy(isBuffering = true) }
+                    }
+                } else {
+                    // When resolving finishes, only keep buffering if ExoPlayer itself is buffering
+                    val ctrl = mediaController
+                    val isExoBuffering = ctrl?.playbackState == Player.STATE_BUFFERING
+                    playbackStateHolder.updateStablePlayerState { it.copy(isBuffering = isExoBuffering) }
                 }
             }
         }
