@@ -1545,7 +1545,8 @@ class MusicService : MediaLibraryService() {
 
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
             requestWidgetFullUpdate(force = true)
-            schedulePlaybackSnapshotPersist(immediate = timeline.isEmpty)
+            val isImmediate = timeline.isEmpty || reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED
+            schedulePlaybackSnapshotPersist(immediate = isImmediate)
             // Pre-fetch RG for the next track so the cache is warm before playback starts
             val player = engine.masterPlayer
             val nextIndex = player.nextMediaItemIndex
@@ -2397,6 +2398,8 @@ class MusicService : MediaLibraryService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
 
     override fun onDestroy() {
+        // Persist current queue/playback snapshot synchronously before releasing players
+        persistPlaybackSnapshotBlocking()
         telemetryManager.destroy()
         listeningStatsTracker.finalizeCurrentSession(forceSynchronousPersistence = true)
         reportNavidromePlayback("stopped")
