@@ -1846,7 +1846,7 @@ class MusicService : MediaLibraryService() {
         // BUG 4 FIX: Ensure new telemetry session starts on track transition (vital for gapless auto-transitions)
         lastTelemetryVideoId = null
         telemetryManager.stopTelemetry()
-        if (player.isPlaying) {
+        if (player.isPlaying || player.playWhenReady) {
             startTelemetryReporting()
         }
     }
