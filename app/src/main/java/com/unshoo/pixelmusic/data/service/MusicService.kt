@@ -2448,11 +2448,13 @@ class MusicService : MediaLibraryService() {
         // This single threshold covers all higher-severity levels too
         // (TRIM_MEMORY_BACKGROUND = 40, TRIM_MEMORY_COMPLETE = 80, etc.).
         if (level >= 10 /* TRIM_MEMORY_RUNNING_LOW */) {
-            Timber.tag(TAG).d("onTrimMemory(level=%d): releasing widget bitmap caches", level)
+            Timber.tag(TAG).d("onTrimMemory(level=%d): releasing widget bitmap and expired stream caches", level)
             invalidateCachedWidgetArtwork()
             // Drop the stale PlayerInfo copy so its embedded ByteArray is GC-eligible.
             // The next processWidgetUpdateInternal() call will rebuild it from scratch.
             lastWidgetPlayerInfo = null
+            engine.pruneExpiredCaches()
+            com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.pruneExpiredCaches()
         }
     }
 

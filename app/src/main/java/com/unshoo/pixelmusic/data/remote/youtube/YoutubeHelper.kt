@@ -1017,6 +1017,25 @@ object YoutubeHelper {
         return url
     }
 
+    /** Evict expired URLs and candidate entries periodically to keep memory bounded and fresh. */
+    fun pruneExpiredCaches() {
+        val nowMs = System.currentTimeMillis()
+        val nowSec = nowMs / 1000L
+        resolvedCandidateUrlCache.entries.removeIf { it.value.second <= nowMs }
+        val snapshot = streamUrlLruCache.snapshot()
+        for ((key, url) in snapshot) {
+            val expireParam = url.substringAfter("expire=", "").substringBefore("&")
+            val expireTimeSecs = expireParam.toLongOrNull()
+            if (expireTimeSecs != null && expireTimeSecs <= nowSec + 90L) {
+                streamUrlLruCache.remove(key)
+                streamMimeTypeLruCache.remove(key)
+                streamBitrateLruCache.remove(key)
+            }
+        }
+        if (playbackTrackingCache.size > 200) playbackTrackingCache.clear()
+        if (watchtimeTrackingCache.size > 200) watchtimeTrackingCache.clear()
+    }
+
     /** Invalidate ALL cached stream URLs for a video ID (including quality-specific _q* keys). */
     fun invalidateStreamCache(youtubeId: String) {
         // Always remove the known aliases first.

@@ -386,7 +386,7 @@ constructor(
                         Log.i(TAG, "LRC Scan finished for $totalToScan songs.")
                     }
 
-                    // Clean orphaned album art cache files
+                    // Clean orphaned album art cache files and expired stream/queue caches
                     setProgress(
                         workDataOf(
                             PROGRESS_PHASE to SyncProgress.SyncPhase.CLEANING_CACHE.ordinal
@@ -394,6 +394,7 @@ constructor(
                     )
                     val allSongIds = musicDao.getAllSongIds().toSet()
                     AlbumArtCacheManager.cleanOrphanedCacheFiles(applicationContext, allSongIds)
+                    com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.pruneExpiredCaches()
 
                     // Sync cloud songs into the unified songs table.
                     // OPT #7: Guard each source to avoid opening Room transactions when

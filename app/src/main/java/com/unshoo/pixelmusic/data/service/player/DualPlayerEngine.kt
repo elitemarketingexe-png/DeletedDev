@@ -437,7 +437,16 @@ class DualPlayerEngine @Inject constructor(
         return expire > (System.currentTimeMillis() / 1000L) + 30L
     }
 
+    fun pruneExpiredCaches() {
+        activePlaybackResolvedUris.entries.removeIf { !isResolvedUriReusable(it.value) }
+        activeResolutions.entries.removeIf { it.value.isCompleted && !it.value.isActive }
+        if (localFilePathCache.size > 200) {
+            localFilePathCache.clear()
+        }
+    }
+
     private fun cachedResolvedUri(uriString: String): Uri? {
+        pruneExpiredCaches()
         activePlaybackResolvedUris[uriString]?.let { locked ->
             if (isResolvedUriReusable(locked)) return locked
             activePlaybackResolvedUris.remove(uriString)
