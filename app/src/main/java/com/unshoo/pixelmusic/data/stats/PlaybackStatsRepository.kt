@@ -346,26 +346,20 @@ class PlaybackStatsRepository @Inject constructor(
                 val thumbnail = song?.albumArtUriString
                     ?: lastEvent?.thumbnail
                 val totalSongDuration = segmentsForSong.sumOf { it.durationMs }
-                val trackDuration = song?.duration?.takeIf { it > 0 } ?: 0L
-                val calculatedPlays = if (trackDuration >= 10_000L && totalSongDuration >= trackDuration) {
-                    max(segmentsForSong.size, (totalSongDuration / trackDuration).toInt())
-                } else {
-                    segmentsForSong.size
-                }
                 SongPlaybackSummary(
                     songId = songId,
                     title = title,
                     artist = artist,
                     albumArtUri = thumbnail,
-                    totalDurationMs = totalSongDuration,
-                    playCount = calculatedPlays
+                    totalDurationMs = segmentsForSong.sumOf { it.durationMs },
+                    playCount = segmentsForSong.size
                 )
             }
             .sortedWith(
                 compareByDescending<SongPlaybackSummary> { it.totalDurationMs }
                     .thenByDescending { it.playCount }
             )
-        val totalPlays = allSongs.sumOf { it.playCount }
+        val totalPlays = segmentsBySong.values.sumOf { it.size }
         val uniqueSongs = segmentsBySong.keys.size
         val topSongs = allSongs.take(5)
 
@@ -1212,7 +1206,7 @@ class PlaybackStatsRepository @Inject constructor(
         private const val MAX_FILE_UPDATE_RETRIES = 3
         const val UNKNOWN_ARTIST = "Unknown Artist"
         private val MAX_HISTORY_AGE_MS = TimeUnit.DAYS.toMillis(730) // Keep roughly two years of history
-        private const val SEGMENT_JOIN_TOLERANCE_MS = 3_000L
+        private const val SEGMENT_JOIN_TOLERANCE_MS = 0L
         /** Genre values that are placeholder/fallback and should not appear in top-genre stats. */
         val UNKNOWN_GENRE_KEYS: Set<String> = setOf(
             "Unknown Genre", "unknown genre", "YouTube Music", "youtube music"

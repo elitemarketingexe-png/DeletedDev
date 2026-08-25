@@ -5083,13 +5083,7 @@ class PlayerViewModel @Inject constructor(
     // rebuildPlayerQueue functionality moved to PlaybackStateHolder (simplified)
     fun playSongs(songsToPlay: List<Song>, startSong: Song, queueName: String = "None", playlistId: String? = null) {
         cancelPendingFullQueuePlayback()
-        // Only display preparing/loading indicator if the song is not yet cached or local
-        val isCachedOrLocal = dualPlayerEngine.isStreamCachedOrLocal(startSong.contentUriString)
-        if (!isCachedOrLocal) {
-            setPreparingSong(startSong.id)
-        } else {
-            clearPreparingSongIfMatching()
-        }
+        setPreparingSong(startSong.id)
         val requestToken = beginDirectPlaybackRequest()
         directPlaybackJob = viewModelScope.launch {
             transitionSchedulerJob?.cancel()
@@ -5348,13 +5342,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun beginPreparingSong(song: Song) {
-        // Only display preparing/loading indicator if the song is not yet cached or local
-        val isCachedOrLocal = dualPlayerEngine.isStreamCachedOrLocal(song.contentUriString)
-        if (!isCachedOrLocal) {
-            setPreparingSong(song.id)
-        } else {
-            clearPreparingSongIfMatching()
-        }
+        setPreparingSong(song.id)
         viewModelScope.launch(Dispatchers.IO) {
             val albumArtUri = song.albumArtUriString
             if (albumArtUri.isNullOrBlank()) {
@@ -5851,7 +5839,10 @@ class PlayerViewModel @Inject constructor(
         // manager, which is driven by the real player rather than a UI-side click/transition.
         youtubePlaybackHistoryJob?.cancel()
         youtubePlaybackHistoryJob = viewModelScope.launch(Dispatchers.IO) {
-            runCatching { listeningStatsTracker.refreshMergedYoutubeHistory() }
+            runCatching {
+                registerYoutubePlaybackHistory(videoId, playlistId = null)
+                listeningStatsTracker.refreshMergedYoutubeHistory()
+            }
         }
     }
 
