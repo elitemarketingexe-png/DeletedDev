@@ -212,6 +212,48 @@ class PlaybackStatsRepository @Inject constructor(
         }
     }
 
+    suspend fun recordPlaybackSegment(
+        songId: String,
+        durationMs: Long,
+        startTimestamp: Long,
+        endTimestamp: Long,
+        title: String? = null,
+        artist: String? = null,
+        thumbnail: String? = null,
+        genre: String? = null,
+        album: String? = null
+    ) = withContext(Dispatchers.IO) {
+        if (songId.isBlank()) return@withContext
+        val coercedStart = startTimestamp.coerceAtLeast(0L)
+        val coercedEnd = max(endTimestamp.coerceAtLeast(0L), coercedStart)
+        val coercedDuration = max(durationMs.coerceAtLeast(0L), (coercedEnd - coercedStart).coerceAtLeast(0L))
+        val safeGenre = genre?.takeIf { it.isNotBlank() && it !in UNKNOWN_GENRE_KEYS }
+        val safeAlbum = album?.takeIf { it.isNotBlank() && it !in UNKNOWN_ALBUM_KEYS }
+        val sanitizedEvent = PlaybackEvent(
+            songId = songId,
+            timestamp = coercedEnd,
+            durationMs = coercedDuration,
+            startTimestamp = coercedStart,
+            endTimestamp = coercedEnd,
+            title = title,
+            artist = artist,
+            thumbnail = thumbnail,
+            genre = safeGenre,
+            album = safeAlbum
+        )
+        val writeSucceeded = updateEventsAtomically { events ->
+            val cutoff = sanitizedEvent.endMillis() - MAX_HISTORY_AGE_MS
+            if (cutoff > 0) {
+                events.removeAll { it.endMillis() < cutoff }
+            }
+            events += sanitizedEvent
+            events
+        }
+        if (writeSucceeded) {
+            notifyStatsChanged()
+        }
+    }
+
     suspend fun recordPlaybackBatch(batch: List<PlaybackEvent>) = withContext(Dispatchers.IO) {
         if (batch.isEmpty()) return@withContext
         val writeSucceeded = updateEventsAtomically { events ->
@@ -290,9 +332,6 @@ class PlaybackStatsRepository @Inject constructor(
         val effectiveEnd = overallSpans.maxOfOrNull { it.endMillis } ?: endBound
 
         val totalDuration = overallSpans.sumOf { it.durationMs }
-        val totalPlays = segmentsBySong.values.sumOf { it.size }
-        val uniqueSongs = segmentsBySong.keys.size
-
         val allSongs = segmentsBySong
             .mapNotNull { (songId, segmentsForSong) ->
                 val song = songMap[songId]
@@ -306,19 +345,28 @@ class PlaybackStatsRepository @Inject constructor(
                     ?: "Unknown Artist"
                 val thumbnail = song?.albumArtUriString
                     ?: lastEvent?.thumbnail
+                val totalSongDuration = segmentsForSong.sumOf { it.durationMs }
+                val trackDuration = song?.duration?.takeIf { it > 0 } ?: 0L
+                val calculatedPlays = if (trackDuration >= 10_000L && totalSongDuration >= trackDuration) {
+                    max(segmentsForSong.size, (totalSongDuration / trackDuration).toInt())
+                } else {
+                    segmentsForSong.size
+                }
                 SongPlaybackSummary(
                     songId = songId,
                     title = title,
                     artist = artist,
                     albumArtUri = thumbnail,
-                    totalDurationMs = segmentsForSong.sumOf { it.durationMs },
-                    playCount = segmentsForSong.size
+                    totalDurationMs = totalSongDuration,
+                    playCount = calculatedPlays
                 )
             }
             .sortedWith(
                 compareByDescending<SongPlaybackSummary> { it.totalDurationMs }
                     .thenByDescending { it.playCount }
             )
+        val totalPlays = allSongs.sumOf { it.playCount }
+        val uniqueSongs = segmentsBySong.keys.size
         val topSongs = allSongs.take(5)
 
         val topGenres = segmentsBySong.entries
@@ -1164,7 +1212,7 @@ class PlaybackStatsRepository @Inject constructor(
         private const val MAX_FILE_UPDATE_RETRIES = 3
         const val UNKNOWN_ARTIST = "Unknown Artist"
         private val MAX_HISTORY_AGE_MS = TimeUnit.DAYS.toMillis(730) // Keep roughly two years of history
-        private const val SEGMENT_JOIN_TOLERANCE_MS = 0L
+        private const val SEGMENT_JOIN_TOLERANCE_MS = 3_000L
         /** Genre values that are placeholder/fallback and should not appear in top-genre stats. */
         val UNKNOWN_GENRE_KEYS: Set<String> = setOf(
             "Unknown Genre", "unknown genre", "YouTube Music", "youtube music"

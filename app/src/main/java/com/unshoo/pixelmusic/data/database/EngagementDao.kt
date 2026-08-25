@@ -63,6 +63,31 @@ interface EngagementDao {
     suspend fun recordPlay(songId: String, durationMs: Long, timestamp: Long)
 
     /**
+     * Atomically adds real listening duration without unconditionally incrementing play count.
+     */
+    @Query("""
+        INSERT INTO song_engagements (song_id, play_count, total_play_duration_ms, last_played_timestamp)
+        VALUES (:songId, 0, :durationMs, :timestamp)
+        ON CONFLICT(song_id) DO UPDATE SET
+            total_play_duration_ms = total_play_duration_ms + :durationMs,
+            last_played_timestamp = :timestamp
+    """)
+    suspend fun recordListeningDuration(songId: String, durationMs: Long, timestamp: Long)
+
+    /**
+     * Atomically adds listening duration and adds a custom play count increment.
+     */
+    @Query("""
+        INSERT INTO song_engagements (song_id, play_count, total_play_duration_ms, last_played_timestamp)
+        VALUES (:songId, :playCountIncrement, :durationMs, :timestamp)
+        ON CONFLICT(song_id) DO UPDATE SET
+            play_count = play_count + :playCountIncrement,
+            total_play_duration_ms = total_play_duration_ms + :durationMs,
+            last_played_timestamp = :timestamp
+    """)
+    suspend fun recordEngagement(songId: String, durationMs: Long, timestamp: Long, playCountIncrement: Int)
+
+    /**
      * Get top songs by play count for quick access.
      */
     @Query("SELECT * FROM song_engagements ORDER BY play_count DESC LIMIT :limit")

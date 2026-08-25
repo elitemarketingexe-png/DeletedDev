@@ -1203,14 +1203,21 @@ class PlayerViewModel @Inject constructor(
             } ?: return@launch
 
             val uriStr = currentItem.uri
-            if (uriStr.isNotBlank() && (
-                uriStr.startsWith("youtube://") ||
-                uriStr.startsWith("telegram:") ||
-                uriStr.startsWith("gdrive:")
-            )) {
+            if (uriStr.isNotBlank()) {
                 launch(Dispatchers.IO) {
                     try {
-                        dualPlayerEngine.resolveCloudUri(uriStr.toUri())
+                        if (uriStr.startsWith("youtube://") ||
+                            uriStr.startsWith("telegram:") ||
+                            uriStr.startsWith("gdrive:")
+                        ) {
+                            val resolvedUri = dualPlayerEngine.resolveCloudUri(uriStr.toUri())
+                            val resolvedStr = resolvedUri.toString()
+                            if (resolvedStr.startsWith("http")) {
+                                dualPlayerEngine.preCacheFirstChunk(resolvedStr)
+                            }
+                        } else if (uriStr.startsWith("http")) {
+                            dualPlayerEngine.preCacheFirstChunk(uriStr)
+                        }
                     } catch (e: Exception) {
                         Timber.w(e, "Pre-fetching startup cloud URI failed for: $uriStr")
                     }
@@ -5076,11 +5083,13 @@ class PlayerViewModel @Inject constructor(
     // rebuildPlayerQueue functionality moved to PlaybackStateHolder (simplified)
     fun playSongs(songsToPlay: List<Song>, startSong: Song, queueName: String = "None", playlistId: String? = null) {
         cancelPendingFullQueuePlayback()
-        // FIX (miniplayer vanish on tap): Set preparingSongId IMMEDIATELY so the miniplayer
-        // becomes visible before any async hydration work starts. Without this, the miniplayer
-        // is invisible during the hydrateSongsIfNeeded() suspend call below, and the
-        // STATE_IDLE protection has nothing to guard against.
-        setPreparingSong(startSong.id)
+        // Only display preparing/loading indicator if the song is not yet cached or local
+        val isCachedOrLocal = dualPlayerEngine.isStreamCachedOrLocal(startSong.contentUriString)
+        if (!isCachedOrLocal) {
+            setPreparingSong(startSong.id)
+        } else {
+            clearPreparingSongIfMatching()
+        }
         val requestToken = beginDirectPlaybackRequest()
         directPlaybackJob = viewModelScope.launch {
             transitionSchedulerJob?.cancel()
@@ -5339,7 +5348,13 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun beginPreparingSong(song: Song) {
-        setPreparingSong(song.id)
+        // Only display preparing/loading indicator if the song is not yet cached or local
+        val isCachedOrLocal = dualPlayerEngine.isStreamCachedOrLocal(song.contentUriString)
+        if (!isCachedOrLocal) {
+            setPreparingSong(song.id)
+        } else {
+            clearPreparingSongIfMatching()
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val albumArtUri = song.albumArtUriString
             if (albumArtUri.isNullOrBlank()) {
@@ -5639,7 +5654,8 @@ class PlayerViewModel @Inject constructor(
                             player.play()
                             // Instant YT Music history sync for the song just launched.
                             player.currentMediaItem?.let { registerYoutubePlaybackHistoryIfNeeded(it) }
-                            _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+                            // Auto Queue automatically refills related songs with a debounce delay so tap-to-play gets 100% priority
+                            com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.scheduleRefill(delayMs = 2000L, forceRefresh = true)
                         }
 
                         // Warm next/prev + first-chunk cache OFF the critical path.
@@ -5678,7 +5694,6 @@ class PlayerViewModel @Inject constructor(
             } else {
                 playSongsAction()
             }
-            com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.forceRefill(forceRefresh = true)
         }
     }
 
@@ -5954,6 +5969,8 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
                 com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.resetAndReseedFromCurrentSong()
+            } else {
+                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
             }
         }
     }

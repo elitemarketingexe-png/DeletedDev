@@ -387,6 +387,57 @@ class ListeningStatsTracker @Inject constructor(
         session.lastUpdateEpochMs = System.currentTimeMillis()
 
         val songId = session.songId
+        val nowEpoch = System.currentTimeMillis()
+
+        // Initial play count qualification once the track has been listened to for at least 15s
+        if (!session.hasRecordedInitialPlayCount && session.accumulatedListeningMs >= MIN_PLAYBACK_LISTEN_MS) {
+            session.hasRecordedInitialPlayCount = true
+            persistenceScope.launch(Dispatchers.IO) {
+                dailyMixManager.recordPlay(
+                    songId = songId,
+                    songDurationMs = 0L,
+                    timestamp = nowEpoch,
+                    playCountIncrement = 1
+                )
+            }
+        }
+
+        // Periodic real-time listening flush (every 20 seconds of continuous playback so no listening time is ever lost)
+        val unpersistedMs = session.accumulatedListeningMs - session.lastPersistedListeningMs
+        if (unpersistedMs >= PERIODIC_FLUSH_INTERVAL_MS) {
+            val startEpoch = session.lastPersistedEpochMs
+            val endEpoch = nowEpoch
+            session.lastPersistedListeningMs = session.accumulatedListeningMs
+            session.lastPersistedEpochMs = endEpoch
+
+            val sessTitle = session.title
+            val sessArtist = session.artist
+            val sessThumbnail = session.thumbnail
+            val sessGenre = session.genre
+            val sessAlbum = session.album
+
+            persistenceScope.launch(Dispatchers.IO) {
+                runCatching {
+                    dailyMixManager.recordListeningDuration(
+                        songId = songId,
+                        durationMs = unpersistedMs,
+                        timestamp = endEpoch
+                    )
+                    playbackStatsRepository.recordPlaybackSegment(
+                        songId = songId,
+                        durationMs = unpersistedMs,
+                        startTimestamp = startEpoch,
+                        endTimestamp = endEpoch,
+                        title = sessTitle,
+                        artist = sessArtist,
+                        thumbnail = sessThumbnail,
+                        genre = sessGenre,
+                        album = sessAlbum
+                    )
+                }
+            }
+        }
+
         if (isPlaying) {
             val durationMs = session.totalDurationMs
             val positionSec = positionMs / 1000
@@ -527,18 +578,8 @@ class ListeningStatsTracker @Inject constructor(
         val nowRealtime = SystemClock.elapsedRealtime()
         val nowEpoch = System.currentTimeMillis()
         accumulateRealtimeListening(session, nowRealtime)
-        val listened = session.accumulatedListeningMs.coerceAtLeast(0L)
+        val totalListenedMs = session.accumulatedListeningMs.coerceAtLeast(0L)
         val trackDuration = session.totalDurationMs
-        val completedPlayback = isCompletedPlayback(
-            listenedMs = listened,
-            lastPositionMs = session.lastKnownPositionMs,
-            durationMs = trackDuration
-        )
-        val countedDuration = if (completedPlayback) {
-            if (trackDuration > 0) listened.coerceAtMost(trackDuration) else listened
-        } else {
-            0L
-        }
 
         val songId = session.songId
         val cpn = telemetryCpn
@@ -556,30 +597,48 @@ class ListeningStatsTracker @Inject constructor(
             }
             telemetryCpn = null
         }
-        if (completedPlayback) {
-            val rawEndTimestamp = when {
-                session.isPlaying -> nowEpoch
-                session.lastUpdateEpochMs > 0L -> session.lastUpdateEpochMs
-                else -> session.startedAtEpochMs + countedDuration
+
+        // Record initial play count if not yet recorded and listened >= 15s
+        if (!session.hasRecordedInitialPlayCount && totalListenedMs >= MIN_PLAYBACK_LISTEN_MS) {
+            session.hasRecordedInitialPlayCount = true
+            persistenceScope.launch(Dispatchers.IO) {
+                dailyMixManager.recordPlay(
+                    songId = songId,
+                    songDurationMs = 0L,
+                    timestamp = nowEpoch,
+                    playCountIncrement = 1
+                )
             }
-            val timestamp = rawEndTimestamp
-                .coerceAtLeast(session.startedAtEpochMs.coerceAtLeast(0L))
-                .coerceAtMost(nowEpoch)
-            val songId = session.songId
-            val historyEntry = PlaybackStatsRepository.PlaybackHistoryEntry(
-                songId = songId,
-                timestamp = timestamp,
-                title = session.title,
-                artist = session.artist,
-                thumbnail = session.thumbnail
-            )
-            _playbackHistory.update { current ->
-                (listOf(historyEntry) + current).take(MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS)
+        }
+
+        // Additional play counts if looped/repeated over multiple track durations (e.g. 3-4 hours of continuous looping)
+        if (trackDuration >= 10_000L && totalListenedMs > trackDuration) {
+            val additionalPlays = ((totalListenedMs / trackDuration) - 1).toInt()
+            if (additionalPlays > 0) {
+                persistenceScope.launch(Dispatchers.IO) {
+                    dailyMixManager.recordPlay(
+                        songId = songId,
+                        songDurationMs = 0L,
+                        timestamp = nowEpoch,
+                        playCountIncrement = additionalPlays
+                    )
+                }
             }
-            persistPlayback(
+        }
+
+        // Flush remaining unpersisted real-time listening segment
+        val unpersistedMs = (totalListenedMs - session.lastPersistedListeningMs).coerceAtLeast(0L)
+        if (unpersistedMs >= 1000L) {
+            val startEpoch = session.lastPersistedEpochMs
+            val endEpoch = nowEpoch
+            session.lastPersistedListeningMs = totalListenedMs
+            session.lastPersistedEpochMs = endEpoch
+
+            persistPlaybackSegment(
                 songId = songId,
-                listened = countedDuration,
-                timestamp = timestamp,
+                durationMs = unpersistedMs,
+                startTimestamp = startEpoch,
+                endTimestamp = endEpoch,
                 forceSynchronous = forceSynchronousPersistence,
                 title = session.title,
                 artist = session.artist,
@@ -587,10 +646,25 @@ class ListeningStatsTracker @Inject constructor(
                 genre = session.genre,
                 album = session.album
             )
-        } else if (listened >= 1000L) {
+        }
+
+        if (totalListenedMs >= MIN_PLAYBACK_LISTEN_MS) {
+            val historyEntry = PlaybackStatsRepository.PlaybackHistoryEntry(
+                songId = songId,
+                timestamp = nowEpoch,
+                title = session.title,
+                artist = session.artist,
+                thumbnail = session.thumbnail
+            )
+            _playbackHistory.update { current ->
+                val withoutDup = current.filterNot { it.songId == songId }
+                (listOf(historyEntry) + withoutDup).take(MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS)
+            }
+        } else if (totalListenedMs >= 1000L) {
             // Log as negative feedback skip signal if song was started but skipped before 15 seconds.
             com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.registerSkip(session.songId)
         }
+
         currentSession = null
         if (pendingVoluntarySongId == session.songId) {
             pendingVoluntarySongId = null
@@ -608,10 +682,11 @@ class ListeningStatsTracker @Inject constructor(
         scope = null
     }
 
-    private fun persistPlayback(
+    private fun persistPlaybackSegment(
         songId: String,
-        listened: Long,
-        timestamp: Long,
+        durationMs: Long,
+        startTimestamp: Long,
+        endTimestamp: Long,
         forceSynchronous: Boolean,
         title: String? = null,
         artist: String? = null,
@@ -634,10 +709,16 @@ class ListeningStatsTracker @Inject constructor(
             kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
                     kotlinx.coroutines.withTimeoutOrNull(FORCE_PERSIST_TIMEOUT_MS) {
-                        persistPlaybackInternal(
+                        dailyMixManager.recordListeningDuration(
                             songId = songId,
-                            listened = listened,
-                            timestamp = timestamp,
+                            durationMs = durationMs,
+                            timestamp = endTimestamp
+                        )
+                        playbackStatsRepository.recordPlaybackSegment(
+                            songId = songId,
+                            durationMs = durationMs,
+                            startTimestamp = startTimestamp,
+                            endTimestamp = endTimestamp,
                             title = title,
                             artist = artist,
                             thumbnail = thumbnail,
@@ -652,10 +733,16 @@ class ListeningStatsTracker @Inject constructor(
         } else {
             persistenceScope.launch {
                 runCatching {
-                    persistPlaybackInternal(
+                    dailyMixManager.recordListeningDuration(
                         songId = songId,
-                        listened = listened,
-                        timestamp = timestamp,
+                        durationMs = durationMs,
+                        timestamp = endTimestamp
+                    )
+                    playbackStatsRepository.recordPlaybackSegment(
+                        songId = songId,
+                        durationMs = durationMs,
+                        startTimestamp = startTimestamp,
+                        endTimestamp = endTimestamp,
                         title = title,
                         artist = artist,
                         thumbnail = thumbnail,
@@ -666,49 +753,6 @@ class ListeningStatsTracker @Inject constructor(
                     Timber.e(throwable, "Failed to persist listening session for song=%s", songId)
                 }
             }
-        }
-    }
-
-    private suspend fun persistPlaybackInternal(
-        songId: String,
-        listened: Long,
-        timestamp: Long,
-        title: String? = null,
-        artist: String? = null,
-        thumbnail: String? = null,
-        genre: String? = null,
-        album: String? = null
-    ) {
-        dailyMixManager.recordPlay(
-            songId = songId,
-            songDurationMs = listened,
-            timestamp = timestamp
-        )
-        playbackStatsRepository.recordPlayback(
-            songId = songId,
-            durationMs = listened,
-            timestamp = timestamp,
-            title = title,
-            artist = artist,
-            thumbnail = thumbnail,
-            genre = genre,
-            album = album
-        )
-        if (SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY) {
-            val ytId = resolveYtId(songId)
-            if (ytId != null) {
-                persistenceScope.launch(Dispatchers.IO) {
-                    runCatching {
-                        val cpn = (1..16).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".random() }.joinToString("")
-                        val lengthSec = listened / 1000
-                        val pingUrl = "https://music.youtube.com/api/stats/watchtime?ns=yt&el=detailpage&docid=$ytId&ver=2&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER&cpn=$cpn&state=ended&st=0&et=$lengthSec&cmt=$lengthSec&rt=$lengthSec&lact=1&len=$lengthSec"
-                        unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(pingUrl)
-                    }
-                }
-            }
-        }
-        if (userPreferencesRepository.cacheMostPlayedSongsOfflineFlow.first()) {
-            triggerAutoCacheIfNeeded(songId)
         }
     }
 
@@ -801,6 +845,8 @@ class ListeningStatsTracker @Inject constructor(
         private const val MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS = 500
         /** Number of plays before a YouTube song is auto-downloaded for offline use. */
         private const val AUTO_CACHE_PLAY_COUNT_THRESHOLD = 3
+        /** Periodic real-time listening flush interval (20s) so continuous sessions are continuously saved. */
+        private const val PERIODIC_FLUSH_INTERVAL_MS = 20_000L
 
         /**
          * YouTube telemetry remote history writer.
@@ -829,6 +875,9 @@ data class ActiveSession(
     var lastUpdateEpochMs: Long,
     var isPlaying: Boolean,
     val isVoluntary: Boolean,
+    var lastPersistedListeningMs: Long = 0L,
+    var lastPersistedEpochMs: Long = startedAtEpochMs,
+    var hasRecordedInitialPlayCount: Boolean = false,
     val title: String? = null,
     val artist: String? = null,
     val thumbnail: String? = null,

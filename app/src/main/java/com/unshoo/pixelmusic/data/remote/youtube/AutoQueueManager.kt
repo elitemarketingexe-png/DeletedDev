@@ -30,10 +30,12 @@ import com.unshoo.pixelmusic.utils.MediaItemBuilder
 import com.unshoo.pixelmusic.presentation.viewmodel.ConnectivityStateHolder
 
 object AutoQueueManager {
-    private const val TARGET_QUEUE_SIZE = 45
+    private const val TARGET_QUEUE_SIZE = 50
+    private const val MIN_REFILL_THRESHOLD = 25
     private const val MAX_HISTORY = 60
     private const val DECAY_LAMBDA = 1.15e-9
 
+    private var refillDebounceJob: Job? = null
     private var fetchJob: Job? = null
     private var lastFetchedVideoId: String? = null
     private var continuationToken: String? = null
@@ -96,17 +98,20 @@ object AutoQueueManager {
                     }
                 }
             }
-            checkAndRefillQueue()
+            // Debounce refill check on track transition so audio playback starting is never blocked
+            checkAndRefillQueue(delayMs = 1500L)
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
-                checkAndRefillQueue()
+                // If queue has ended, refill immediately without waiting
+                checkAndRefillQueue(delayMs = 0L)
             }
         }
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
-            checkAndRefillQueue()
+            // Debounce timeline-triggered refill to avoid fighting tap-to-play queue setup
+            checkAndRefillQueue(delayMs = 2000L)
         }
     }
 
@@ -143,7 +148,10 @@ object AutoQueueManager {
     fun detach(player: Player?) {
         player?.removeListener(playerListener)
         playerRef = null
+        refillDebounceJob?.cancel()
+        refillDebounceJob = null
         fetchJob?.cancel()
+        fetchJob = null
         scope = null
         contextRef = null
         datastoreRepository = null
@@ -152,6 +160,8 @@ object AutoQueueManager {
     }
 
     fun reset() {
+        refillDebounceJob?.cancel()
+        refillDebounceJob = null
         lastFetchedVideoId = null
         continuationToken = null
         currentWatchEndpoint = null
@@ -168,7 +178,7 @@ object AutoQueueManager {
     /**
      * Called when auto-queue is re-enabled (toggle OFF→ON).
      * Fully resets state and re-seeds from the currently playing song so that
-     * a fresh related-songs queue is built from scratch.
+     * a fresh related-songs queue is built from scratch immediately.
      */
     fun resetAndReseedFromCurrentSong() {
         reset()
@@ -212,10 +222,8 @@ object AutoQueueManager {
                 currentWatchEndpoint = endpoint
                 continuationToken = null
             }
-            // Trigger deferred refill (allows 1.5s for initial audio buffer to stream cleanly)
-            fetchJob = currentScope.launch(Dispatchers.IO) {
-                kotlinx.coroutines.delay(1500)
-                refillQueueLoop(currentId, forceRefresh = false)
+            fetchJob = launch(Dispatchers.IO) {
+                refillQueueLoop(currentId, forceRefresh = true)
             }
         }
     }
@@ -320,8 +328,24 @@ object AutoQueueManager {
     }
 
 
-    private fun checkAndRefillQueue() {
-        forceRefill(forceRefresh = false)
+    /**
+     * Schedules an auto-queue refill with a debounce delay.
+     * This guarantees that tap-to-play has 100% first-priority bandwidth and CPU
+     * to start playback instantly without competing with Auto Queue queue modifications.
+     */
+    fun scheduleRefill(delayMs: Long = 2000L, forceRefresh: Boolean = false) {
+        refillDebounceJob?.cancel()
+        val currentScope = scope ?: return
+        refillDebounceJob = currentScope.launch(Dispatchers.IO) {
+            if (delayMs > 0L) {
+                kotlinx.coroutines.delay(delayMs)
+            }
+            forceRefill(forceRefresh)
+        }
+    }
+
+    private fun checkAndRefillQueue(delayMs: Long = 1500L) {
+        scheduleRefill(delayMs = delayMs, forceRefresh = false)
     }
 
     fun forceRefill(forceRefresh: Boolean) {
@@ -339,24 +363,17 @@ object AutoQueueManager {
                     val totalCount = player.mediaItemCount
                     val remaining = totalCount - currentIndex - 1
                     val currentId = player.currentMediaItem?.mediaId
-                    val uriScheme = player.currentMediaItem?.localConfiguration?.uri?.scheme
-                    val isLocalOrFile = uriScheme == "file" || uriScheme == "content"
-                    listOf(remaining, currentId, totalCount, isLocalOrFile)
+                    listOf(remaining, currentId, totalCount)
                 }
             } ?: return@launch
 
             val remaining = playerState[0] as Int
             val currentId = playerState[1] as? String
-            val isLocalOrFile = playerState[3] as Boolean
             if (currentId == null) return@launch
 
-            val ctx = contextRef ?: return@launch
-            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
-            val activeNet = cm?.activeNetwork
-            val caps = cm?.getNetworkCapabilities(activeNet)
-            val hasInternet = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-
-            if (isLocalOrFile || !hasInternet) return@launch
+            if (!forceRefresh && remaining >= MIN_REFILL_THRESHOLD) {
+                return@launch
+            }
 
             if (forceRefresh) {
                 fetchJob?.cancel()
@@ -1092,11 +1109,22 @@ object AutoQueueManager {
             }
 
             // 2. Discover related tracks (first priority is online YouTube Music for online tracks, and local related for offline tracks)
-            val isOnline = connectivityStateHolder?.isOnline?.value ?: true
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            val activeNet = cm?.activeNetwork
+            val caps = cm?.getNetworkCapabilities(activeNet)
+            val hasNetworkConnection = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true ||
+                (connectivityStateHolder?.isOnline?.value ?: false)
+
             var discovered = emptyList<Song>()
             
-            if (isOnline && !isLocal && resolvedVideoId.isNotBlank()) {
-                val related = fetchOnlineRelated(resolvedVideoId)
+            if (hasNetworkConnection && !isLocal && resolvedVideoId.isNotBlank()) {
+                val related = try {
+                    kotlinx.coroutines.withTimeoutOrNull(7000L) {
+                        fetchOnlineRelated(resolvedVideoId)
+                    } ?: emptyList()
+                } catch (e: Exception) {
+                    emptyList()
+                }
                 if (related.isNotEmpty()) {
                     saveRelatedSongsToDb(resolvedVideoId, related, player)
                     discovered = related
@@ -1300,7 +1328,8 @@ object AutoQueueManager {
 
             // Fallback: If we couldn't build at least 6 songs due to strict limits, relax constraints but STILL enforce avoidIds, Title/Artist duplicates, and queue checks!
             if (finalSongsToAdd.size < 6) {
-                val remainingCandidates = (discovered + sameGenreSongs + familiarSongs).distinctBy { it.id }
+                val allLocalPool = try { dao.getAllSongsList().map { it.toSong() } } catch (_: Exception) { emptyList() }
+                val remainingCandidates = (discovered + sameGenreSongs + familiarSongs + allLocalPool).distinctBy { it.id }
                 for (s in remainingCandidates) {
                     val songIdStr = s.id
                     val isInQueue = currentQueueIds.any { isSameSong(it, songIdStr) }

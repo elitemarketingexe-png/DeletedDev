@@ -248,11 +248,28 @@ class DailyMixManager @Inject constructor(
     suspend fun recordPlay(
         songId: String,
         songDurationMs: Long = 0L,
-        timestamp: Long = System.currentTimeMillis()
+        timestamp: Long = System.currentTimeMillis(),
+        playCountIncrement: Int = 1
     ) {
-        engagementDao.recordPlay(
+        engagementDao.recordEngagement(
             songId = songId,
             durationMs = songDurationMs.coerceAtLeast(0L),
+            timestamp = timestamp.coerceAtLeast(0L),
+            playCountIncrement = playCountIncrement.coerceAtLeast(1)
+        )
+    }
+
+    /**
+     * Records elapsed listening duration without artificially bumping the play count.
+     */
+    suspend fun recordListeningDuration(
+        songId: String,
+        durationMs: Long,
+        timestamp: Long = System.currentTimeMillis()
+    ) {
+        engagementDao.recordListeningDuration(
+            songId = songId,
+            durationMs = durationMs.coerceAtLeast(0L),
             timestamp = timestamp.coerceAtLeast(0L)
         )
     }

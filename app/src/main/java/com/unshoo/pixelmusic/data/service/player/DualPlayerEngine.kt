@@ -540,6 +540,34 @@ class DualPlayerEngine @Inject constructor(
         }
     }
 
+    /**
+     * Returns true if the given audio stream is stored locally on disk or has its
+     * first chunk already cached in SimpleCache.
+     */
+    fun isStreamCachedOrLocal(uriString: String?): Boolean {
+        if (uriString.isNullOrBlank()) return false
+        val scheme = try { Uri.parse(uriString).scheme } catch (_: Exception) { null }
+        if (scheme == "file" || scheme == "content" || (scheme != "http" && scheme != "https" && scheme !in REMOTE_MEDIA_SCHEMES)) {
+            return true
+        }
+        val localPath = localFilePathCache[uriString]
+        if (localPath != null && java.io.File(localPath).exists()) {
+            return true
+        }
+        val resolvedUri = resolvedUriCache.get(uriString) ?: if (scheme == "http" || scheme == "https") Uri.parse(uriString) else null
+        if (resolvedUri != null) {
+            val cachedBytes = try {
+                exoCache.cache.getCachedBytes(resolvedUri.toString(), 0, FIRST_CHUNK_PRECACHE_BYTES)
+            } catch (e: Exception) {
+                0L
+            }
+            if (cachedBytes > 0) {
+                return true
+            }
+        }
+        return false
+    }
+
     private fun applyAudioOffloadToActivePlayers() {
         if (::playerA.isInitialized) applyAudioOffload(playerA)
         if (::playerB.isInitialized) applyAudioOffload(playerB)

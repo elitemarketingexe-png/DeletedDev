@@ -1024,6 +1024,8 @@ class MusicService : MediaLibraryService() {
                         // resetAndReseedFromCurrentSong clears addedVideoIds fully,
                         // then seeds a fresh related-songs queue from the current song.
                         AutoQueueManager.resetAndReseedFromCurrentSong()
+                    } else if (!enabled) {
+                        AutoQueueManager.reset()
                     }
                 }
         }
@@ -2673,7 +2675,14 @@ class MusicService : MediaLibraryService() {
         // The URI resolution is launched asynchronously to warm up the cache with fresh URLs.
         preparedItems.getOrNull(resolvedIndex)?.let { currentItem ->
             serviceScope.launch(Dispatchers.IO) {
-                runCatching { engine.preResolveForPlayback(currentItem) }
+                runCatching {
+                    val resolved = engine.preResolveForPlayback(currentItem)
+                    resolved.localConfiguration?.uri?.toString()?.let { uriStr ->
+                        if (uriStr.startsWith("http")) {
+                            engine.preCacheFirstChunk(uriStr)
+                        }
+                    }
+                }
             }
         }
 
