@@ -417,7 +417,18 @@ class PlaybackStateHolder @Inject constructor(
             if (controller.isPlaying) {
                 controller.pause()
             } else {
-                _stablePlayerState.update { it.copy(isBuffering = true) }
+                val currentMediaItem = controller.currentMediaItem
+                val currentUri = currentMediaItem?.localConfiguration?.uri?.toString()
+                val originalUri = currentMediaItem?.mediaMetadata?.extras?.getString("com.unshoo.pixelmusic.external.CONTENT_URI") ?: currentUri
+                val isCached = originalUri != null && (
+                    !originalUri.startsWith("http") && !originalUri.startsWith("youtube://") && !originalUri.startsWith("telegram:") && !originalUri.startsWith("gdrive:") ||
+                    dualPlayerEngine.hasFreshResolvedUri(originalUri)
+                )
+
+                if (!isCached) {
+                    _stablePlayerState.update { it.copy(isBuffering = true) }
+                }
+
                 scope?.launch {
                     dualPlayerEngine.ensureFreshStreamForResume()
                     controller.play()

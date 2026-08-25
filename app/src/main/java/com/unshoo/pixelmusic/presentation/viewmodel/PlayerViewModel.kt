@@ -2398,14 +2398,16 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             dualPlayerEngine.isResolvingStream.collect { isResolving ->
                 if (isResolving) {
-                    val isPlaying = playbackStateHolder.stablePlayerState.value.isPlaying
-                    if (!isPlaying) {
+                    val state = playbackStateHolder.stablePlayerState.value
+                    // Only show buffering indicator if the user actually commanded playback (playWhenReady)
+                    // and audio is not actively playing. Silent background pre-resolves during cold start or idle won't trigger buffering UI.
+                    if (state.playWhenReady && !state.isPlaying) {
                         playbackStateHolder.updateStablePlayerState { it.copy(isBuffering = true) }
                     }
                 } else {
-                    // When resolving finishes, only keep buffering if ExoPlayer itself is buffering
+                    // When resolving finishes, only keep buffering if ExoPlayer itself is buffering and playWhenReady is true
                     val ctrl = mediaController
-                    val isExoBuffering = ctrl?.playbackState == Player.STATE_BUFFERING
+                    val isExoBuffering = ctrl?.playbackState == Player.STATE_BUFFERING && ctrl.playWhenReady
                     playbackStateHolder.updateStablePlayerState { it.copy(isBuffering = isExoBuffering) }
                 }
             }
