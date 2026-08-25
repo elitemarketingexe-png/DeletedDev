@@ -180,13 +180,15 @@ object AutoQueueManager {
      * Fully resets state and re-seeds from the currently playing song so that
      * a fresh related-songs queue is built from scratch immediately.
      */
-    fun resetAndReseedFromCurrentSong() {
+    fun resetAndReseedFromCurrentSong(forceEnable: Boolean = true) {
         reset()
         val player = playerRef ?: return
         val currentScope = scope ?: return
         currentScope.launch(Dispatchers.IO) {
-            val settings = datastoreRepository?.settings?.first() ?: return@launch
-            if (!settings.autoQueueEnabled) return@launch
+            if (!forceEnable) {
+                val settings = datastoreRepository?.settings?.first() ?: return@launch
+                if (!settings.autoQueueEnabled) return@launch
+            }
             val (currentId, videoId) = withContext(Dispatchers.Main) {
                 val item = player.currentMediaItem ?: return@withContext null
                 val mediaId = item.mediaId
@@ -223,7 +225,7 @@ object AutoQueueManager {
                 continuationToken = null
             }
             fetchJob = launch(Dispatchers.IO) {
-                refillQueueLoop(currentId, forceRefresh = true)
+                refillQueueLoop(currentId, forceRefresh = true, forceEnable = forceEnable)
             }
         }
     }
@@ -348,13 +350,14 @@ object AutoQueueManager {
         scheduleRefill(delayMs = delayMs, forceRefresh = false)
     }
 
-    fun forceRefill(forceRefresh: Boolean) {
+    fun forceRefill(forceRefresh: Boolean, forceEnable: Boolean = false) {
         val currentScope = scope ?: return
         val player = playerRef ?: return
 
         currentScope.launch(Dispatchers.IO) {
-            val settings = datastoreRepository?.settings?.first() ?: return@launch
-            if (!settings.autoQueueEnabled) return@launch
+            val settings = datastoreRepository?.settings?.first()
+            val isEnabled = if (forceEnable) true else (settings?.autoQueueEnabled ?: true)
+            if (!isEnabled) return@launch
 
             val playerState = withContext(Dispatchers.Main) {
                 if (playerRef == null) null
@@ -388,7 +391,7 @@ object AutoQueueManager {
             }
 
             fetchJob = launch(Dispatchers.IO) {
-                refillQueueLoop(currentId, forceRefresh)
+                refillQueueLoop(currentId, forceRefresh, forceEnable = forceEnable)
             }
         }
     }
@@ -928,7 +931,7 @@ object AutoQueueManager {
         return finalSongsToAdd
     }
 
-    private suspend fun refillQueueLoop(currentId: String, forceRefresh: Boolean) {
+    private suspend fun refillQueueLoop(currentId: String, forceRefresh: Boolean, forceEnable: Boolean = false) {
         val player = playerRef ?: return
         val dao = musicDaoRef ?: return
         val context = contextRef ?: return
@@ -1057,9 +1060,12 @@ object AutoQueueManager {
                 }
             }
 
-            val settings = datastoreRepository?.settings?.first() ?: return
+            val settings = datastoreRepository?.settings?.first()
+            val isEnabled = if (forceEnable) true else (settings?.autoQueueEnabled ?: true)
+            if (!isEnabled) return
+
             val activeSkips = getActiveSkippedSongIds()
-            val avoidIds = if (settings.avoidRepetitiveSongs) {
+            val avoidIds = if (settings?.avoidRepetitiveSongs == true) {
                 highlyRotatedIds + recentlyPlayedIds + activeSkips
             } else {
                 highlyRotatedIds + activeSkips
@@ -1096,9 +1102,9 @@ object AutoQueueManager {
             val currentSongLongId = currentId.toLongOrNull()
             val currentSongEntity = if (currentSongLongId != null) dao.getSongByIdOnce(currentSongLongId) else null
             
-            val currentMediaItem = withContext(Dispatchers.Main) { player.currentMediaItem }
-            val currentTitle = currentMediaItem?.mediaMetadata?.title?.toString().orEmpty()
-            val currentArtist = currentMediaItem?.mediaMetadata?.artist?.toString().orEmpty()
+            val currentMediaItemObj = withContext(Dispatchers.Main) { player.currentMediaItem }
+            val currentTitle = currentMediaItemObj?.mediaMetadata?.title?.toString().orEmpty()
+            val currentArtist = currentMediaItemObj?.mediaMetadata?.artist?.toString().orEmpty()
             
             var resolvedGenre = currentSongEntity?.genre
             if (resolvedGenre.isNullOrBlank() && currentTitle.isNotBlank() && currentArtist.isNotBlank()) {
@@ -1108,7 +1114,7 @@ object AutoQueueManager {
                 }
             }
 
-            // 2. Discover related tracks (first priority is online YouTube Music for online tracks, and local related for offline tracks)
+            // 2. Discover related tracks (online YouTube Music for online tracks, smart local mix for offline tracks)
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
             val activeNet = cm?.activeNetwork
             val caps = cm?.getNetworkCapabilities(activeNet)
@@ -1117,14 +1123,17 @@ object AutoQueueManager {
 
             var discovered = emptyList<Song>()
             
-            if (hasNetworkConnection && !isLocal && resolvedVideoId.isNotBlank()) {
-                val related = try {
-                    kotlinx.coroutines.withTimeoutOrNull(7000L) {
-                        fetchOnlineRelated(resolvedVideoId)
-                    } ?: emptyList()
-                } catch (e: Exception) {
-                    emptyList()
-                }
+            if (!isLocal && resolvedVideoId.isNotBlank()) {
+                val related = if (hasNetworkConnection) {
+                    try {
+                        kotlinx.coroutines.withTimeoutOrNull(10000L) {
+                            fetchOnlineRelated(resolvedVideoId)
+                        } ?: emptyList()
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                } else emptyList()
+
                 if (related.isNotEmpty()) {
                     saveRelatedSongsToDb(resolvedVideoId, related, player)
                     discovered = related
@@ -1134,9 +1143,39 @@ object AutoQueueManager {
                         onQueueItemsAddedCallback?.invoke()
                     }
                     printd("AutoQueueManager: Appended ${mediaItems.size} online mix radio songs directly.")
+                    emptyFetchCount = 0
                     continue
                 } else {
-                    discovered = fetchLocalRelated(currentId, currentQueueIds)
+                    // Weak network or offline: check if previously cached online related tracks exist in DB
+                    val dbId = getDatabaseIdForYoutubeId(resolvedVideoId)
+                    val cachedRelatedEntities = if (dbId != 0L) {
+                        try { dao.getRelatedSongs(dbId, 25) } catch (_: Exception) { emptyList() }
+                    } else emptyList()
+
+                    val cachedSongs = cachedRelatedEntities.map { it.toSong() }.filter { s ->
+                        val songIdStr = s.id
+                        val isInQueue = currentQueueIds.any { isSameSong(it, songIdStr) }
+                        val isAlreadyAdded = synchronized(addedVideoIds) {
+                            addedVideoIds.any { isSameSong(it, songIdStr) }
+                        }
+                        !isInQueue && !isAlreadyAdded
+                    }
+                    if (cachedSongs.isNotEmpty()) {
+                        cachedSongs.forEach { addToAddedVideoIds(it.id) }
+                        val mediaItems = cachedSongs.map { MediaItemBuilder.build(it) }
+                        withContext(Dispatchers.Main) {
+                            player.addMediaItems(mediaItems)
+                            onQueueItemsAddedCallback?.invoke()
+                        }
+                        printd("AutoQueueManager: Appended ${mediaItems.size} cached online related songs from DB.")
+                        emptyFetchCount = 0
+                        continue
+                    } else {
+                        // Do not fall back to random local filesystem songs for an online YouTube radio queue!
+                        printd("AutoQueueManager: Online related fetch returned 0 songs and no DB cache for videoId=$resolvedVideoId")
+                        emptyFetchCount++
+                        continue
+                    }
                 }
             } else {
                 discovered = fetchLocalRelated(currentId, currentQueueIds)

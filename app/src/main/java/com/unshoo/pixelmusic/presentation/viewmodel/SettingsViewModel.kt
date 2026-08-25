@@ -1839,7 +1839,9 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             datastoreRepository.save(DatastoreRepository.PreferenceKeys.AUTO_QUEUE_ENABLED, enabled)
             if (enabled) {
-                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.resetAndReseedFromCurrentSong()
+                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.resetAndReseedFromCurrentSong(forceEnable = true)
+            } else {
+                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
             }
         }
     }

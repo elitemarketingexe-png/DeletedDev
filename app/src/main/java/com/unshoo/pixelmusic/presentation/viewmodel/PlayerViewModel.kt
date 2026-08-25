@@ -5959,7 +5959,7 @@ class PlayerViewModel @Inject constructor(
                         }
                     }
                 }
-                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.resetAndReseedFromCurrentSong()
+                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.resetAndReseedFromCurrentSong(forceEnable = true)
             } else {
                 com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()
             }
