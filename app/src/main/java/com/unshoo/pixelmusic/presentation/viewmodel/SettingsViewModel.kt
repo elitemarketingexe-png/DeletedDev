@@ -1840,6 +1840,11 @@ class SettingsViewModel @Inject constructor(
             datastoreRepository.save(DatastoreRepository.PreferenceKeys.AUTO_QUEUE_ENABLED, enabled)
             if (enabled) {
                 com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.resetAndReseedFromCurrentSong()
+            } else {
+                // Was previously a no-op on disable: it neither cancelled the in-flight
+                // refill nor trimmed already-queued auto-added songs, so toggling off here
+                // behaved differently from toggling off in the queue sheet.
+                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.disableAndTrimQueue()
             }
         }
     }

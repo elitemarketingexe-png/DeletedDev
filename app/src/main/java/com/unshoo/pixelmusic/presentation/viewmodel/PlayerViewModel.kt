@@ -5640,6 +5640,8 @@ class PlayerViewModel @Inject constructor(
                             // Instant YT Music history sync for the song just launched.
                             player.currentMediaItem?.let { registerYoutubePlaybackHistoryIfNeeded(it) }
                             _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+                            // Auto Queue automatically refills related songs with a debounce delay so tap-to-play gets 100% priority
+                            com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.scheduleRefill(delayMs = 2000L, forceRefresh = true)
                         }
 
                         // Warm next/prev + first-chunk cache OFF the critical path.
@@ -5943,17 +5945,13 @@ class PlayerViewModel @Inject constructor(
                 target
             )
             if (target) {
-                withContext(Dispatchers.Main) {
-                    val player = dualPlayerEngine.masterPlayer
-                    if (player.mediaItemCount > 0) {
-                        val currentIndex = player.currentMediaItemIndex
-                        val totalCount = player.mediaItemCount
-                        if (totalCount > currentIndex + 1) {
-                            player.removeMediaItems(currentIndex + 1, totalCount)
-                        }
-                    }
-                }
+                // Do NOT trim the queue here. Reseeding appends fresh related songs on top
+                // of whatever is already queued; trimming first raced the network fetch that
+                // builds the new queue and left the user with nothing queued whenever that
+                // fetch was slow or failed (e.g. on a weak connection).
                 com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.resetAndReseedFromCurrentSong()
+            } else {
+                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.disableAndTrimQueue()
             }
         }
     }

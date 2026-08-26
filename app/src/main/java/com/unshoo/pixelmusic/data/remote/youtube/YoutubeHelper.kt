@@ -1034,6 +1034,35 @@ object YoutubeHelper {
         }
     }
 
+    private const val MAX_TRACKING_CACHE_ENTRIES = 300
+
+    /**
+     * Drops expired entries from the resolved-candidate-URL cache and caps the size of the
+     * playback-tracking maps.
+     *
+     * Note this is memory hygiene, not a playback-correctness fix: [resolvedCandidateUrlCache]
+     * is an unbounded map keyed by video/itag/client/auth, so a long-running session that plays
+     * many different songs can otherwise accumulate entries indefinitely. The stream/mime/bitrate
+     * caches above are already size-capped LruCaches, and every read site (e.g. the
+     * resolvedCandidateUrlCache lookup during resolution) already re-checks expiry with a safety
+     * margin before trusting a cached URL — a stale entry is never served either way, pruned or
+     * not. Safe to call periodically (e.g. from onTrimMemory or a background sync tick).
+     */
+    fun pruneExpiredCaches() {
+        val now = System.currentTimeMillis()
+        resolvedCandidateUrlCache.entries.removeIf { (_, cached) -> cached.second <= now }
+        if (playbackTrackingCache.size > MAX_TRACKING_CACHE_ENTRIES) {
+            playbackTrackingCache.keys
+                .take(playbackTrackingCache.size - MAX_TRACKING_CACHE_ENTRIES)
+                .forEach { playbackTrackingCache.remove(it) }
+        }
+        if (watchtimeTrackingCache.size > MAX_TRACKING_CACHE_ENTRIES) {
+            watchtimeTrackingCache.keys
+                .take(watchtimeTrackingCache.size - MAX_TRACKING_CACHE_ENTRIES)
+                .forEach { watchtimeTrackingCache.remove(it) }
+        }
+    }
+
     private fun extractDuration(songContent: JsonObject): String {
         val durationRegex = Regex("""\d+:\d{2}(:\d{2})?""")
 

@@ -1011,19 +1011,15 @@ class MusicService : MediaLibraryService() {
                     val wasDisabled = lastAutoQueueEnabled == false
                     lastAutoQueueEnabled = enabled
                     if (enabled && wasDisabled) {
-                        withContext(Dispatchers.Main) {
-                            val player = mediaSession?.player
-                            if (player != null && player.mediaItemCount > 0) {
-                                val currentIndex = player.currentMediaItemIndex
-                                val totalCount = player.mediaItemCount
-                                if (totalCount > currentIndex + 1) {
-                                    player.removeMediaItems(currentIndex + 1, totalCount)
-                                }
-                            }
-                        }
-                        // resetAndReseedFromCurrentSong clears addedVideoIds fully,
-                        // then seeds a fresh related-songs queue from the current song.
+                        // resetAndReseedFromCurrentSong clears addedVideoIds fully, then
+                        // appends a fresh related-songs queue on top of whatever is already
+                        // queued. Deliberately NOT trimming first: trimming here raced the
+                        // network fetch that rebuilds the queue and left the user with an
+                        // empty queue whenever that fetch was slow or failed outright (e.g.
+                        // on a weak connection).
                         AutoQueueManager.resetAndReseedFromCurrentSong()
+                    } else if (!enabled) {
+                        AutoQueueManager.disableAndTrimQueue()
                     }
                 }
         }
@@ -1850,9 +1846,18 @@ class MusicService : MediaLibraryService() {
         schedulePlaybackSnapshotPersist()
 
         // BUG 4 FIX: Ensure new telemetry session starts on track transition (vital for gapless auto-transitions)
+        // BUG 4b FIX (YT Music sync): player.isPlaying is false while the new item is still
+        // buffering (STATE_BUFFERING), which is common right after a transition to a track
+        // whose stream wasn't pre-resolved/cached yet. Gating solely on isPlaying meant
+        // telemetry was stopped for the old track here but never restarted for the new one;
+        // it only had a chance to recover later via onIsPlayingChanged(true) - and if that
+        // edge never cleanly fires (e.g. isPlaying was already true and never dipped to
+        // false around a near-gapless transition), YouTube Music's "now playing"/history
+        // sync would silently stop updating after the first track of a session. playWhenReady
+        // reflects intent to play regardless of buffering state, so include it too.
         lastTelemetryVideoId = null
         telemetryManager.stopTelemetry()
-        if (player.isPlaying) {
+        if (player.isPlaying || player.playWhenReady) {
             startTelemetryReporting()
         }
     }
@@ -2460,6 +2465,10 @@ class MusicService : MediaLibraryService() {
             // Drop the stale PlayerInfo copy so its embedded ByteArray is GC-eligible.
             // The next processWidgetUpdateInternal() call will rebuild it from scratch.
             lastWidgetPlayerInfo = null
+            // Sweep expired resolved-stream-URL entries so a long session doesn't
+            // accumulate an unbounded cache. Purely memory hygiene: every read path
+            // already re-validates expiry before trusting a cached URL.
+            com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.pruneExpiredCaches()
         }
     }
 

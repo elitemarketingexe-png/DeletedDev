@@ -212,6 +212,63 @@ class PlaybackStatsRepository @Inject constructor(
         }
     }
 
+    suspend fun recordPlaybackSegment(
+        songId: String,
+        durationMs: Long,
+        startTimestamp: Long,
+        endTimestamp: Long,
+        title: String? = null,
+        artist: String? = null,
+        thumbnail: String? = null,
+        genre: String? = null,
+        album: String? = null
+    ) = withContext(Dispatchers.IO) {
+        if (songId.isBlank()) return@withContext
+        val coercedEnd = endTimestamp.coerceAtLeast(0L)
+        val coercedDuration = durationMs.coerceAtLeast(0L)
+        val providedStart = startTimestamp.coerceAtLeast(0L).coerceAtMost(coercedEnd)
+        // BUGFIX (listening-stats accuracy): every downstream aggregate (PlaybackSegment,
+        // PlaybackSpan, day/session bucketing) recomputes duration as (endMillis - startMillis)
+        // rather than trusting the durationMs field. durationMs is the *actual* accumulated
+        // listening time in this flush window (pauses/buffering already excluded by the
+        // caller), but startTimestamp/endTimestamp are the wall-clock boundaries of that
+        // window, which can be much wider than durationMs if playback was paused or stalled
+        // partway through (e.g. a 20s flush window that contains a 1-hour pause). Previously
+        // this took max(durationMs, endMillis-startMillis), which actively preferred the
+        // inflated wall-clock span. Only fall back to synthesizing start=end-duration when the
+        // provided window is actually wider than the real duration; keep the real start
+        // otherwise so back-to-back segments still merge/chain exactly as before.
+        val coercedStart = if (coercedEnd - providedStart > coercedDuration) {
+            (coercedEnd - coercedDuration).coerceAtLeast(0L)
+        } else {
+            providedStart
+        }
+        val safeGenre = genre?.takeIf { it.isNotBlank() && it !in UNKNOWN_GENRE_KEYS }
+        val safeAlbum = album?.takeIf { it.isNotBlank() && it !in UNKNOWN_ALBUM_KEYS }
+        val sanitizedEvent = PlaybackEvent(
+            songId = songId,
+            timestamp = coercedEnd,
+            durationMs = coercedDuration,
+            startTimestamp = coercedStart,
+            endTimestamp = coercedEnd,
+            title = title,
+            artist = artist,
+            thumbnail = thumbnail,
+            genre = safeGenre,
+            album = safeAlbum
+        )
+        val writeSucceeded = updateEventsAtomically { events ->
+            val cutoff = sanitizedEvent.endMillis() - MAX_HISTORY_AGE_MS
+            if (cutoff > 0) {
+                events.removeAll { it.endMillis() < cutoff }
+            }
+            events += sanitizedEvent
+            events
+        }
+        if (writeSucceeded) {
+            notifyStatsChanged()
+        }
+    }
     suspend fun recordPlaybackBatch(batch: List<PlaybackEvent>) = withContext(Dispatchers.IO) {
         if (batch.isEmpty()) return@withContext
         val writeSucceeded = updateEventsAtomically { events ->

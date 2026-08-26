@@ -106,7 +106,16 @@ object AutoQueueManager {
         }
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
-            checkAndRefillQueue()
+            // Only PLAYLIST_CHANGED (setMediaItems()/add/removeMediaItems()) needs a
+            // debounced top-up here. That reason fires synchronously the instant a user
+            // taps a song, exactly when the tapped track's stream URL is being resolved and
+            // its first chunk cached — refilling immediately there was the tap-to-play
+            // latency regression. Other reasons (e.g. SOURCE_UPDATE when a duration/metadata
+            // becomes known) don't need a refill at all and debouncing them too just adds
+            // needless delay to legitimate track-transition top-ups, which already have
+            // their own debounce via onMediaItemTransition/onPlaybackStateChanged above.
+            if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
+            checkAndRefillQueue(delayMs = 2000L)
         }
     }
 
@@ -166,9 +175,41 @@ object AutoQueueManager {
     }
 
     /**
+     * Called when auto-queue is disabled (toggle ON→OFF). Cancels any in-flight refill
+     * and immediately trims the upcoming queue back to just the current item, so stale
+     * auto-added songs don't linger after the feature is turned off.
+     *
+     * This is the single, consolidated toggle-OFF handler — call it from every surface
+     * that can flip the setting (queue sheet, settings screen, etc.) instead of
+     * re-implementing the trim locally, so the behavior can't drift out of sync between
+     * screens again.
+     *
+     * Deliberately the mirror image of resetAndReseedFromCurrentSong(): trimming happens
+     * HERE, on disable, never on the enable path. Trimming on enable-before-reseed was the
+     * root cause of "queue doesn't rebuild on a weak connection" — it wiped the existing
+     * queue immediately, then raced a network fetch that could take seconds or fail
+     * outright, leaving the user with nothing queued for that whole window.
+     */
+    fun disableAndTrimQueue() {
+        reset()
+        val currentScope = scope ?: return
+        currentScope.launch(Dispatchers.Main) {
+            val player = playerRef ?: return@launch
+            if (player.mediaItemCount > 0) {
+                val currentIndex = player.currentMediaItemIndex
+                val totalCount = player.mediaItemCount
+                if (totalCount > currentIndex + 1) {
+                    player.removeMediaItems(currentIndex + 1, totalCount)
+                }
+            }
+        }
+    }
+
+    /**
      * Called when auto-queue is re-enabled (toggle OFF→ON).
-     * Fully resets state and re-seeds from the currently playing song so that
-     * a fresh related-songs queue is built from scratch.
+     * Resets tracking state and re-seeds from the currently playing song, appending fresh
+     * related songs on top of whatever is already queued (does NOT trim first — see
+     * disableAndTrimQueue() for why that ordering matters).
      */
     fun resetAndReseedFromCurrentSong() {
         reset()
@@ -320,8 +361,18 @@ object AutoQueueManager {
     }
 
 
-    private fun checkAndRefillQueue() {
-        forceRefill(forceRefresh = false)
+    fun scheduleRefill(delayMs: Long = 0L, forceRefresh: Boolean = false) {
+        val currentScope = scope ?: return
+        currentScope.launch(Dispatchers.IO) {
+            if (delayMs > 0L) {
+                kotlinx.coroutines.delay(delayMs)
+            }
+            forceRefill(forceRefresh = forceRefresh)
+        }
+    }
+
+    private fun checkAndRefillQueue(delayMs: Long = 0L) {
+        scheduleRefill(delayMs = delayMs, forceRefresh = false)
     }
 
     fun forceRefill(forceRefresh: Boolean) {
@@ -1099,13 +1150,39 @@ object AutoQueueManager {
                 val related = fetchOnlineRelated(resolvedVideoId)
                 if (related.isNotEmpty()) {
                     saveRelatedSongsToDb(resolvedVideoId, related, player)
-                    discovered = related
-                    val mediaItems = related.map { MediaItemBuilder.build(it) }
-                    withContext(Dispatchers.Main) {
-                        player.addMediaItems(mediaItems)
-                        onQueueItemsAddedCallback?.invoke()
+                    // BUGFIX (duplicate queue entries): these came straight from YouTube's
+                    // "related" endpoint and were previously appended unfiltered, so any
+                    // track already sitting in the queue (or on the avoid/skip list) could
+                    // be added a second time. The local-fallback branch below already
+                    // filters — do the same here.
+                    val needed = (TARGET_QUEUE_SIZE - remaining).coerceAtLeast(1)
+                    val filteredRelated = related.filter { song ->
+                        val songIdStr = song.id
+                        val isInQueue = currentQueueIds.any { isSameSong(it, songIdStr) }
+                        val isAvoid = avoidIds.any { isSameSong(it, songIdStr) }
+                        val alreadyTracked = synchronized(addedVideoIds) {
+                            addedVideoIds.any { isSameSong(it, songIdStr) }
+                        }
+                        !isInQueue && !isAvoid && !alreadyTracked
+                    }.take(needed)
+                    discovered = filteredRelated
+                    if (filteredRelated.isNotEmpty()) {
+                        val mediaItems = filteredRelated.map { MediaItemBuilder.build(it) }
+                        withContext(Dispatchers.Main) {
+                            player.addMediaItems(mediaItems)
+                            onQueueItemsAddedCallback?.invoke()
+                        }
+                        for (song in filteredRelated) {
+                            addToAddedVideoIds(song.id)
+                        }
+                        printd("AutoQueueManager: Appended ${mediaItems.size} online mix radio songs directly.")
+                        emptyFetchCount = 0
+                        continue
                     }
-                    printd("AutoQueueManager: Appended ${mediaItems.size} online mix radio songs directly.")
+                    // Page was all duplicates/avoided — count as an empty fetch and let the
+                    // next loop iteration page further via the continuation token instead of
+                    // falling through to the (much thinner) local fallback pool.
+                    emptyFetchCount++
                     continue
                 } else {
                     discovered = fetchLocalRelated(currentId, currentQueueIds)
