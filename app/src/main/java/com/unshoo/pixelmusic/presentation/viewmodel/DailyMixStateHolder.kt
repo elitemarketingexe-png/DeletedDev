@@ -130,14 +130,36 @@ class DailyMixStateHolder @Inject constructor(
 
     /**
      * Force update the daily mix regardless of day.
+     * BUGFIX: Inlines the generation directly instead of delegating to updateDailyMix()
+     * which launches a separate coroutine via scope?.launch — that created a race where
+     * updateJob might not be assigned by the time join() was called. Now the generation
+     * runs sequentially within this single coroutine, so completion is guaranteed before
+     * the timestamp is saved.
      */
     fun forceUpdate(favoriteSongIdsFlow: kotlinx.coroutines.flow.Flow<Set<String>>) {
-        scope?.launch {
-            updateDailyMix(favoriteSongIdsFlow)
-            // BUGFIX: wait for generation to complete before marking day as done.
-            // Previously the timestamp was saved immediately (fire-and-forget),
-            // so a failed/cancelled generation still marked the day done.
-            updateJob?.join()
+        updateJob?.cancel()
+        updateJob = scope?.launch(Dispatchers.IO) {
+            // Reset timestamp first so any concurrent checkAndUpdateIfNeeded sees stale state
+            userPreferencesRepository.saveLastDailyMixUpdateTimestamp(0L)
+
+            val allSongs = musicRepository.getAllSongsOnce()
+            if (allSongs.isNotEmpty()) {
+                val favoriteIds = favoriteSongIdsFlow.first()
+
+                // Generate daily mix
+                val mix = dailyMixManager.generateDailyMix(allSongs, favoriteIds)
+                _dailyMixSongs.value = mix.toImmutableList()
+                userPreferencesRepository.saveDailyMixSongIds(mix.map { it.id })
+
+                // Generate your mix
+                val yourMix = dailyMixManager.generateYourMix(allSongs, favoriteIds)
+                _yourMixSongs.value = yourMix.toImmutableList()
+                userPreferencesRepository.saveYourMixSongIds(yourMix.map { it.id })
+            } else {
+                _yourMixSongs.value = persistentListOf()
+                _dailyMixSongs.value = persistentListOf()
+            }
+
             userPreferencesRepository.saveLastDailyMixUpdateTimestamp(System.currentTimeMillis())
         }
     }

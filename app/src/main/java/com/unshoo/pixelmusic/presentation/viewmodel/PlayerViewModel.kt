@@ -3806,7 +3806,13 @@ class PlayerViewModel @Inject constructor(
                         com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.buildMixQueue(song, relatedSongs)
                     }
 
-                    saveYoutubeSongsToDb(fullQueue)
+                    launch(Dispatchers.IO) {
+                        try {
+                            saveYoutubeSongsToDb(fullQueue)
+                        } catch (e: Exception) {
+                            Timber.e(e, "ArchiveTune Queue Builder: Failed to save queue songs to DB in background")
+                        }
+                    }
 
                     if (isDirectPlaybackRequestStale(requestToken)) return@launch
 

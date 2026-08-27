@@ -89,6 +89,18 @@ class QuickPicksViewModel @Inject constructor(
         loadQuickPicks(_selectedCategory.value, forceRefresh = true)
     }
 
+    /**
+     * Lifecycle-aware auto-refresh: silently reloads quickpicks in the background
+     * when the cache TTL (4 hours) has lapsed. Unlike refresh(), the old cached data
+     * stays visible while the new data loads — no visible loading state unless cache
+     * was already empty.
+     */
+    fun refreshIfStale() {
+        if (isCacheExpired() && !_isLoading.value) {
+            loadQuickPicks(_selectedCategory.value, forceRefresh = true)
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Cache helpers
     // ─────────────────────────────────────────────────────────────────────────
