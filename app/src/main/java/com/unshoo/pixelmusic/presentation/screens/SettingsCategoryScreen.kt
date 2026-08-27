@@ -961,6 +961,42 @@ fun SettingsCategoryScreen(
                                         leadingIcon = { Icon(Icons.Rounded.Timer, null, tint = MaterialTheme.colorScheme.secondary) }
                                     )
                                 }
+
+                                val jpDownloadState by com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.downloadState.collectAsStateWithLifecycle()
+                                val isJpInstalled = jpDownloadState is com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.DownloadState.Installed
+                                val isJpDownloading = jpDownloadState is com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.DownloadState.Downloading
+                                val jpPercent = (jpDownloadState as? com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.DownloadState.Downloading)?.progressPercent ?: 0
+
+                                ActionSettingsItem(
+                                    title = "Japanese Kanji Dictionary",
+                                    subtitle = when (jpDownloadState) {
+                                        is com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.DownloadState.Installed -> "Installed (~13 MB) • High accuracy offline Kanji parsing active"
+                                        is com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.DownloadState.Downloading -> "Downloading dictionary: $jpPercent%"
+                                        is com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.DownloadState.Error -> "Download failed: ${(jpDownloadState as com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.DownloadState.Error).message}"
+                                        else -> "Built-in 0-MB Kana transliteration active. Download full Kanji dictionary on-demand (~13 MB)"
+                                    },
+                                    icon = { Icon(painterResource(R.drawable.rounded_lyrics_24), null, tint = MaterialTheme.colorScheme.secondary) },
+                                    primaryActionLabel = when {
+                                        isJpDownloading -> "$jpPercent%"
+                                        isJpInstalled -> "Delete"
+                                        else -> "Download"
+                                    },
+                                    onPrimaryAction = {
+                                        if (isJpInstalled) {
+                                            com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.deleteDictionary(context)
+                                            Toast.makeText(context, "Japanese dictionary removed", Toast.LENGTH_SHORT).show()
+                                        } else if (!isJpDownloading) {
+                                            Toast.makeText(context, "Downloading Japanese dictionary...", Toast.LENGTH_SHORT).show()
+                                            coroutineScope.launch {
+                                                val success = com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.downloadDictionary(context)
+                                                if (success) {
+                                                    Toast.makeText(context, "Japanese dictionary installed successfully!", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        }
+                                    },
+                                    enabled = !isJpDownloading
+                                )
                             }
 
                             SettingsSubsection(

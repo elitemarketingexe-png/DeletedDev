@@ -242,6 +242,8 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
             if (savedLimit != null) {
                 AlbumArtCacheManager.configuredCacheLimitMb = savedLimit.toLong()
             }
+
+            com.unshoo.pixelmusic.utils.JapaneseDictionaryManager.initAtAppStart(this@PixelMusicApplication)
         }
 
         // Initialize Last.fm client defaults

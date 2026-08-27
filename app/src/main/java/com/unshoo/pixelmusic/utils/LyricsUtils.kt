@@ -38,7 +38,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import com.atilika.kuromoji.ipadic.Tokenizer
 import net.sourceforge.pinyin4j.PinyinHelper
 import net.sourceforge.pinyin4j.format.HanyuPinyinCaseType
 import net.sourceforge.pinyin4j.format.HanyuPinyinOutputFormat
@@ -47,6 +46,8 @@ import com.unshoo.pixelmusic.data.model.Lyrics
 import com.unshoo.pixelmusic.data.model.SyncedLine
 import com.unshoo.pixelmusic.data.model.SyncedWord
 import kotlinx.coroutines.flow.Flow
+import java.io.File
+import dalvik.system.DexClassLoader
 
 import java.util.Locale
 import java.util.regex.Pattern
@@ -56,12 +57,19 @@ import kotlin.math.sin
 
 // Roman Multilang
 object MultiLangRomanizer {
-    private val kuromojiTokenizer: Tokenizer? by lazy {
-        try {
-            Thread.currentThread().contextClassLoader = MultiLangRomanizer::class.java.classLoader
-            Tokenizer()
-        } catch (e: Throwable) {
-            e.printStackTrace()
+    @Volatile
+    private var customKuromojiClassLoader: ClassLoader? = null
+
+    fun setDynamicDictionaryClassLoader(classLoader: ClassLoader?) {
+        customKuromojiClassLoader = classLoader
+    }
+
+    private fun getDynamicTokenizer(): Any? {
+        return try {
+            val cl = customKuromojiClassLoader ?: MultiLangRomanizer::class.java.classLoader
+            val tokenizerClass = Class.forName("com.atilika.kuromoji.ipadic.Tokenizer", true, cl)
+            tokenizerClass.getDeclaredConstructor().newInstance()
+        } catch (_: Throwable) {
             null
         }
     }
@@ -142,91 +150,82 @@ object MultiLangRomanizer {
     private fun isMacedonian(text: String) = text.any { MACEDONIAN_CYRILLIC_LETTERS.contains(it.toString()) || MACEDONIAN_SPECIFIC_CYRILLIC_LETTERS.contains(it.toString()) } && text.all { MACEDONIAN_CYRILLIC_LETTERS.contains(it.toString()) || MACEDONIAN_SPECIFIC_CYRILLIC_LETTERS.contains(it.toString()) || !it.toString().matches("[\\u0400-\\u04FF]".toRegex()) }
 
     fun romanizeJapanese(japaneseText: String): String? {
-        val tokenizer = kuromojiTokenizer ?: return null
+        val dynamicTokenizer = getDynamicTokenizer()
+        if (dynamicTokenizer != null) {
+            val dynamicResult = runCatching {
+                val tokenizeMethod = dynamicTokenizer.javaClass.getMethod("tokenize", String::class.java)
+                val tokens = tokenizeMethod.invoke(dynamicTokenizer, japaneseText) as? List<*> ?: emptyList<Any>()
+                
+                val readings = mutableListOf<Triple<String, String, String>>()
+                var i = 0
+                while (i < tokens.size) {
+                    val token = tokens[i] ?: break
+                    val tokenClass = token.javaClass
+                    val surface = (tokenClass.getMethod("getSurface").invoke(token) as? String).orEmpty()
+                    val pos1 = (tokenClass.getMethod("getPartOfSpeechLevel1").invoke(token) as? String).orEmpty()
+                    val pos2 = (tokenClass.getMethod("getPartOfSpeechLevel2").invoke(token) as? String).orEmpty()
+                    val rawReading = tokenClass.getMethod("getReading").invoke(token) as? String
+                    val reading = rawReading?.takeIf { it.isNotBlank() && it != "*" }
 
-        return try {
-            val tokens = tokenizer.tokenize(japaneseText)
-
-            // ── Pass 1: resolve readings ──────────────────────────────────────
-            val readings = mutableListOf<Triple<String, String, String>>()
-            var i = 0
-            while (i < tokens.size) {
-                val token = tokens[i]
-                val next  = tokens.getOrNull(i + 1)
-
-                // Irregular lexical compounds
-                when {
-                    token.surface == "一" && next?.surface == "人" -> {
-                        readings += Triple("ヒトリ", "名詞", "一般"); i += 2; continue
-                    }
-                    token.surface == "二" && next?.surface == "人" -> {
-                        readings += Triple("フタリ", "名詞", "一般"); i += 2; continue
-                    }
-                    token.surface == "今日" -> {
-                        readings += Triple("キョウ", "名詞", "一般"); i++; continue
-                    }
-                    token.surface == "明日" -> {
-                        readings += Triple("アシタ", "名詞", "一般"); i++; continue
-                    }
-                    token.surface == "昨日" -> {
-                        readings += Triple("キノウ", "名詞", "一般"); i++; continue
-                    }
-                }
-
-                val pos1    = token.partOfSpeechLevel1 ?: ""
-                val pos2    = token.partOfSpeechLevel2 ?: ""
-                val surface = token.surface ?: ""
-                val reading = token.reading?.takeIf { it.isNotBlank() && it != "*" }
-
-                val kata = when {
-                    pos1 == "助詞" -> when (surface) {
-                        "は" -> "ワ"
-                        "へ" -> "エ"
-                        "を" -> "オ"
+                    val kata = when {
+                        pos1 == "助詞" -> when (surface) {
+                            "は" -> "ワ"
+                            "へ" -> "エ"
+                            "を" -> "オ"
+                            else -> reading ?: surface
+                        }
                         else -> reading ?: surface
                     }
-                    else -> reading ?: surface
+                    readings += Triple(kata, pos1, pos2)
+                    i++
                 }
-                readings += Triple(kata, pos1, pos2)
-                i++
+
+                val kataBuf = StringBuilder()
+                readings.forEachIndexed { idx, (kata, pos1, pos2) ->
+                    val prevKata = readings.getOrNull(idx - 1)?.first ?: ""
+                    val prevEndsWithSokuon = prevKata.endsWith("ッ") || prevKata.endsWith("っ")
+                    val noSpace = idx == 0
+                        || prevEndsWithSokuon
+                        || pos1 == "助動詞"
+                        || pos2 == "接尾"
+                        || pos1 == "記号"
+                        || pos2 == "非自立"
+                    if (!noSpace) kataBuf.append(" ")
+                    kataBuf.append(kata)
+                }
+
+                val katakanaText = kataBuf.toString().replace("\\s+".toRegex(), " ").trim()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    android.icu.text.Transliterator
+                        .getInstance("Katakana-Latin; Lower")
+                        .transliterate(katakanaText)
+                } else {
+                    katakanaText
+                }
+            }.getOrNull()
+
+            if (!dynamicResult.isNullOrBlank()) {
+                return dynamicResult
+                    .replace(Regex("n(?=[bp])"), "m")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
             }
+        }
 
-            // ── Pass 2: build katakana string with spacing ────────────────────
-            val kataBuf = StringBuilder()
-            readings.forEachIndexed { idx, (kata, pos1, pos2) ->
-                val prevKata = readings.getOrNull(idx - 1)?.first ?: ""
-                val prevEndsWithSokuon = prevKata.endsWith("ッ") || prevKata.endsWith("っ")
-                val noSpace = idx == 0
-                    || prevEndsWithSokuon
-                    || pos1 == "助動詞"
-                    || pos2 == "接尾"
-                    || pos1 == "記号"
-                    || pos2 == "非自立"
-                if (!noSpace) kataBuf.append(" ")
-                kataBuf.append(kata)
-            }
-
-            val katakanaText = kataBuf.toString().replace("\\s+".toRegex(), " ").trim()
-
-            // ── Pass 3: Katakana → Latin via ICU transliterator ───────────────
-            val latin = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        // ── 0-MB Built-in Android ICU Native Transliterator ───────────────
+        // Transliterates Hiragana & Katakana directly using OS system tables (0 KB extra size)
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 android.icu.text.Transliterator
-                    .getInstance("Katakana-Latin; Lower")
-                    .transliterate(katakanaText)
+                    .getInstance("Hiragana-Latin; Katakana-Latin; Lower")
+                    .transliterate(japaneseText)
+                    .replace(Regex("n(?=[bp])"), "m")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
             } else {
-                katakanaText
+                null
             }
-
-            // ── Pass 4: context-sensitive post-processing ─────────────────────
-            // Fix ん before b/p → "m" (standard Hepburn).
-            // Fix word-initial false "m" that is actually "n".
-            latin
-                .replace(Regex("n(?=[bp])"), "m")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-
-        } catch (e: Throwable) {
-            e.printStackTrace()
+        } catch (_: Throwable) {
             null
         }
     }
