@@ -201,7 +201,7 @@ async def publish():
                         [
                             InlineKeyboardButton(
                                 "GitHub",
-                                url=f"https://github.com/ianshulyadav/PixelMusic/releases/tag/v{version}"
+                                url=f"https://github.com/ianshulyadav/PixelMusicApp/releases/tag/v{version}"
                             )
                         ]
                     ]

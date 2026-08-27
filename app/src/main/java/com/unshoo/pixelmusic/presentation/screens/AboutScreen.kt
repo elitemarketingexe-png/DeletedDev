@@ -499,7 +499,7 @@ private fun SocialLinksColumn() {
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ianshulyadav/ThePixelMusic"))
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/ianshulyadav/PixelMusicApp"))
                     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
                 },
             shape = buttonShape,
@@ -537,7 +537,7 @@ private fun SocialLinksColumn() {
                         maxLines = 1,
                     )
                     Text(
-                        text = "ianshulyadav/ThePixelMusic",
+                        text = "ianshulyadav/PixelMusicApp",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

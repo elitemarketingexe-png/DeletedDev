@@ -110,34 +110,34 @@ jobs:
           CURR_SHA: ${{ github.sha }}
         run: python3 .github/scripts/generate_changelog.py
 
-      # ── GitHub Release — ONLY when version is new (tag does not exist yet) ───
-      - name: Create GitHub Release
+      # ── GitHub Release — Upload to PUBLIC repo ianshulyadav/PixelMusicApp ───
+      - name: Create GitHub Release in Public Repo
         if: >
           success() &&
           steps.version_check.outputs.is_new_version == 'true' &&
           (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
+          repository: ianshulyadav/PixelMusicApp
+          token: ${{ secrets.RELEASE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
           tag_name: v${{ steps.version.outputs.version_name }}
           name: "PixelMusic v${{ steps.version.outputs.version_name }}"
           body: |
-            ## What's new
+            ## What's new in v${{ steps.version.outputs.version_name }}
             ${{ steps.changelog.outputs.changelog_md }}
 
             ---
-            | APK | Target |
-            |-----|--------|
+            | APK | Architecture / Target |
+            |-----|----------------------|
+            | `app-arm64-v8a-release.apk` | **Recommended:** Modern phones (Pixel, Samsung, OnePlus, Xiaomi, etc.) |
             | `app-universal-release.apk` | Universal — works on all devices |
-            | `app-arm64-v8a-release.apk` | Modern phones (Pixel, Samsung, etc.) |
-            | `app-armeabi-v7a-release.apk` | Older / budget ARM phones |
+            | `app-armeabi-v7a-release.apk` | Older / budget 32-bit ARM phones |
             | `app-x86_64-release.apk` | Emulators & Chromebooks |
-
-            **Commit:** ${{ github.sha }}
           files: |
             app/build/outputs/apk/release/app-arm64-v8a-release.apk
+            app/build/outputs/apk/release/app-universal-release.apk
             app/build/outputs/apk/release/app-armeabi-v7a-release.apk
             app/build/outputs/apk/release/app-x86_64-release.apk
-            app/build/outputs/apk/release/app-universal-release.apk
           draft: false
           prerelease: false
           make_latest: true
