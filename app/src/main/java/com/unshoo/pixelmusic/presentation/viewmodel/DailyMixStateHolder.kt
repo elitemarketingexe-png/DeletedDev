@@ -84,7 +84,9 @@ class DailyMixStateHolder @Inject constructor(
                 _yourMixSongs.value = yourMix.toImmutableList()
                 userPreferencesRepository.saveYourMixSongIds(yourMix.map { it.id })
             } else {
+                // BUGFIX: clear BOTH lists on empty library, not just yourMix
                 _yourMixSongs.value = persistentListOf()
+                _dailyMixSongs.value = persistentListOf()
             }
         }
     }
@@ -131,8 +133,12 @@ class DailyMixStateHolder @Inject constructor(
      */
     fun forceUpdate(favoriteSongIdsFlow: kotlinx.coroutines.flow.Flow<Set<String>>) {
         scope?.launch {
-                updateDailyMix(favoriteSongIdsFlow)
-                userPreferencesRepository.saveLastDailyMixUpdateTimestamp(System.currentTimeMillis())
+            updateDailyMix(favoriteSongIdsFlow)
+            // BUGFIX: wait for generation to complete before marking day as done.
+            // Previously the timestamp was saved immediately (fire-and-forget),
+            // so a failed/cancelled generation still marked the day done.
+            updateJob?.join()
+            userPreferencesRepository.saveLastDailyMixUpdateTimestamp(System.currentTimeMillis())
         }
     }
 
@@ -142,13 +148,19 @@ class DailyMixStateHolder @Inject constructor(
     fun checkAndUpdateIfNeeded(favoriteSongIdsFlow: kotlinx.coroutines.flow.Flow<Set<String>>) {
         scope?.launch {
             val lastUpdate = userPreferencesRepository.lastDailyMixUpdateFlow.first()
-            val today = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
-            val lastUpdateDay = Calendar.getInstance().apply {
-                timeInMillis = lastUpdate
-            }.get(Calendar.DAY_OF_YEAR)
+            val now = Calendar.getInstance()
+            val lastCal = Calendar.getInstance().apply { timeInMillis = lastUpdate }
 
-            if (today != lastUpdateDay) {
+            // Compare full date (year + day-of-year) to handle year boundaries
+            // and epoch-zero (never updated) correctly.
+            val isNewDay = lastUpdate <= 0L ||
+                now.get(Calendar.YEAR) != lastCal.get(Calendar.YEAR) ||
+                now.get(Calendar.DAY_OF_YEAR) != lastCal.get(Calendar.DAY_OF_YEAR)
+
+            if (isNewDay) {
                 updateDailyMix(favoriteSongIdsFlow)
+                // BUGFIX: wait for generation to complete before marking day as done.
+                updateJob?.join()
                 userPreferencesRepository.saveLastDailyMixUpdateTimestamp(System.currentTimeMillis())
             }
         }

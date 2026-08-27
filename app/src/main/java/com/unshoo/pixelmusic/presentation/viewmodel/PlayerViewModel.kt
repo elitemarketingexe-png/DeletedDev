@@ -2378,8 +2378,29 @@ class PlayerViewModel @Inject constructor(
             preloadThemesAndInitialData()
             checkAndUpdateDailyMixIfNeeded()
             checkAndReconnectMediaController()
+            preWarmCurrentSongStream()
         } finally {
             Trace.endSection()
+        }
+    }
+
+    /**
+     * Silently pre-resolves the current snapshot song's cloud stream URL in the background
+     * so that when the user taps play, the stream is already cached and playback starts
+     * instantly. This replaces the missing PlaybackSessionWarmer functionality.
+     */
+    private fun preWarmCurrentSongStream() {
+        val currentSong = playbackStateHolder.stablePlayerState.value.currentSong ?: return
+        val uri = com.unshoo.pixelmusic.utils.MediaItemBuilder.playbackUri(currentSong)
+        val scheme = uri.scheme
+        if (scheme == "youtube" || scheme == "telegram" || scheme == "gdrive") {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching {
+                    dualPlayerEngine.ensureFreshStreamForResume()
+                }.onFailure { e ->
+                    timber.log.Timber.w(e, "Pre-warm stream resolve failed for %s (non-fatal)", currentSong.id)
+                }
+            }
         }
     }
 
@@ -4814,7 +4835,11 @@ class PlayerViewModel @Inject constructor(
                 playbackStateHolder.updateStablePlayerState {
                     it.copy(
                         isPlaying = isPlaying,
-                        playWhenReady = playerCtrl.playWhenReady
+                        playWhenReady = playerCtrl.playWhenReady,
+                        // BUGFIX: clear isBuffering when playback starts. Without this,
+                        // the spinner could persist if STATE_READY was missed or if
+                        // playPause set isBuffering before ensureFreshStreamForResume.
+                        isBuffering = if (isPlaying) false else it.isBuffering
                     )
                 }
                 if (isPlaying) {

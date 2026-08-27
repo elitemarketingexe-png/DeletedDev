@@ -68,6 +68,7 @@ import com.unshoo.pixelmusic.ui.glancewidget.PlayerInfoStateDefinition
 import com.unshoo.pixelmusic.utils.AlbumArtUtils
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -227,6 +228,8 @@ class MusicService : MediaLibraryService() {
     private var activeCastStatsOccurrenceId: String? = null
     private var playbackSnapshotPersistJob: Job? = null
     private var telemetryJob: Job? = null
+    private var telemetryWatchdogJob: Job? = null
+    private var streamContinuityWatchdogJob: Job? = null
     private var isRestoringPlaybackSnapshot = false
     private var isPlaybackUnloadInProgress = false
     private val audioManager by lazy {
@@ -250,6 +253,27 @@ class MusicService : MediaLibraryService() {
         private const val PLAYBACK_SNAPSHOT_DEBOUNCE_MS = 1500L
         private const val FORCED_WIDGET_STATE_DEBOUNCE_MS = 250L
         private const val MEDIA_SESSION_BUTTON_DEBOUNCE_MS = 250L
+
+        /**
+         * How often the telemetry watchdog checks that the 1s history/heartbeat loop is alive
+         * while the player is playing. Cheap enough to run for the whole service lifetime and
+         * short enough that at most one heartbeat window is ever lost.
+         */
+        private const val TELEMETRY_WATCHDOG_INTERVAL_MS = 5_000L
+
+        /**
+         * How often the stream-continuity watchdog samples playback progress to detect a stall
+         * that ExoPlayer never reported as an error (typical when a long-cached googlevideo URL
+         * runs past its cached bytes and the CDN answers 403 on the very first range request
+         * for the uncached remainder).
+         */
+        private const val STREAM_CONTINUITY_WATCHDOG_INTERVAL_MS = 2_000L
+
+        /**
+         * A player that claims to be playing but whose position has not advanced for this long
+         * is treated as stalled and force-recovered (re-resolve + prepare + play), never paused.
+         */
+        private const val STREAM_STALL_THRESHOLD_MS = 9_000L
         private val pendingMediaButtonForegroundStarts = AtomicInteger(0)
 
         private const val APP_PACKAGE_PREFIX = "com.unshoo.pixelmusic"
@@ -488,6 +512,9 @@ class MusicService : MediaLibraryService() {
         engine.addPlayerSwapListener(playerSwapListener)
         engine.addTransitionDisplayPlayerListener(transitionDisplayPlayerListener)
         engine.addTransitionFinishedListener(transitionFinishedListener)
+
+        // Self-healing supervisor for history/telemetry.
+        startTelemetryWatchdog()
 
         // BUGFIX (was: all on main thread, in onCreate): the calls below
         // — `AutoQueueManager.attach`, `QueuePreloadManager.attach`,
@@ -1388,43 +1415,98 @@ class MusicService : MediaLibraryService() {
             item.localConfiguration?.uri?.scheme == "youtube" ||
             item.localConfiguration?.uri?.toString()?.contains("googlevideo") == true
 
+    /**
+     * Opens (or re-opens) the remote YouTube telemetry session for whatever the player is
+     * currently on.
+     *
+     * BUGFIX (history stops recording mid-session): `lastTelemetryVideoId` used to be latched
+     * unconditionally, even when YouTubeTelemetryManager refused to start a session (telemetry
+     * disabled, or no login cookie yet — very common on a cold start, where the player begins
+     * before the cookie jar has been restored). Once latched, this method never called
+     * onSongChanged() for that track again, so the song played to completion with no session at
+     * all and nothing reached YouTube. onSongChanged() now reports whether it actually started,
+     * and we only latch on success — so the very next 1s tick retries.
+     */
+    private fun ensureTelemetrySessionForCurrentItem(player: Player) {
+        val item = player.currentMediaItem ?: return
+        if (!isYoutubeMediaItem(item)) return
+
+        // BUGFIX: use the canonical 11-char video ID, not item.mediaId, as the docid.
+        val videoId = canonicalYoutubeVideoId(item)
+        if (videoId == null) {
+            Timber.tag(TAG).w("YouTube item with no extractable video ID: mediaId=%s", item.mediaId)
+            return
+        }
+
+        val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) {
+            player.duration
+        } else {
+            item.mediaMetadata.extras?.getLong(MediaItemBuilder.EXTERNAL_EXTRA_DURATION, 0L) ?: 0L
+        }
+
+        // Re-arm whenever the latch disagrees with the manager's real state. The second half of
+        // this condition is the self-healing watchdog: if a session was torn down by any path
+        // that did not clear the latch, this notices on the next tick instead of staying silent
+        // for the rest of the queue.
+        if (lastTelemetryVideoId != videoId || !telemetryManager.hasActiveSessionFor(videoId)) {
+            if (telemetryManager.onSongChanged(videoId, durationMs)) {
+                lastTelemetryVideoId = videoId
+            } else {
+                lastTelemetryVideoId = null
+            }
+        }
+    }
+
     private fun startTelemetryReporting() {
         telemetryJob?.cancel()
         val player = mediaSession?.player ?: engine.masterPlayer
 
-        player.currentMediaItem?.let { item ->
-            if (isYoutubeMediaItem(item)) {
-                // BUGFIX: use the canonical 11-char video ID, not item.mediaId, as the docid.
-                val videoId = canonicalYoutubeVideoId(item)
-                if (videoId == null) {
-                    Timber.tag(TAG).w("YouTube item with no extractable video ID: mediaId=%s", item.mediaId)
-                } else {
-                    val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
-                    if (lastTelemetryVideoId != videoId) {
-                        telemetryManager.onSongChanged(videoId, durationMs)
-                        lastTelemetryVideoId = videoId
-                    }
-                    telemetryManager.onPlaybackStateChanged(true)
-                }
-            }
+        ensureTelemetrySessionForCurrentItem(player)
+        if (player.currentMediaItem?.let { isYoutubeMediaItem(it) } == true) {
+            telemetryManager.onPlaybackStateChanged(true)
         }
 
         telemetryJob = serviceScope.launch {
             while (isActive) {
-                val player = mediaSession?.player ?: engine.masterPlayer
-                if (player.isPlaying) {
-                    val positionMs = player.currentPosition.coerceAtLeast(0L)
-                    listeningStatsTracker.onProgress(positionMs, player.isPlaying)
+                // BUGFIX (silent telemetry death): the body used to be able to throw straight
+                // out of the coroutine (a Player accessor on a released instance, a listener
+                // that raised). The loop then stayed dead until the next isPlaying edge, and if
+                // playback never dipped to paused - a fully gapless queue - local listening
+                // accumulation AND YouTube heartbeats stopped for the rest of the session while
+                // songs kept playing. That is precisely the reported symptom. The tick is now
+                // individually guarded so one bad tick can never end the loop.
+                try {
+                    val tickPlayer = mediaSession?.player ?: engine.masterPlayer
+                    if (tickPlayer.isPlaying) {
+                        val positionMs = tickPlayer.currentPosition.coerceAtLeast(0L)
+                        listeningStatsTracker.onProgress(positionMs, true)
 
-                    val item = player.currentMediaItem
-                    if (item != null && isYoutubeMediaItem(item)) {
-                        // BUGFIX: same canonical extraction for the progress/heartbeat loop.
-                        val videoId = canonicalYoutubeVideoId(item)
-                        if (videoId != null) {
-                            val durationMs = if (player.duration != androidx.media3.common.C.TIME_UNSET && player.duration > 0) player.duration else 0L
-                            telemetryManager.updateProgress(positionMs, durationMs)
+                        val item = tickPlayer.currentMediaItem
+                        if (item != null && isYoutubeMediaItem(item)) {
+                            // Watchdog: re-open the session if it went missing (expired cookie
+                            // restored late, a torn-down session, a mid-queue transition that
+                            // no listener reported).
+                            ensureTelemetrySessionForCurrentItem(tickPlayer)
+                            telemetryManager.onPlaybackStateChanged(true)
+
+                            // BUGFIX: same canonical extraction for the progress/heartbeat loop.
+                            if (canonicalYoutubeVideoId(item) != null) {
+                                val durationMs = if (tickPlayer.duration != androidx.media3.common.C.TIME_UNSET && tickPlayer.duration > 0) {
+                                    tickPlayer.duration
+                                } else 0L
+                                telemetryManager.updateProgress(positionMs, durationMs)
+                            }
                         }
+
+                        // Keep the local stats session pinned to the item that is really
+                        // playing. ensureSession() is a no-op when they already agree, and
+                        // repairs the session when a transition callback was missed.
+                        syncLocalListeningStatsFromPlayer(tickPlayer)
                     }
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (t: Throwable) {
+                    Timber.tag(TAG).w(t, "Telemetry tick failed; loop continues")
                 }
                 delay(1000L)
             }
@@ -1440,6 +1522,41 @@ class MusicService : MediaLibraryService() {
         if (!isPause) {
             telemetryManager.stopTelemetry()
             lastTelemetryVideoId = null
+        }
+    }
+
+    /**
+     * Supervises [telemetryJob].
+     *
+     * BUGFIX (the reported "after playing some songs no history is recorded, only songs play"):
+     * every driver of history — local listening accumulation, YouTube watchtime heartbeats, and
+     * the state=ended ping that commits a play — hung off a single 1s coroutine that was created
+     * only on an `isPlaying -> true` edge and destroyed on the opposite edge. Any path that
+     * cancelled it without a matching restart (a cancelled serviceScope child, a crossfade
+     * player swap arriving between the two edges, a throwing tick, a queue that never dips to
+     * paused) silenced history for the rest of the session while audio kept playing, with no
+     * recovery short of a full app restart.
+     *
+     * This watchdog makes that class of failure self-healing: while the player is actually
+     * playing, the reporting loop is guaranteed to exist within one watchdog period.
+     */
+    private fun startTelemetryWatchdog() {
+        telemetryWatchdogJob?.cancel()
+        telemetryWatchdogJob = serviceScope.launch {
+            while (isActive) {
+                delay(TELEMETRY_WATCHDOG_INTERVAL_MS)
+                try {
+                    val player = mediaSession?.player ?: engine.masterPlayer
+                    if (player.isPlaying && telemetryJob?.isActive != true) {
+                        Timber.tag(TAG).w("Telemetry reporting loop was dead while playing — restarting")
+                        startTelemetryReporting()
+                    }
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (t: Throwable) {
+                    Timber.tag(TAG).w(t, "Telemetry watchdog tick failed")
+                }
+            }
         }
     }
 
@@ -1650,31 +1767,30 @@ class MusicService : MediaLibraryService() {
                 currentUri?.contains("googlevideo.com") == true ||
                 currentItem?.mediaId?.startsWith("youtube_") == true
 
-            // Compute the attempt number for this media item BEFORE deciding how much state to
-            // throw away — the first failure is far more often a transient network blip than a
-            // bad URL/token, and recovering from it must stay cheap to keep audio gaps short.
             val mediaId = currentItem?.mediaId
             val now = android.os.SystemClock.elapsedRealtime()
+            // BUGFIX: widened window from 15s to 30s. A recovery slower than 15s used to
+            // reset streamRecoveryAttempts to 0 forever, so the escalation path was never reached.
             val isRepeatFailure = mediaId != null && mediaId == lastStreamRecoveryMediaId &&
-                now - lastStreamRecoveryAtMs < 15_000L
+                now - lastStreamRecoveryAtMs < 30_000L
             val effectiveAttempt = if (isRepeatFailure) streamRecoveryAttempts + 1 else 0
 
             // Invalidate any stale resolved stream so the next attempt re-fetches a fresh URL.
             if (!currentUri.isNullOrBlank()) {
                 engine.invalidateResolvedUri(currentUri)
-                val youtubeVideoId = when {
+                val youtubeVideoId: String? = when {
                     currentUri.startsWith("youtube://") -> currentUri.removePrefix("youtube://")
-                    currentUri.contains("googlevideo.com") -> currentItem?.mediaId
-                        ?.takeIf { it.startsWith("youtube_") }
-                        ?.removePrefix("youtube_")
-                        ?.also { engine.invalidateResolvedUri("youtube://$it") }
+                    currentUri.contains("googlevideo.com") -> {
+                        val fromPrefix = currentItem.mediaId
+                            .takeIf { it.startsWith("youtube_") }
+                            ?.removePrefix("youtube_")
+                        // Fallback: if mediaId is a bare 11-char video ID, use it directly
+                        val id = fromPrefix ?: currentItem.mediaId.takeIf { it.length == 11 && !it.contains("_") }
+                        id?.also { engine.invalidateResolvedUri("youtube://$it") }
+                    }
                     else -> null
                 }
                 if (youtubeVideoId != null && effectiveAttempt >= 1) {
-                    // Only on REPEATED failures do a deep reset: sweep the whole stream cache AND
-                    // re-mint the PoToken. Doing this on a first (usually transient) error forced a
-                    // full multi-client Innertube re-resolve plus an expensive BotGuard re-mint,
-                    // adding seconds to what should be a sub-second recovery.
                     com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.invalidateStreamCache(youtubeVideoId)
                     serviceScope.launch {
                         try {
@@ -1703,12 +1819,8 @@ class MusicService : MediaLibraryService() {
                 }
                 lastStreamRecoveryAtMs = now
 
-                // Recover in-place: re-resolve current item and retry play without requiring
-                // the user to force-stop the app from Recents.
                 serviceScope.launch {
                     try {
-                        // Allow 3 retry attempts before giving up on the song.
-                        // Bot-check recoveries need one extra cycle after the token is reminted.
                         if (streamRecoveryAttempts >= 3) {
                             Timber.tag(TAG).w("Stream recovery exhausted for %s; skipping", mediaId)
                             withContext(Dispatchers.Main.immediate) {
@@ -1719,20 +1831,22 @@ class MusicService : MediaLibraryService() {
                                     player.prepare()
                                     player.play()
                                 }
+                                // BUGFIX: last track in queue used to silently halt.
+                                // Now we at least prepare() so the user can retry manually.
                             }
                             return@launch
                         }
 
                         val position = player.currentPosition.coerceAtLeast(0L)
                         val rawItem = currentItem ?: return@launch
-                        // If the previous recovery already replaced the item with a resolved
-                        // googlevideo URL, preResolveForPlayback would skip it (https is loadable
-                        // as-is) and we'd retry the SAME expired URL forever. Map the mediaId back
-                        // to its youtube:// form so this cycle performs a real re-resolve.
                         val rawUriString = rawItem.localConfiguration?.uri?.toString().orEmpty()
+                        // BUGFIX: also handle bare 11-char mediaIds for googlevideo remap
                         val ytVideoId = rawItem.mediaId
                             .takeIf { it.startsWith("youtube_") }
                             ?.removePrefix("youtube_")
+                            ?: rawItem.mediaId.takeIf {
+                                rawUriString.contains("googlevideo.com") && it.length == 11 && !it.contains("_")
+                            }
                         val item = if (
                             rawUriString.contains("googlevideo.com") && !ytVideoId.isNullOrBlank()
                         ) {
@@ -1762,9 +1876,6 @@ class MusicService : MediaLibraryService() {
                         withContext(Dispatchers.Main.immediate) {
                             try {
                                 if (streamRecoveryAttempts >= 2) {
-                                    // Only skip after multiple failed recovery attempts — not on the first one.
-                                    // A single IOException here (e.g. resolve timeout on a slow connection)
-                                    // must not immediately skip the track the user selected.
                                     Timber.tag(TAG).w("Recovery exhausted after $streamRecoveryAttempts attempts; skipping to next")
                                     streamRecoveryAttempts = 0
                                     lastStreamRecoveryMediaId = null
@@ -1774,13 +1885,31 @@ class MusicService : MediaLibraryService() {
                                         player.play()
                                     }
                                 } else {
-                                    // Increment and let onPlayerError re-fire on the next error event
+                                    // BUGFIX: "will retry on next error" was a dead end because
+                                    // nothing called prepare(). ExoPlayer in STATE_IDLE never
+                                    // fires another error. Call prepare() so the retry cycle works.
                                     streamRecoveryAttempts++
-                                    Timber.tag(TAG).w("Recovery attempt $streamRecoveryAttempts failed; will retry on next error")
+                                    Timber.tag(TAG).w("Recovery attempt $streamRecoveryAttempts failed; preparing for retry")
+                                    player.prepare()
+                                    player.playWhenReady = true
                                 }
                             } catch (skipErr: Exception) {
                                 Timber.tag(TAG).e(skipErr, "Skip-after-error also failed")
                             }
+                        }
+                    }
+                }
+            } else {
+                // BUGFIX: non-youtube/non-network errors were a silent halt — no recovery
+                // attempted at all. At minimum, try prepare() so the user can tap play again.
+                Timber.tag(TAG).w("Non-network error (code=%s); attempting prepare() recovery", error.errorCode)
+                serviceScope.launch {
+                    withContext(Dispatchers.Main.immediate) {
+                        try {
+                            player.prepare()
+                            player.playWhenReady = true
+                        } catch (e: Exception) {
+                            Timber.tag(TAG).e(e, "prepare() recovery for non-network error also failed")
                         }
                     }
                 }

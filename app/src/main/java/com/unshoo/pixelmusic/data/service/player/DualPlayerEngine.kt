@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.async
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -90,7 +91,8 @@ class DualPlayerEngine @Inject constructor(
         private const val AUDIO_OFFLOAD_BUFFERING_FALLBACK_MS = 4_000L
         private const val MAX_AUXILIARY_TIMELINE_ITEMS = 200
         private const val STREAM_RESOLVE_TIMEOUT_MS = 8_000L
-        private const val STREAM_RESOLVE_TIMEOUT_LOW_CONNECTIVITY_MS = 5_000L
+        // BUGFIX: was 5_000L (shorter than normal!). Weak networks need MORE time, not less.
+        private const val STREAM_RESOLVE_TIMEOUT_LOW_CONNECTIVITY_MS = 12_000L
         /**
          * How long the ExoPlayer load thread may cooperatively wait for a stream resolve to
          * finish before giving up. Must exceed [STREAM_RESOLVE_TIMEOUT_MS] so the load thread
@@ -114,7 +116,11 @@ class DualPlayerEngine @Inject constructor(
         val queueSize: Int
     )
 
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    // BUGFIX: was `val` — release() cancels the SupervisorJob, but initialize() never
+    // recreated it. Since DualPlayerEngine is @Singleton, the dead scope persisted across
+    // MusicService destroy/create cycles, silently dropping all scope.launch calls
+    // (kickBackgroundResolve, preResolve, preference collectors).
+    private var scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     var hiFiModeEnabled: Boolean = false
         private set
     private var audioOffloadEnabled = !shouldDisableAudioOffloadByDefault()
@@ -597,6 +603,13 @@ class DualPlayerEngine @Inject constructor(
     fun initialize() {
         if (!isReleased && ::playerA.isInitialized && playerA.applicationLooper.thread.isAlive) return
 
+        // Recreate scope if it was cancelled by a previous release() call.
+        // DualPlayerEngine is @Singleton, so the scope must survive across
+        // MusicService destroy/create cycles.
+        if (!scope.isActive) {
+            scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        }
+
         if (::playerA.isInitialized) {
             onPlayerAboutToBeReleasedListener?.invoke(playerA)
             try { playerA.release() } catch (e: Exception) { /* Ignore */ }
@@ -879,6 +892,7 @@ class DualPlayerEngine @Inject constructor(
                             return dataSpec.buildUpon().setUri(locked).build()
                         } else {
                             activePlaybackResolvedUris.remove(originalUri)
+                            resolvedUriCache.remove(originalUri) // BUGFIX: also clear LRU so kickBackgroundResolve does a fresh resolve
                         }
                     }
 
@@ -1079,6 +1093,11 @@ class DualPlayerEngine @Inject constructor(
                         playerA.replaceMediaItem(idx, freshItem)
                         playerA.seekTo(idx, pos)
                         playerA.playWhenReady = playWhenReady
+                        // BUGFIX: a prior error leaves the player STATE_IDLE; setting
+                        // playWhenReady alone does nothing without prepare().
+                        if (playerA.playbackState == Player.STATE_IDLE || playerA.playbackState == Player.STATE_ENDED) {
+                            playerA.prepare()
+                        }
                     }
                 }
             }
@@ -1117,10 +1136,14 @@ class DualPlayerEngine @Inject constructor(
         val deferred = activeResolutions.getOrPut(uriString) {
             scope.async(Dispatchers.IO) {
                 try {
+                    // BUGFIX: the outer timeout here must be the MAXIMUM of the two so
+                    // resolveYoutubeUriAsync's own timeout (which also branches on metered)
+                    // can complete before the outer fires. Previously the outer and inner
+                    // used the same value, making the inner's fallback unreachable.
                     val timeoutMs = if (connectivityStateHolder.isMeteredNetwork.value) {
-                        STREAM_RESOLVE_TIMEOUT_LOW_CONNECTIVITY_MS
+                        STREAM_RESOLVE_TIMEOUT_LOW_CONNECTIVITY_MS + 4_000L
                     } else {
-                        STREAM_RESOLVE_TIMEOUT_MS
+                        STREAM_RESOLVE_TIMEOUT_MS + 4_000L
                     }
                     val resolved: Uri? = withTimeoutOrNull(timeoutMs) {
                         when (uri.scheme) {
@@ -1135,6 +1158,10 @@ class DualPlayerEngine @Inject constructor(
                         activePlaybackResolvedUris[uriString] = resolved
                         resolved
                     } else {
+                        // BUGFIX: returning the original unresolvable youtube:// URI here made
+                        // the caller hand an unplayable URI to ExoPlayer as if it were a success.
+                        // Return the original URI only so callers can detect "no resolution" and
+                        // the load-thread resolver can throw the proper IOException.
                         Timber.tag("DualPlayerEngine").w(
                             "resolveCloudUri timed out/null for %s (metered=%s)",
                             uriString,

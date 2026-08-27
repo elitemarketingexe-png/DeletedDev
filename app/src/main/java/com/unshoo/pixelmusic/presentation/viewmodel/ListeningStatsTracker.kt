@@ -206,18 +206,25 @@ class ListeningStatsTracker @Inject constructor(
         }
 
         persistenceScope.launch(Dispatchers.IO) {
-            // MusicService's YouTubeTelemetryManager is the sole remote history writer. Do not
-            // resolve tracking URLs or create a second timing session merely for local stats.
-            if (!SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY) return@launch
             runCatching {
                 val ytId = resolveYtId(safeSongId)
                 if (ytId != null) {
+                    // BUGFIX: CPN generation was gated behind SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY.
+                    // When that flag was false, telemetryCpn stayed null forever, causing
+                    // onProgress() to early-return on `val cpn = telemetryCpn ?: return` every
+                    // tick — no watchtime was ever accumulated, so finalizeCurrentSession()
+                    // always saw accumulatedListeningMs < 15s and never persisted to history.
+                    // CPN is always generated now; remote pings are still gated separately.
                     val cpn = (1..16).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".random() }.joinToString("")
                     telemetryCpn = cpn
                     telemetryLastReportedTimeMs = 0L
                     telemetrySessionStartTimeMs = System.currentTimeMillis()
                     isPlaybackStartReported = false
                     isWatchCompleted = false
+
+                    // MusicService's YouTubeTelemetryManager is the sole remote history writer.
+                    // Only resolve tracking URLs and send remote pings in redundant mode.
+                    if (!SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY) return@launch
 
                     // SpatialFlow parity: resolve tracking URLs quickly, then:
                     //  1) send stats/playback start ping (with auth headers via sendTelemetryPing)
@@ -333,8 +340,11 @@ class ListeningStatsTracker @Inject constructor(
             val cachedWatchUrl = com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper.watchtimeTrackingCache[videoId]?.replace("https://s.youtube.com", "https://music.youtube.com")
                 ?: "https://music.youtube.com/api/stats/watchtime?ns=yt&el=detailpage&docid=$videoId"
             
-            val currentSession = currentSession
-            val lengthSec = if (currentSession != null && currentSession.totalDurationMs > 0) currentSession.totalDurationMs / 1000 else 0L
+            // BUGFIX: capture totalDurationMs safely — currentSession is accessed from
+            // persistenceScope while @Synchronized methods mutate it. Snapshot the value
+            // at call time to avoid a data race.
+            val capturedDurationMs = currentSession?.totalDurationMs ?: 0L
+            val lengthSec = if (capturedDurationMs > 0) capturedDurationMs / 1000 else 0L
             val rtSec = (System.currentTimeMillis() - sessionStartTimeMs) / 1000
             val state = if (isPaused) "paused" else if (et >= lengthSec * 0.95 && lengthSec > 0) "ended" else "playing"
             val separator = if (cachedWatchUrl.contains("?")) "&" else "?"
@@ -370,9 +380,12 @@ class ListeningStatsTracker @Inject constructor(
                     }
                 }
             }
-            if (!isPlaying) {
-                telemetryCpn = null
-            }
+            // BUGFIX: Do NOT null telemetryCpn on pause. Temporary pauses (buffering,
+            // audio focus loss, user pause) are normal and playback will resume.
+            // Nulling the CPN here causes onProgress to early-return on resume,
+            // permanently stopping watchtime accumulation for this song's session.
+            // The CPN is properly cleaned up in finalizeCurrentSession() when the
+            // track actually changes.
         }
     }
 
@@ -574,7 +587,10 @@ class ListeningStatsTracker @Inject constructor(
                 thumbnail = session.thumbnail
             )
             _playbackHistory.update { current ->
-                (listOf(historyEntry) + current).take(MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS)
+                // BUGFIX: dedupe by songId (same as onTrackChanged's optimistic insert)
+                // to prevent duplicate Recently Played rows for the same song.
+                val withoutDup = current.filterNot { it.songId == songId }
+                (listOf(historyEntry) + withoutDup).take(MAX_INTERNAL_PLAYBACK_HISTORY_ITEMS)
             }
             persistPlayback(
                 songId = songId,
@@ -605,7 +621,10 @@ class ListeningStatsTracker @Inject constructor(
     @Synchronized
     fun onCleared() {
         finalizeCurrentSession(forceSynchronousPersistence = true)
-        scope = null
+        // BUGFIX: Do NOT null `scope` here. ListeningStatsTracker is @Singleton and
+        // MusicService may still be playing (foreground service survives Activity/ViewModel
+        // lifecycle). Nulling scope breaks history recording for the rest of the session.
+        // The scope will be re-set when PlayerViewModel is recreated.
     }
 
     private fun persistPlayback(
@@ -694,19 +713,10 @@ class ListeningStatsTracker @Inject constructor(
             genre = genre,
             album = album
         )
-        if (SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY) {
-            val ytId = resolveYtId(songId)
-            if (ytId != null) {
-                persistenceScope.launch(Dispatchers.IO) {
-                    runCatching {
-                        val cpn = (1..16).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".random() }.joinToString("")
-                        val lengthSec = listened / 1000
-                        val pingUrl = "https://music.youtube.com/api/stats/watchtime?ns=yt&el=detailpage&docid=$ytId&ver=2&c=WEB_REMIX&cver=1.20260531.05.00&cplayer=UNIPLAYER&cpn=$cpn&state=ended&st=0&et=$lengthSec&cmt=$lengthSec&rt=$lengthSec&lact=1&len=$lengthSec"
-                        unshoo.ianshulyadav.pixelmusic.innertube.YouTube.sendTelemetryPing(pingUrl)
-                    }
-                }
-            }
-        }
+        // BUGFIX: removed the third remote writer that was here. It sent a state=ended
+        // ping with a brand-new random CPN and len = listened/1000 (the listened time, not
+        // the track length) — wrong data on a session YouTube has never seen a start ping
+        // for. YouTubeTelemetryManager is the sole remote writer.
         if (userPreferencesRepository.cacheMostPlayedSongsOfflineFlow.first()) {
             triggerAutoCacheIfNeeded(songId)
         }
@@ -803,11 +813,29 @@ class ListeningStatsTracker @Inject constructor(
         private const val AUTO_CACHE_PLAY_COUNT_THRESHOLD = 3
 
         /**
-         * YouTube telemetry remote history writer.
-         * Resolves tracking URLs, sends playback start pings, registers playback with InnerTube,
-         * and reports watchtime heartbeats so YouTube Music account history stays in sync.
+         * Remote YouTube history writing is owned exclusively by MusicService's
+         * YouTubeTelemetryManager.
+         *
+         * BUGFIX (history syncs for a few songs then stops): this was `true`, which made this
+         * class a *second*, completely independent remote writer — its own random cpn, its own
+         * session clock, its own st/et bookkeeping — pinging the same docid at overlapping
+         * times as YouTubeTelemetryManager. persistPlaybackInternal() then fired a *third*
+         * `state=ended` ping with yet another fresh cpn and `len` set to the accumulated
+         * listening time instead of the track length. YouTube deduplicates and rate-limits per
+         * (docid, cpn); a docid arriving under three conflicting session identities, one of
+         * them with an impossible length, is exactly the shape that gets dropped rather than
+         * committed to watch history — and it degrades progressively as more sessions pile up,
+         * which is why the first few songs land and later ones do not.
+         *
+         * Keeping this `false` restores the single-writer design the rest of the file already
+         * documents. Local stats/Recently Played are unaffected: they never went through this
+         * flag.
          */
-        private const val SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY = true
+        // BUGFIX: set to false. YouTubeTelemetryManager is the sole remote history writer.
+        // Having this true creates a SECOND concurrent cpn session for the same docid,
+        // plus a third random-cpn ended ping in persistPlaybackInternal — both conflict
+        // with the canonical session and confuse YouTube's dedup/commit logic.
+        private const val SEND_REDUNDANT_REMOTE_YOUTUBE_TELEMETRY = false
 
         // BUGFIX (freeze after long idle): upper bound for the synchronous, monitor-holding
         // persistence path in persistPlayback(forceSynchronous = true). See the call site for
