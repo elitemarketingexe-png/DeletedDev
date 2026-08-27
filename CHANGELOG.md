@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.09] - 2026-08-28
+
+### Features & Enhancements
+- **Massive APK Size Reduction**: Reduced APK download footprint by ~18 MB.
+- **Built-in 0-MB Japanese Romanization**: Migrated to native Android ICU transliterator engine with zero APK overhead.
+- **On-Demand Japanese Kanji Pack**: Optional offline high-accuracy Kanji dictionary downloadable dynamically on-demand.
+- **Daily Mix Regeneration**: Resolved force update race condition for immediate mix refresh.
+- **Background Database Optimization**: Non-blocking asynchronous queue writes and stale Quick Picks auto-refresh on app resume.
+
 ## [1.6.08] - 2026-07-31
 
 ### Features & Enhancements
