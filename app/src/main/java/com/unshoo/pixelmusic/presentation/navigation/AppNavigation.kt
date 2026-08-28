@@ -66,7 +66,6 @@ import com.unshoo.pixelmusic.presentation.viewmodel.PlayerViewModel
 import com.unshoo.pixelmusic.presentation.viewmodel.PlaylistViewModel
 import kotlinx.coroutines.flow.first
 import com.unshoo.pixelmusic.presentation.components.ScreenWrapper
-import com.unshoo.pixelmusic.ui.theme.ExpressiveSprings
 
 @OptIn(UnstableApi::class)
 @SuppressLint("UnrememberedGetBackStackEntry")
@@ -93,28 +92,28 @@ fun AppNavigation(
             composable(
                 Screen.Home.route,
                 enterTransition = {
-                    mainRootEnterTransition(
+                    mainTabEnterTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = enterTransition()
                     )
                 },
                 exitTransition = {
-                    mainRootExitTransition(
+                    mainTabExitTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = exitTransition()
                     )
                 },
                 popEnterTransition = {
-                    mainRootEnterTransition(
+                    mainTabEnterTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = popEnterTransition()
                     )
                 },
                 popExitTransition = {
-                    mainRootExitTransition(
+                    mainTabExitTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = popExitTransition()
@@ -133,28 +132,28 @@ fun AppNavigation(
             composable(
                 Screen.Explore.route,
                 enterTransition = {
-                    mainRootEnterTransition(
+                    mainTabEnterTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = enterTransition()
                     )
                 },
                 exitTransition = {
-                    mainRootExitTransition(
+                    mainTabExitTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = exitTransition()
                     )
                 },
                 popEnterTransition = {
-                    mainRootEnterTransition(
+                    mainTabEnterTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = popEnterTransition()
                     )
                 },
                 popExitTransition = {
-                    mainRootExitTransition(
+                    mainTabExitTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = popExitTransition()
@@ -172,28 +171,28 @@ fun AppNavigation(
             composable(
                 Screen.Search.route,
                 enterTransition = {
-                    mainRootEnterTransition(
+                    mainTabEnterTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = enterTransition()
                     )
                 },
                 exitTransition = {
-                    mainRootExitTransition(
+                    mainTabExitTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = exitTransition()
                     )
                 },
                 popEnterTransition = {
-                    mainRootEnterTransition(
+                    mainTabEnterTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = popEnterTransition()
                     )
                 },
                 popExitTransition = {
-                    mainRootExitTransition(
+                    mainTabExitTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = popExitTransition()
@@ -212,28 +211,28 @@ fun AppNavigation(
             composable(
                 Screen.Library.route,
                 enterTransition = {
-                    mainRootEnterTransition(
+                    mainTabEnterTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = enterTransition()
                     )
                 },
                 exitTransition = {
-                    mainRootExitTransition(
+                    mainTabExitTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = exitTransition()
                     )
                 },
                 popEnterTransition = {
-                    mainRootEnterTransition(
+                    mainTabEnterTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = popEnterTransition()
                     )
                 },
                 popExitTransition = {
-                    mainRootExitTransition(
+                    mainTabExitTransition(
                         fromRoute = initialState.destination.route,
                         toRoute = targetState.destination.route,
                         fallback = popExitTransition()
@@ -655,75 +654,3 @@ private fun launchTabToRoute(tab: String): String = when (tab) {
     else -> Screen.Home.route
 }
 
-// MD3 Expressive — fade-through spring specs for switching between top-level
-// (bottom-nav) destinations.
-//
-// Deliberately non-directional: fade-through (cross-dissolve, no slide) is the
-// correct M3 pattern for peer destinations that have no spatial/hierarchical
-// relationship to one another — unlike push/pop in Transitions.kt, which slides
-// because the entered screen is conceptually "inside" the one that opened it.
-// An earlier version of this file computed a FORWARD/BACKWARD tab direction here,
-// but nothing ever consumed the value beyond a null-check — dead code, replaced
-// below by a plain isMainRootTransition() boolean that does the same gating.
-//
-// Real spring specs, not tween()+cubic-bezier approximations — this matches the
-// physics-based M3 Expressive motion system already used elsewhere in this app
-// (ScreenWrapper's corner-radius/dim springs) instead of hand-picked curves that
-// only resemble one. Springs have no fixed end time, but that's safe here: input
-// gating in ScreenWrapper is keyed off lifecycle/navigation-target state, not
-// transition duration (see the hit-testing note in Transitions.kt), and
-// shouldRunDepthEffects already skips the offscreen depth layer for main-root
-// switches — so there's no zombie hit-test window a longer-settling spring could
-// reopen. Exit uses "fast" tokens and enter uses "default" tokens, preserving this
-// file's previous exit-quicker-than-enter feel (180ms/320ms) so the outgoing tab
-// clears out of the way promptly while the incoming one settles a touch slower.
-private val M3_TRANSFORM_FADE_IN_SPEC = spring<Float>(
-    dampingRatio = ExpressiveSprings.DefaultEffectsDampingRatio,
-    stiffness = ExpressiveSprings.DefaultEffectsStiffness
-)
-
-private val M3_TRANSFORM_FADE_OUT_SPEC = spring<Float>(
-    dampingRatio = ExpressiveSprings.FastEffectsDampingRatio,
-    stiffness = ExpressiveSprings.FastEffectsStiffness
-)
-
-private val M3_TRANSFORM_SCALE_IN_SPEC = spring<Float>(
-    dampingRatio = ExpressiveSprings.DefaultSpatialDampingRatio,
-    stiffness = ExpressiveSprings.DefaultSpatialStiffness
-)
-
-private val M3_TRANSFORM_SCALE_OUT_SPEC = spring<Float>(
-    dampingRatio = ExpressiveSprings.FastSpatialDampingRatio,
-    stiffness = ExpressiveSprings.FastSpatialStiffness
-)
-
-private fun isMainRootTransition(fromRoute: String?, toRoute: String?): Boolean =
-    isMainRootRoute(fromRoute) && isMainRootRoute(toRoute) && fromRoute != toRoute
-
-private fun mainRootEnterTransition(
-    fromRoute: String?,
-    toRoute: String?,
-    fallback: EnterTransition
-): EnterTransition {
-    if (!isMainRootTransition(fromRoute, toRoute)) return fallback
-    return fadeIn(animationSpec = M3_TRANSFORM_FADE_IN_SPEC) +
-        scaleIn(
-            animationSpec = M3_TRANSFORM_SCALE_IN_SPEC,
-            initialScale = 0.96f,
-            transformOrigin = TransformOrigin(0.5f, 0.5f)
-        )
-}
-
-private fun mainRootExitTransition(
-    fromRoute: String?,
-    toRoute: String?,
-    fallback: ExitTransition
-): ExitTransition {
-    if (!isMainRootTransition(fromRoute, toRoute)) return fallback
-    return fadeOut(animationSpec = M3_TRANSFORM_FADE_OUT_SPEC) +
-        scaleOut(
-            animationSpec = M3_TRANSFORM_SCALE_OUT_SPEC,
-            targetScale = 0.98f,
-            transformOrigin = TransformOrigin(0.5f, 0.5f)
-        )
-}

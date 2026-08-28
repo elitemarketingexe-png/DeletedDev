@@ -389,7 +389,9 @@ private fun AboutHeroCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                val context = LocalContext.current
+                val commitHash = com.unshoo.pixelmusic.BuildConfig.GIT_COMMIT_HASH
+                val displayVersion = if (commitHash.isNotEmpty()) "v$versionName #$commitHash" else "v$versionName"
 
                 Box(
                     modifier = Modifier
@@ -397,6 +399,12 @@ private fun AboutHeroCard(
                         .background(MaterialTheme.colorScheme.secondaryContainer)
                         .pointerInput(Unit) {
                             detectTapGestures(
+                                onTap = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("PixelMusic Version", displayVersion)
+                                    clipboard.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(context, "Copied: $displayVersion", android.widget.Toast.LENGTH_SHORT).show()
+                                },
                                 onLongPress = {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onVersionLongPress()
@@ -405,8 +413,8 @@ private fun AboutHeroCard(
                         },
                 ) {
                     Text(
-                        text = stringResource(R.string.about_version_format, versionName),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                        text = displayVersion,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         fontWeight = FontWeight.Bold,
@@ -434,6 +442,66 @@ private fun SocialLinksColumn() {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // Ko-fi Support / Donations button
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ko-fi.com/ianshulyadav"))
+                    try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
+                },
+            shape = buttonShape,
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Icon(
+                            painter = painterResource(R.drawable.rounded_favorite_24),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Support the development",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "ko-fi.com/ianshulyadav",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.75f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+
         // Telegram button
         Surface(
             modifier = Modifier
