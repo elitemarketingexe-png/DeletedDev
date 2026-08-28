@@ -275,16 +275,18 @@ object AppModule {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
         val isLowRamDevice = activityManager?.isLowRamDevice == true
 
-        // LOAD BALANCING PIPELINE:
-        // On low RAM / thermal sensitive devices, scale memory cache down to 8% and use RGB_565 (2 bytes/pixel)
-        // to cut GPU memory bandwidth and RAM footprint in half. Limit decode parallelism to 2 worker threads
-        // so CPU cores stay in low-power states without queuing RenderThread GPU upload command flushes.
-        val cachePercent = if (isLowRamDevice) 0.08 else 0.12
+        // CALM & OPTIMAL IMAGE PIPELINE:
+        // - crossfade(250): Gentle and calm image settlement instead of popping in abruptly.
+        // - Low decode parallelism (Dispatchers.IO.limitedParallelism(2)) so background IO and main-thread navigation
+        //   transitions are never blocked by sudden bursts of bitmap decoding.
+        // - allowRgb565 for low ram devices to cut texture bandwidth.
+        val cachePercent = if (isLowRamDevice) 0.08 else 0.14
 
         return ImageLoader.Builder(context)
             .okHttpClient(okHttpClient)
             .dispatcher(Dispatchers.IO.limitedParallelism(2))
             .allowHardware(true)
+            .crossfade(250)
             .bitmapConfig(if (isLowRamDevice) android.graphics.Bitmap.Config.RGB_565 else android.graphics.Bitmap.Config.ARGB_8888)
             .memoryCache {
                 MemoryCache.Builder(context)

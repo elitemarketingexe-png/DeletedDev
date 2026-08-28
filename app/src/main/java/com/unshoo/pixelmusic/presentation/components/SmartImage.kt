@@ -84,7 +84,7 @@ fun SmartImage(
     // second, each forcing a recomposition of the surrounding card.
     // 120ms is long enough to look polished on the full-player cover,
     // and short enough that scrolling lists don't visibly queue.
-    crossfadeDurationMillis: Int = 120,
+    crossfadeDurationMillis: Int = 220,
     useDiskCache: Boolean = true,
     useMemoryCache: Boolean = true,
     allowHardware: Boolean = true,
@@ -196,10 +196,7 @@ fun SmartImage(
             model
         }
 
-        val isListThumbnail = requestTargetSize.width is coil.size.Dimension.Pixels &&
-            (requestTargetSize.width as coil.size.Dimension.Pixels).px <= 256
-
-        val effectiveCrossfade = if (isListThumbnail) 0 else crossfadeDurationMillis
+        val effectiveCrossfade = crossfadeDurationMillis
 
         if (optimizedModel is ImageRequest) {
             optimizedModel.newBuilder(context)

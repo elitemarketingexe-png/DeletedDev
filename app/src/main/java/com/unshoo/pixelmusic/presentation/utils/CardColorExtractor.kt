@@ -295,8 +295,8 @@ fun rememberDominantCardColor(
 
     if (initialArgb == null && !imageUrl.isNullOrBlank()) {
         LaunchedEffect(imageUrl, baseColor, isDarkTheme) {
-            // Ultra-fast 120ms debounce to cancel unneeded work when scrolling fast
-            delay(120)
+            // Calm 160ms debounce to prevent thrashing during fast tab switching/scrolling
+            delay(160)
             val argb = CardColorExtractor.extractColorArgb(context, imageUrl)
             if (argb != null) {
                 val extracted = lerp(baseColor, Color(argb), blendFraction)
@@ -312,7 +312,7 @@ fun rememberDominantCardColor(
 
     val animatedColor by animateColorAsState(
         targetValue = targetColor,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
         label = "card_dominant_color"
     )
     return animatedColor

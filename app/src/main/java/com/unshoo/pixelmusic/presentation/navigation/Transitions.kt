@@ -15,24 +15,21 @@ import androidx.compose.ui.graphics.TransformOrigin
 // MD3 Expressive — Fluid page transitions with micro-scale & coordinated fades.
 //
 // ────────────────────────────────────────────────────────────────────────────────
-// HIT-TESTING & SMOOTHNESS TUNING:
+// GRACEFUL SETTLING & HIGH-REFRESH RATE SMOOTHNESS:
 //
-// Uses Emphasized curves tuned for fluid 60/120/144Hz displays with calibrated
-// spatial offsets (40% slide + subtle scale depth + progressive fade-in/fade-out).
-// Fixed-duration tweens settle deterministically so outgoing destinations are
-// cleaned up promptly without touch-event conflicts, while ScreenWrapper provides
-// lifecycle-level input isolation.
+// Tuned with expressive easing curves allowing elements to decelerate and settle
+// with optical continuity.
 // ────────────────────────────────────────────────────────────────────────────────
-private const val PUSH_POP_TOTAL_MS = 380
-private const val PUSH_POP_FADE_MS = 260
-private const val POP_FADE_MS = 240
+private const val PUSH_POP_TOTAL_MS = 460
+private const val PUSH_POP_FADE_MS = 380
+private const val POP_FADE_MS = 340
 
-// Main Tab switching timings (snappy yet smooth)
-private const val TAB_TRANSITION_MS = 340
-private const val TAB_FADE_IN_MS = 280
-private const val TAB_FADE_OUT_MS = 180
+// Main Tab switching timings (generous duration for relaxed, graceful element settling)
+private const val TAB_TRANSITION_MS = 420
+private const val TAB_FADE_IN_MS = 380
+private const val TAB_FADE_OUT_MS = 260
 
-// MD3 Expressive — Emphasized decelerate/accelerate curves
+// MD3 Expressive — Emphasized decelerate/accelerate curves tuned for smooth element settling
 private val EmphasizedDecelerateEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
 private val EmphasizedAccelerateEasing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
 private val StandardDecelerateEasing = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)
@@ -44,37 +41,37 @@ const val TRANSITION_DURATION = PUSH_POP_TOTAL_MS
 // HIERARCHICAL NAVIGATION (Push / Pop between sub-screens)
 // ────────────────────────────────────────────────────────────────────────────────
 
-// Push: Enter from Right — slides in smoothly from 40% of width with subtle micro-scale
+// Push: Enter from Right — slides in smoothly from 35% of width with subtle micro-scale
 fun enterTransition(): EnterTransition = slideInHorizontally(
     animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedDecelerateEasing),
-    initialOffsetX = { (it * 0.40f).toInt() }
+    initialOffsetX = { (it * 0.35f).toInt() }
 ) + scaleIn(
     animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedDecelerateEasing),
-    initialScale = 0.95f,
+    initialScale = 0.96f,
     transformOrigin = TransformOrigin(0.5f, 0.5f)
 ) + fadeIn(
     animationSpec = tween(durationMillis = PUSH_POP_FADE_MS, easing = StandardDecelerateEasing)
 )
 
-// Push: Exit to Left — gentle parallax slide-out (18%) with soft micro scale-down & fade
+// Push: Exit to Left — gentle parallax slide-out (15%) with soft micro scale-down & fade
 fun exitTransition(): ExitTransition = slideOutHorizontally(
     animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedAccelerateEasing),
-    targetOffsetX = { -(it * 0.18f).toInt() }
+    targetOffsetX = { -(it * 0.15f).toInt() }
 ) + scaleOut(
     animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedAccelerateEasing),
-    targetScale = 0.97f,
+    targetScale = 0.98f,
     transformOrigin = TransformOrigin(0.5f, 0.5f)
 ) + fadeOut(
     animationSpec = tween(durationMillis = PUSH_POP_FADE_MS, easing = EmphasizedAccelerateEasing)
 )
 
-// Pop: Enter from Left — subtle parallax re-entry (18%) with micro scale recovery & fade
+// Pop: Enter from Left — subtle parallax re-entry (15%) with micro scale recovery & fade
 fun popEnterTransition(): EnterTransition = slideInHorizontally(
     animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedDecelerateEasing),
-    initialOffsetX = { -(it * 0.18f).toInt() }
+    initialOffsetX = { -(it * 0.15f).toInt() }
 ) + scaleIn(
     animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedDecelerateEasing),
-    initialScale = 0.97f,
+    initialScale = 0.98f,
     transformOrigin = TransformOrigin(0.5f, 0.5f)
 ) + fadeIn(
     animationSpec = tween(durationMillis = POP_FADE_MS, easing = StandardDecelerateEasing)
@@ -83,10 +80,10 @@ fun popEnterTransition(): EnterTransition = slideInHorizontally(
 // Pop: Exit to Right — slides off screen to the right with gentle scale-down & prompt fade
 fun popExitTransition(): ExitTransition = slideOutHorizontally(
     animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedAccelerateEasing),
-    targetOffsetX = { (it * 0.85f).toInt() }
+    targetOffsetX = { (it * 0.75f).toInt() }
 ) + scaleOut(
     animationSpec = tween(durationMillis = PUSH_POP_TOTAL_MS, easing = EmphasizedAccelerateEasing),
-    targetScale = 0.95f,
+    targetScale = 0.96f,
     transformOrigin = TransformOrigin(0.5f, 0.5f)
 ) + fadeOut(
     animationSpec = tween(durationMillis = POP_FADE_MS, easing = EmphasizedAccelerateEasing)
@@ -120,10 +117,10 @@ fun mainTabEnterTransition(
 
     return slideInHorizontally(
         animationSpec = tween(durationMillis = TAB_TRANSITION_MS, easing = EmphasizedDecelerateEasing),
-        initialOffsetX = { (it * 0.28f * directionMultiplier).toInt() }
+        initialOffsetX = { (it * 0.22f * directionMultiplier).toInt() }
     ) + scaleIn(
         animationSpec = tween(durationMillis = TAB_TRANSITION_MS, easing = EmphasizedDecelerateEasing),
-        initialScale = 0.96f,
+        initialScale = 0.97f,
         transformOrigin = TransformOrigin(0.5f, 0.5f)
     ) + fadeIn(
         animationSpec = tween(durationMillis = TAB_FADE_IN_MS, easing = StandardDecelerateEasing)
@@ -145,10 +142,10 @@ fun mainTabExitTransition(
 
     return slideOutHorizontally(
         animationSpec = tween(durationMillis = TAB_TRANSITION_MS, easing = EmphasizedAccelerateEasing),
-        targetOffsetX = { (it * 0.22f * directionMultiplier).toInt() }
+        targetOffsetX = { (it * 0.18f * directionMultiplier).toInt() }
     ) + scaleOut(
         animationSpec = tween(durationMillis = TAB_TRANSITION_MS, easing = EmphasizedAccelerateEasing),
-        targetScale = 0.97f,
+        targetScale = 0.98f,
         transformOrigin = TransformOrigin(0.5f, 0.5f)
     ) + fadeOut(
         animationSpec = tween(durationMillis = TAB_FADE_OUT_MS, easing = EmphasizedAccelerateEasing)
