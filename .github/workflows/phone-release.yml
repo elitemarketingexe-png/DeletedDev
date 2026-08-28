@@ -1,6 +1,11 @@
 name: Build Phone APK (Release)
 
 on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ main, master ]
   workflow_dispatch:
 
 permissions:
@@ -63,9 +68,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="v${VERSION_NAME}"
-          if git tag --list "$TAG" | grep -q "$TAG"; then
+          git fetch --tags origin 2>/dev/null || true
+          
+          # Also check the target release repository tags using gh api
+          EXISTS_REMOTE="false"
+          if gh api repos/ianshulyadav/PixelMusicApp/releases/tags/"$TAG" >/dev/null 2>&1; then
+            EXISTS_REMOTE="true"
+          fi
+          
+          if [ "$EXISTS_REMOTE" = "true" ] || git tag --list "$TAG" | grep -q "^$TAG$"; then
             echo "is_new_version=false" >> "$GITHUB_OUTPUT"
-            echo "Tag $TAG already exists locally — NOT a new release."
+            echo "Tag $TAG already exists on release repository or locally — NOT a new release. Posting as Nightly build."
           else
             echo "is_new_version=true" >> "$GITHUB_OUTPUT"
             echo "Tag $TAG does not exist — this IS a new version. GitHub Release will be created."
