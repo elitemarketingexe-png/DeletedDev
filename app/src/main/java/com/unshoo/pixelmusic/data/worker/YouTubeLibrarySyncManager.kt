@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
@@ -63,6 +64,10 @@ class YouTubeLibrarySyncManager @Inject constructor(
                 return@withLock
             }
             if (!YouTube.hasLoginCookie()) {
+                return@withLock
+            }
+            val syncPlaylistsAndLikes = userPreferencesRepository.youtubeSyncPlaylistsAndLikesFlow.first()
+            if (!syncPlaylistsAndLikes && !force) {
                 return@withLock
             }
             // Bug 7 fix: reduced from 2500ms to 150ms. The long delay was causing

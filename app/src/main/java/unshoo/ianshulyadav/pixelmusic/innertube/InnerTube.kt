@@ -468,12 +468,17 @@ class InnerTube {
         index: Int?,
         params: String?,
         continuation: String? = null,
+        forceAnonymous: Boolean = false,
     ) = withRetry {
         httpClient.post("next") {
-            ytClient(client, setLogin = true)
+            ytClient(client, setLogin = !forceAnonymous, forceAnonymous = forceAnonymous)
             setBody(
                 NextBody(
-                    context = client.toContext(locale, visitorData, dataSyncId),
+                    context = client.toContext(
+                        locale,
+                        if (forceAnonymous) null else visitorData,
+                        if (forceAnonymous) null else dataSyncId
+                    ),
                     videoId = videoId,
                     playlistId = playlistId,
                     playlistSetVideoId = playlistSetVideoId,

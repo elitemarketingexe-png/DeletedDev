@@ -347,6 +347,12 @@ constructor(
         val YOUTUBE_PLAYLIST_UPLOAD_SYNC_ENABLED = booleanPreferencesKey("youtube_playlist_upload_sync_enabled")
         val SHOW_SMART_MIX_PLAYLISTS = booleanPreferencesKey("show_smart_mix_playlists")
         val ARTIST_LIBRARY_FILTER = stringPreferencesKey("artist_library_filter")
+
+        // YouTube Granular Sync & Personalization Options
+        val YOUTUBE_SYNC_PLAYLISTS_AND_LIKES = booleanPreferencesKey("youtube_sync_playlists_and_likes")
+        val YOUTUBE_SYNC_LISTENING_ACTIVITY = booleanPreferencesKey("youtube_sync_listening_activity")
+        val YOUTUBE_PERSONALIZED_EXPLORE = booleanPreferencesKey("youtube_personalized_explore")
+        val YOUTUBE_PERSONALIZED_QUEUE = booleanPreferencesKey("youtube_personalized_queue")
     }
 
     val preferTelegramAlternativeFlow: Flow<Boolean> =
@@ -2446,6 +2452,54 @@ constructor(
     suspend fun setGeneratedPlaylistsRetentionPeriod(period: String) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.GENERATED_PLAYLISTS_RETENTION_PERIOD] = period
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // YouTube Granular Sync & Personalization Options
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    val youtubeSyncPlaylistsAndLikesFlow: Flow<Boolean> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_SYNC_PLAYLISTS_AND_LIKES] ?: true
+        }.distinctUntilChanged()
+
+    suspend fun setYoutubeSyncPlaylistsAndLikes(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_SYNC_PLAYLISTS_AND_LIKES] = enabled
+        }
+    }
+
+    val youtubeSyncListeningActivityFlow: Flow<Boolean> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_SYNC_LISTENING_ACTIVITY] ?: true
+        }.distinctUntilChanged()
+
+    suspend fun setYoutubeSyncListeningActivity(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_SYNC_LISTENING_ACTIVITY] = enabled
+        }
+    }
+
+    val youtubePersonalizedExploreFlow: Flow<Boolean> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_PERSONALIZED_EXPLORE] ?: true
+        }.distinctUntilChanged()
+
+    suspend fun setYoutubePersonalizedExplore(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_PERSONALIZED_EXPLORE] = enabled
+        }
+    }
+
+    val youtubePersonalizedQueueFlow: Flow<Boolean> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_PERSONALIZED_QUEUE] ?: true
+        }.distinctUntilChanged()
+
+    suspend fun setYoutubePersonalizedQueue(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_PERSONALIZED_QUEUE] = enabled
         }
     }
 }

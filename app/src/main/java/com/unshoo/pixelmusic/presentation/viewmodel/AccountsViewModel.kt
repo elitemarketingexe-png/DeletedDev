@@ -66,9 +66,39 @@ class AccountsViewModel @Inject constructor(
         }
     }
 
-    fun toggleSync(enabled: Boolean) {
+    val youtubeSyncPlaylistsAndLikes: StateFlow<Boolean> = userPreferencesRepository.youtubeSyncPlaylistsAndLikesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val youtubeSyncListeningActivity: StateFlow<Boolean> = userPreferencesRepository.youtubeSyncListeningActivityFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val youtubePersonalizedExplore: StateFlow<Boolean> = userPreferencesRepository.youtubePersonalizedExploreFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val youtubePersonalizedQueue: StateFlow<Boolean> = userPreferencesRepository.youtubePersonalizedQueueFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun toggleYoutubeSyncPlaylistsAndLikes(enabled: Boolean) {
         viewModelScope.launch {
-            datastoreRepository.saveSyncEnabled(enabled)
+            userPreferencesRepository.setYoutubeSyncPlaylistsAndLikes(enabled)
+        }
+    }
+
+    fun toggleYoutubeSyncListeningActivity(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setYoutubeSyncListeningActivity(enabled)
+        }
+    }
+
+    fun toggleYoutubePersonalizedExplore(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setYoutubePersonalizedExplore(enabled)
+        }
+    }
+
+    fun toggleYoutubePersonalizedQueue(enabled: Boolean) {
+        viewModelScope.launch {
+            userPreferencesRepository.setYoutubePersonalizedQueue(enabled)
         }
     }
 

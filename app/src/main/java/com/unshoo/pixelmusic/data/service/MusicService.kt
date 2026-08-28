@@ -609,6 +609,12 @@ class MusicService : MediaLibraryService() {
         }
 
         serviceScope.launch {
+            userPreferencesRepository.youtubeSyncListeningActivityFlow.collect { enabled ->
+                telemetryManager.setTelemetryEnabled(enabled)
+            }
+        }
+
+        serviceScope.launch {
             userPreferencesRepository.keepPlayingInBackgroundFlow.collect { enabled ->
                 keepPlayingInBackground = enabled
             }

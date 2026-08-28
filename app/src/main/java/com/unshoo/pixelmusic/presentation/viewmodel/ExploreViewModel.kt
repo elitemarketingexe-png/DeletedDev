@@ -130,6 +130,24 @@ class ExploreViewModel @Inject constructor(
                     loadData(forceRefresh = true)
                 }
         }
+        viewModelScope.launch {
+            userPreferencesRepository.youtubePersonalizedExploreFlow
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    YouTube.personalizedExploreEnabled = enabled
+                    if (cacheFile.exists()) {
+                        cacheFile.delete()
+                    }
+                    loadData(forceRefresh = true)
+                }
+        }
+        viewModelScope.launch {
+            userPreferencesRepository.youtubePersonalizedQueueFlow
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    YouTube.personalizedQueueEnabled = enabled
+                }
+        }
     }
 
     private fun restoreFromCache() {

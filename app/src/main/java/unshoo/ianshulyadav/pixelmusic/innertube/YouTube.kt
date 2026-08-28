@@ -177,6 +177,8 @@ object YouTube {
         set(value) {
             innerTube.useLoginForBrowse = value
         }
+    var personalizedExploreEnabled: Boolean = true
+    var personalizedQueueEnabled: Boolean = true
 
     fun currentPlaybackAuthState(): PlaybackAuthState = authState
 
@@ -745,7 +747,14 @@ object YouTube {
             return@runCatching homeContinuation(continuation).getOrThrow()
         }
 
-        val response = innerTube.browse(WEB_REMIX, browseId = "FEmusic_home", params = params, setLogin = true).body<BrowseResponse>()
+        val forceAnon = !personalizedExploreEnabled
+        val response = innerTube.browse(
+            WEB_REMIX,
+            browseId = "FEmusic_home",
+            params = params,
+            setLogin = !forceAnon,
+            forceAnonymous = forceAnon
+        ).body<BrowseResponse>()
         val continuation = response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()
             ?.tabRenderer?.content?.sectionListRenderer?.continuations?.getContinuation()
         val sectionListRender = response.contents?.singleColumnBrowseResultsRenderer?.tabs?.firstOrNull()
@@ -1533,6 +1542,7 @@ object YouTube {
         continuation: String? = null,
         followAutomixPreview: Boolean = true,
     ): Result<NextResult> = runCatching {
+        val forceAnon = !personalizedQueueEnabled
         val response = innerTube.next(
             WEB_REMIX,
             endpoint.videoId,
@@ -1540,7 +1550,9 @@ object YouTube {
             endpoint.playlistSetVideoId,
             endpoint.index,
             endpoint.params,
-            continuation).body<NextResponse>()
+            continuation,
+            forceAnonymous = forceAnon
+        ).body<NextResponse>()
         val playlistPanelRenderer = response.continuationContents?.playlistPanelContinuation
             ?: response.contents.singleColumnMusicWatchNextResultsRenderer?.tabbedRenderer
                 ?.watchNextTabbedResultsRenderer?.tabs?.get(0)?.tabRenderer?.content?.musicQueueRenderer

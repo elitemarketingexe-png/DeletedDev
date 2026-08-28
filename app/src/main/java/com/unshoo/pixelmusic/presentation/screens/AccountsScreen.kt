@@ -77,6 +77,8 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.clickable
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.unshoo.pixelmusic.R
 import com.unshoo.pixelmusic.presentation.components.CollapsibleCommonTopBar
@@ -196,9 +198,22 @@ fun AccountsScreen(
             }
 
             item {
+                val syncPlaylistsAndLikes by viewModel.youtubeSyncPlaylistsAndLikes.collectAsStateWithLifecycle()
+                val syncListeningActivity by viewModel.youtubeSyncListeningActivity.collectAsStateWithLifecycle()
+                val personalizedExplore by viewModel.youtubePersonalizedExplore.collectAsStateWithLifecycle()
+                val personalizedQueue by viewModel.youtubePersonalizedQueue.collectAsStateWithLifecycle()
+
                 YouTubeAccountCard(
                     account = youtubeAccount,
                     isSyncing = isSyncing,
+                    syncPlaylistsAndLikes = syncPlaylistsAndLikes,
+                    syncListeningActivity = syncListeningActivity,
+                    personalizedExplore = personalizedExplore,
+                    personalizedQueue = personalizedQueue,
+                    onToggleSyncPlaylistsAndLikes = { viewModel.toggleYoutubeSyncPlaylistsAndLikes(it) },
+                    onToggleSyncListeningActivity = { viewModel.toggleYoutubeSyncListeningActivity(it) },
+                    onTogglePersonalizedExplore = { viewModel.toggleYoutubePersonalizedExplore(it) },
+                    onTogglePersonalizedQueue = { viewModel.toggleYoutubePersonalizedQueue(it) },
                     onSignIn = {
                         openService(
                             context = context,
@@ -211,9 +226,6 @@ fun AccountsScreen(
                     },
                     onLogout = {
                         viewModel.logout(ExternalServiceAccount.YOUTUBE)
-                    },
-                    onToggleSync = {
-                        viewModel.toggleSync(it)
                     }
                 )
             }
@@ -734,13 +746,21 @@ private fun safeStartActivity(
 private fun YouTubeAccountCard(
     account: ExternalAccountUiModel?,
     isSyncing: Boolean,
+    syncPlaylistsAndLikes: Boolean,
+    syncListeningActivity: Boolean,
+    personalizedExplore: Boolean,
+    personalizedQueue: Boolean,
+    onToggleSyncPlaylistsAndLikes: (Boolean) -> Unit,
+    onToggleSyncListeningActivity: (Boolean) -> Unit,
+    onTogglePersonalizedExplore: (Boolean) -> Unit,
+    onTogglePersonalizedQueue: (Boolean) -> Unit,
     onSignIn: () -> Unit,
     onSync: () -> Unit,
-    onLogout: () -> Unit,
-    onToggleSync: (Boolean) -> Unit = {}
+    onLogout: () -> Unit
 ) {
     val cardShape = AbsoluteSmoothCornerShape(28.dp, 60)
     val isConnected = account != null
+    var isExpanded by remember { mutableStateOf(false) }
 
     Card(
         shape = cardShape,
@@ -763,7 +783,11 @@ private fun YouTubeAccountCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = isConnected) {
+                        isExpanded = !isExpanded
+                    },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
@@ -788,7 +812,11 @@ private fun YouTubeAccountCard(
                         color = Color.White
                     )
                     Text(
-                        text = if (isConnected) "Active Session Linked" else "Sync your online music library",
+                        text = if (isConnected) {
+                            if (isExpanded) "Tap to hide sync & personalization" else "Tap to configure sync & personalization"
+                        } else {
+                            "Sync your online music library"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.7f),
                         maxLines = 2,
@@ -802,7 +830,7 @@ private fun YouTubeAccountCard(
                         color = Color.White.copy(alpha = 0.2f)
                     ) {
                         Text(
-                            text = "Linked",
+                            text = if (isExpanded) "Options ▲" else "Linked ▼",
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White,
                             fontWeight = FontWeight.SemiBold,
@@ -813,54 +841,54 @@ private fun YouTubeAccountCard(
             }
 
             if (isConnected) {
-                Surface(
-                    shape = AbsoluteSmoothCornerShape(14.dp, 60),
-                    color = Color.White.copy(alpha = 0.1f)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = isExpanded,
+                    enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut()
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Sync,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
+
                         Text(
-                            text = account.syncedContentLabel,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White
+                            text = "Synchronization & Personalization",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+
+                        YouTubeOptionToggleRow(
+                            title = "Sync Playlists & Liked Songs",
+                            subtitle = "Sync YouTube Music playlists and likes with your local library. (Changes in app sync to YouTube)",
+                            checked = syncPlaylistsAndLikes,
+                            onCheckedChange = onToggleSyncPlaylistsAndLikes
+                        )
+
+                        YouTubeOptionToggleRow(
+                            title = "Sync Listening Activity",
+                            subtitle = "Share played tracks to your YouTube Music account history.",
+                            checked = syncListeningActivity,
+                            onCheckedChange = onToggleSyncListeningActivity
+                        )
+
+                        YouTubeOptionToggleRow(
+                            title = "Personalized Explore Feed",
+                            subtitle = "When off, loads the explore page anonymously without account history.",
+                            checked = personalizedExplore,
+                            onCheckedChange = onTogglePersonalizedExplore
+                        )
+
+                        YouTubeOptionToggleRow(
+                            title = "Personalized Queue & Radios",
+                            subtitle = "When off, builds auto-play recommendations purely based on current song.",
+                            checked = personalizedQueue,
+                            onCheckedChange = onTogglePersonalizedQueue
                         )
                     }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Live Library Sync",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    androidx.compose.material3.Switch(
-                        checked = account.isSyncEnabled,
-                        onCheckedChange = onToggleSync,
-                        colors = androidx.compose.material3.SwitchDefaults.colors(
-                            checkedThumbColor = Color(0xFF8C1D24),
-                            checkedTrackColor = Color.White,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = Color.White.copy(alpha = 0.3f)
-                        )
-                    )
                 }
 
                 HorizontalDivider(color = Color.White.copy(alpha = 0.15f))
@@ -951,11 +979,54 @@ private fun YouTubeAccountCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Sign In to YouTube",
-                        fontWeight = FontWeight.Bold
+                        text = "Sign in to YouTube Music",
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun YouTubeOptionToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.72f),
+                lineHeight = 14.sp
+            )
+        }
+
+        androidx.compose.material3.Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = androidx.compose.material3.SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFF8C1D24),
+                checkedTrackColor = Color.White,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = Color.White.copy(alpha = 0.3f)
+            )
+        )
     }
 }
