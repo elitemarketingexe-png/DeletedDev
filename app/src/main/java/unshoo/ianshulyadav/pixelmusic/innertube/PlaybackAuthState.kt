@@ -66,23 +66,19 @@ data class PlaybackAuthState(
         if (explicit != null) return explicit
         if (!webClientPoTokenEnabled) return null
         if (!needsServiceIntegrity(client)) return null
-        val token = poTokenPlayer ?: poToken
-        if (token.isNullOrBlank()) {
-            val id = sessionId ?: java.util.UUID.randomUUID().toString()
-            return unshoo.ianshulyadav.pixelmusic.innertube.utils.PoTokenGenerator.generateSessionToken(id)
-        }
-        return token
+        // Only a genuine BotGuard-minted token is usable. There is deliberately
+        // NO locally-fabricated fallback here: a synthesized token cannot pass
+        // YouTube attestation, and sending one marks the request as bot-suspect
+        // (worse than sending no token at all). Without a token, web-client
+        // requests may receive throttled formats — the correct signal is to let
+        // the stream ladder fall through to clients that return plain URLs.
+        return poTokenPlayer ?: poToken
     }
 
     fun resolveGvsPoToken(client: YouTubeClient? = null): String? {
         if (client != null && !needsServiceIntegrity(client)) return null
         if (!webClientPoTokenEnabled) return null
-        val token = poTokenGvs ?: poToken
-        if (token.isNullOrBlank()) {
-            val id = sessionId ?: java.util.UUID.randomUUID().toString()
-            return unshoo.ianshulyadav.pixelmusic.innertube.utils.PoTokenGenerator.generateSessionToken(id)
-        }
-        return token
+        return poTokenGvs ?: poToken
     }
 
     companion object {

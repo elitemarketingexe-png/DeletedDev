@@ -456,10 +456,64 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
+    /**
+     * Resolves a shared YouTube/Spotify link and starts playback immediately —
+     * no manual search needed (video id comes straight from the URL; Spotify
+     * links are matched by title via oEmbed + YouTube search).
+     */
+    private fun handleSharedLink(link: android.net.Uri?) {
+        if (link == null) return
+        lifecycleScope.launch {
+            val resolved = runCatching {
+                com.unshoo.pixelmusic.data.remote.youtube.SharedLinkResolver.resolve(link)
+            }.getOrNull()
+            when (resolved) {
+                is com.unshoo.pixelmusic.data.remote.youtube.SharedLinkResolver.Result.Playlist -> {
+                    if (resolved.songs.isNotEmpty()) {
+                        playerViewModel.playSongs(resolved.songs, resolved.songs.first(), "Shared link", null)
+                        playerViewModel.showPlayer()
+                    } else {
+                        Toast.makeText(this@MainActivity, "Couldn't open that link", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                is com.unshoo.pixelmusic.data.remote.youtube.SharedLinkResolver.Result.Single -> {
+                    playerViewModel.playSongs(resolved.queue, resolved.song, "Shared link", null)
+                    playerViewModel.showPlayer()
+                }
+                null -> {
+                    Toast.makeText(this@MainActivity, "Couldn't open that link", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
 
         when {
+            // Shared-link instant playback (LastWave LinkPlaybackResolver parity):
+            // youtube.com / youtu.be / music.youtube.com / spotify links open
+            // straight into the queue.
+            intent.action == Intent.ACTION_VIEW && SharedLinkResolver.isSupportedLink(intent.data) -> {
+                val link = intent.data
+                intent.action = null // Clear action to prevent re-triggering
+                handleSharedLink(link)
+            }
+
+            // "Share → PixelMusic": pull the first supported URL out of the text.
+            // Must stay conditional so plain-text shares (e.g. M3U URLs) still
+            // reach the M3U import branch below.
+            intent.action == Intent.ACTION_SEND &&
+                SharedLinkResolver.extractUrlFromText(
+                    intent.getStringExtra(Intent.EXTRA_TEXT)
+                ) != null -> {
+                val link = SharedLinkResolver.extractUrlFromText(
+                    intent.getStringExtra(Intent.EXTRA_TEXT)
+                )
+                intent.action = null
+                handleSharedLink(link)
+            }
+
             // Handle shuffle all shortcut / tile
             intent.action == MainActivityIntentContract.ACTION_SHUFFLE_ALL -> {
                 playerViewModel.triggerShuffleAllFromTile()

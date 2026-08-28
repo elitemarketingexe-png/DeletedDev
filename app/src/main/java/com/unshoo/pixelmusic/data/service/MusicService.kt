@@ -1800,6 +1800,27 @@ class MusicService : MediaLibraryService() {
                 }
             }
 
+            // Confirmed-unplayable fast path (LastWave parity): a provider has
+            // authoritatively declared this media unavailable (age gate, geo
+            // block, private, removed). Skip immediately — recovery attempts
+            // can only re-prove the same verdict.
+            if (isYoutube && engine.isConfirmedUnplayable(currentUri)) {
+                Timber.tag(TAG).w("Confirmed-unplayable media %s — skipping", currentUri)
+                serviceScope.launch {
+                    withContext(Dispatchers.Main.immediate) {
+                        streamRecoveryAttempts = 0
+                        lastStreamRecoveryMediaId = null
+                        val p = mediaSession?.player ?: engine.masterPlayer
+                        if (p.hasNextMediaItem()) {
+                            p.seekToNextMediaItem()
+                            p.prepare()
+                            p.play()
+                        }
+                    }
+                }
+                return
+            }
+
             val isNetworkish = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
                 error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
                 error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||

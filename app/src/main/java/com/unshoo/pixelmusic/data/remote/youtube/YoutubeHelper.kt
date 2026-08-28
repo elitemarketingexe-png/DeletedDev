@@ -15,6 +15,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
@@ -34,6 +35,7 @@ import org.schabi.newpipe.extractor.ServiceList
 import java.io.File
 import java.util.Locale
 import unshoo.ianshulyadav.pixelmusic.innertube.NewPipeUtils
+import unshoo.ianshulyadav.pixelmusic.innertube.InnerTubeRuntimeConfig
 import unshoo.ianshulyadav.pixelmusic.innertube.PlaybackAuthState
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.ANDROID_CREATOR
@@ -52,6 +54,7 @@ import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.W
 import unshoo.ianshulyadav.pixelmusic.innertube.models.YouTubeClient.Companion.WEB_REMIX
 import unshoo.ianshulyadav.pixelmusic.innertube.utils.StreamClientUtils
 import com.unshoo.pixelmusic.data.preferences.PlayerStreamClient
+import com.unshoo.pixelmusic.data.remote.qobuz.QobuzMusicApi
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
 import unshoo.ianshulyadav.pixelmusic.innertube.models.response.PlayerResponse
 import java.util.concurrent.ConcurrentHashMap
@@ -107,6 +110,52 @@ object YoutubeHelper {
     private const val CANDIDATE_URL_EXPIRY_SAFETY_MS = 60_000L
     private const val DEFAULT_STREAM_EXPIRE_SECONDS = 300
     @Volatile private var lastSuccessfulClientKey: String? = null
+
+    // ── In-flight resolve dedup (LastWave pattern) ─────────────────────────────────
+    // Identical concurrent resolves (double-tap play, QueuePreloadManager racing the
+    // engine, background quality warm) share one Deferred instead of stampeding the
+    // InnerTube/NewPipe layers with duplicate player requests for the same video.
+    private val inFlightResolves = ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Triple<String, String?, Int?>>>()
+    private const val CLIENT_COOLDOWN_MS = 60_000L
+
+    /** Qobuz Hi-Res primary attempt budget (LastWave parity). */
+    private const val QOBUZ_RESOLVE_BUDGET_MS = 4_000L
+
+    // ── Client circuit breaker (LastWave pattern) ──────────────────────────────────
+    // A player client that failed recently sits out for a cooldown so the ladder
+    // advances to the next client instead of re-probing a known-dead one on every
+    // resolve. Cleared on first success.
+    private val failedClientsUntil = ConcurrentHashMap<String, Long>()
+
+    private fun isClientCoolingDown(client: YouTubeClient): Boolean {
+        val key = StreamClientUtils.buildClientKey(client)
+        val until = failedClientsUntil[key] ?: return false
+        if (System.currentTimeMillis() >= until) {
+            failedClientsUntil.remove(key, until)
+            return false
+        }
+        return true
+    }
+
+    private fun markClientFailed(client: YouTubeClient) {
+        failedClientsUntil[StreamClientUtils.buildClientKey(client)] =
+            System.currentTimeMillis() + CLIENT_COOLDOWN_MS
+    }
+
+    private fun markClientHealthy(client: YouTubeClient) {
+        failedClientsUntil.remove(StreamClientUtils.buildClientKey(client))
+    }
+
+    /** Parses Song.duration ("m:ss" / "h:mm:ss") to seconds; null when unparsable. */
+    private fun parseDurationSecondsLoose(raw: String?): Int? {
+        if (raw.isNullOrBlank()) return null
+        val parts = raw.trim().split(":").map { it.trim().toIntOrNull() ?: return null }
+        return when (parts.size) {
+            2 -> parts[0] * 60 + parts[1]
+            3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+            else -> null
+        }
+    }
 
     /**
      * ArchiveTune STREAM_FALLBACK_CLIENTS order: ANDROID_VR variants first (plain URLs = zero
@@ -706,6 +755,39 @@ object YoutubeHelper {
             }
         }
 
+        // ── QOBUZ HI-RES PRIMARY (strict match, 4s budget) ────────────────────
+        // Ported from LastWave: lossless FLAC is the preferred source when the
+        // worker backend is configured AND the track passes title/artist/variant/
+        // duration verification. Anything less returns null and we drop straight
+        // through to the YouTube ladder, which stays the guaranteed source.
+        if (QobuzMusicApi.isConfigured && song.title.isNotBlank() && song.artist.isNotBlank()) {
+            val qobuzStream = runCatching {
+                kotlinx.coroutines.withTimeoutOrNull(QOBUZ_RESOLVE_BUDGET_MS) {
+                    QobuzMusicApi.resolveStream(
+                        title = song.title,
+                        artist = song.artist,
+                        expectedDurationSeconds = parseDurationSecondsLoose(song.duration),
+                        preferredQuality = QobuzMusicApi.QUALITY_MAX_HI_RES,
+                    )
+                }
+            }.getOrNull()
+            if (qobuzStream != null && qobuzStream.url.startsWith("http")) {
+                PixelMusicHelper.printd(
+                    "$videoId : Qobuz ${qobuzStream.bitDepth}-bit/${qobuzStream.samplingRate}kHz " +
+                        "(format=${qobuzStream.formatId}) — lossless primary"
+                )
+                streamUrlLruCache.put("${videoId}_qobuz", qobuzStream.url)
+                streamUrlLruCache.put("${videoId}_high", qobuzStream.url)
+                streamMimeTypeLruCache.put("${videoId}_qobuz", qobuzStream.mimeType)
+                streamMimeTypeLruCache.put("${videoId}_high", qobuzStream.mimeType)
+                qobuzStream.bitrateKbps?.let { kbps ->
+                    streamBitrateLruCache.put("${videoId}_qobuz", kbps)
+                    streamBitrateLruCache.put("${videoId}_high", kbps)
+                }
+                return qobuzStream.url
+            }
+        }
+
         val plan = resolveStreamQualityPlan(context)
         val maxBitrate = plan.maxBitrateKbps
         val preferLowFirst = plan.preferLowFirst
@@ -771,7 +853,7 @@ object YoutubeHelper {
             preferLowFirst
         }
         val result = try {
-            getSongUrlFromYoutube(
+            getSongUrlFromYoutubeDeduped(
                 context = context,
                 song = song,
                 retries = 1,
@@ -779,6 +861,9 @@ object YoutubeHelper {
                 maxBitrateKbps = maxBitrate,
             )
         } catch (primary: Exception) {
+            // A confirmed-unavailable video must not trigger the quality fallback
+            // (LOW/unrestricted passes would only re-prove the same verdict).
+            if (primary is ConfirmedUnplayableMediaException) throw primary
             PixelMusicHelper.printe(
                 "$videoId : ${plan.quality} stream resolve failed (${primary.message}); " +
                     "retrying with fallback quality"
@@ -787,7 +872,7 @@ object YoutubeHelper {
             // If LOW fails, try unrestricted once more.
             try {
                 if (!useLowQuality) {
-                    getSongUrlFromYoutube(
+                    getSongUrlFromYoutubeDeduped(
                         context = context,
                         song = song,
                         retries = 1,
@@ -795,7 +880,7 @@ object YoutubeHelper {
                         maxBitrateKbps = StreamingAudioQuality.LOW.maxBitrateKbps,
                     )
                 } else {
-                    getSongUrlFromYoutube(
+                    getSongUrlFromYoutubeDeduped(
                         context = context,
                         song = song,
                         retries = 1,
@@ -804,6 +889,7 @@ object YoutubeHelper {
                     )
                 }
             } catch (secondary: Exception) {
+                if (secondary is ConfirmedUnplayableMediaException) throw secondary
                 throw primary
             }
         }
@@ -854,7 +940,7 @@ object YoutubeHelper {
                 // competes with the very stream the user is listening to on weak links.
                 delay(8_000L)
                 if (streamUrlLruCache.get(cacheKey) != null) return@launch
-                val result = getSongUrlFromYoutube(
+                val result = getSongUrlFromYoutubeDeduped(
                     context = context,
                     song = song,
                     lowQuality = false,
@@ -908,7 +994,7 @@ object YoutubeHelper {
             if (isYoutubeUrlValid(it)) return it 
         }
 
-        val lowResult = getSongUrlFromYoutube(context, song, retries = 1, lowQuality = true)
+        val lowResult = getSongUrlFromYoutubeDeduped(context, song, retries = 1, lowQuality = true)
         val lowUrl = lowResult.first
         val mimeType = lowResult.second
         val bitrate = lowResult.third
@@ -946,7 +1032,7 @@ object YoutubeHelper {
             if (isYoutubeUrlValid(it)) return it 
         }
 
-        val highResult = getSongUrlFromYoutube(context, song, lowQuality = false, maxBitrateKbps = maxBitrate)
+        val highResult = getSongUrlFromYoutubeDeduped(context, song, lowQuality = false, maxBitrateKbps = maxBitrate)
         val highUrl = highResult.first
         val mimeType = highResult.second
         val bitrate = highResult.third
@@ -1006,7 +1092,7 @@ object YoutubeHelper {
             if (isYoutubeUrlValid(it)) return it 
         }
 
-        val urlResult = getSongUrlFromYoutube(context, song, lowQuality = false, maxBitrateKbps = maxBitrateKbps)
+        val urlResult = getSongUrlFromYoutubeDeduped(context, song, lowQuality = false, maxBitrateKbps = maxBitrateKbps)
         val url = urlResult.first
         val mimeType = urlResult.second
         val bitrate = urlResult.third
@@ -1125,6 +1211,45 @@ object YoutubeHelper {
      *  2. Fallback: the original NewPipe extractor (watch-page scrape), RETRY_COUNT attempts
      *     with linear back-off.
      */
+    /**
+     * Deduped front for [getSongUrlFromYoutube]: concurrent identical resolves
+     * for the same (videoId, quality) pair share one in-flight Deferred instead
+     * of issuing duplicate player requests (double-tap play, QueuePreloadManager
+     * racing the engine, background warm pass).
+     */
+    private suspend fun getSongUrlFromYoutubeDeduped(
+        context: Context,
+        song: Song,
+        retries: Int = Constants.YoutubeApi.RETRY_COUNT,
+        lowQuality: Boolean = false,
+        maxBitrateKbps: Int = 0
+    ): Triple<String, String?, Int?> {
+        val key = "${song.youtubeId}|$lowQuality|$maxBitrateKbps|$retries"
+        while (true) {
+            val existing = inFlightResolves[key]
+            if (existing != null && existing.isActive) {
+                return existing.await()
+            }
+            val deferred = backgroundScope.async(
+                start = kotlinx.coroutines.CoroutineStart.LAZY
+            ) {
+                getSongUrlFromYoutube(context, song, retries, lowQuality, maxBitrateKbps)
+            }
+            val raced = inFlightResolves.putIfAbsent(key, deferred)
+            if (raced != null) {
+                deferred.cancel()
+                if (raced.isActive) return raced.await()
+                inFlightResolves.remove(key, raced)
+                continue
+            }
+            try {
+                return deferred.await()
+            } finally {
+                inFlightResolves.remove(key, deferred)
+            }
+        }
+    }
+
     private suspend fun getSongUrlFromYoutube(
         context: Context,
         song: Song,
@@ -1149,6 +1274,9 @@ object YoutubeHelper {
             try {
                 return resolveNewPipeStreamUrl(song, lowQuality, maxBitrateKbps)
             } catch (e: Throwable) {
+                // NewPipe's ContentNotAvailableException family carries the same
+                // authoritative verdicts — don't burn the retry budget on them.
+                ConfirmedUnplayableMediaException.from(e)?.let { throw it }
                 lastError = e
                 PixelMusicHelper.printe(
                     "$videoId : NewPipe attempt ${attempt + 1}/${Constants.YoutubeApi.RETRY_COUNT} failed: " +
@@ -1178,6 +1306,14 @@ object YoutubeHelper {
         maxBitrateKbps: Int,
         retries: Int
     ): Triple<String, String?, Int?>? = withContext(Dispatchers.IO) {
+        // Dynamic signatureTimestamp (NewPipe-cached per videoId) — hoisted from
+        // Stage 2 so the fast path never depends on a stale/pinned value if
+        // YouTube starts requiring it for VR clients too.
+        val signatureTimestamp = try {
+            NewPipeUtils.getSignatureTimestamp(videoId).getOrNull()
+        } catch (_: Exception) {
+            null
+        }
         repeat(retries) { attempt ->
             val previousVisitorData = YouTube.visitorData
 
@@ -1185,6 +1321,7 @@ object YoutubeHelper {
                 YouTube.player(
                     videoId = videoId,
                     client = ANDROID_VR_1_61_48,
+                    signatureTimestamp = signatureTimestamp,
                     authState = YouTube.currentPlaybackAuthState()
                         .copy(webClientPoTokenEnabled = false),
                 ).getOrNull()
@@ -1218,6 +1355,12 @@ object YoutubeHelper {
             }
 
             PixelMusicHelper.printe("$videoId : ANDROID_VR playability failed status=$status reason=$reason")
+
+            // Authoritative unavailability (age gate, geo-block, private, removed)
+            // must end the resolve immediately — the ArchiveTune ladder and NewPipe
+            // can only re-prove the same verdict. Bot-wall phrasing stays
+            // transient (handled by visitorData rotation below).
+            ConfirmedUnplayableMediaException.fromPlayability(status, reason)?.let { throw it }
 
             // umihi parity: on bot checks, rotate visitorData once and retry the same fast client;
             // anything else is not recoverable here, so bail to the NewPipe fallback.
@@ -1389,9 +1532,13 @@ object YoutubeHelper {
         }
 
         val clients = buildStreamClientOrder(preferredClient, authState)
+        // Circuit breaker: skip clients that failed within the cooldown window so
+        // the ladder advances instead of re-probing a dead client on every resolve.
+        // Blackout safety: if EVERY client is benched, race the full list anyway.
+        val liveClients = clients.filterNot(::isClientCoolingDown).ifEmpty { clients }
         var didRepairAuthAfterBotDetection = false
 
-        for (client in clients) {
+        for (client in liveClients) {
             // ArchiveTune rule: never burn a request on a login-required client when anonymous.
             if (client.loginRequired && !(authState.hasPlaybackLoginContext && client.loginSupported)) {
                 continue
@@ -1406,6 +1553,12 @@ object YoutubeHelper {
                 ).getOrNull()
             } catch (e: Exception) {
                 PixelMusicHelper.printe("$videoId : ${client.clientName} player request failed: ${e.message}")
+                markClientFailed(client)
+                // A rejected web-family call often means the bootstrapped web
+                // clientVersion went stale — drop it so the next request re-bootstraps.
+                if (client.clientName.startsWith("WEB", ignoreCase = true)) {
+                    InnerTubeRuntimeConfig.invalidate()
+                }
                 null
             } ?: continue
 
@@ -1415,6 +1568,10 @@ object YoutubeHelper {
             if (status != "OK") {
                 val reason = response.playabilityStatus.reason.orEmpty()
                 PixelMusicHelper.printe("$videoId : ${client.clientName} playability status=$status reason=$reason")
+
+                // Authoritative unavailability ends the whole resolve immediately —
+                // no other client can play a video YouTube has already ruled out.
+                ConfirmedUnplayableMediaException.fromPlayability(status, reason)?.let { throw it }
 
                 // ArchiveTune bot-detection repair: invalidate BotGuard session + rotate
                 // visitorData once per resolve, then retry the SAME client a single time.
@@ -1431,16 +1588,23 @@ object YoutubeHelper {
                             authState = authState,
                         ).getOrNull()
                     } catch (_: Exception) {
+                        markClientFailed(client)
                         null
                     } ?: continue
                     status = retried.playabilityStatus.status
                     streamResponse = retried
                 }
-                if (status != "OK") continue
+                if (status != "OK") {
+                    markClientFailed(client)
+                    continue
+                }
             }
 
             val candidates = selectArchiveTuneCandidates(streamResponse, lowQuality, maxBitrateKbps)
-            if (candidates.isEmpty()) continue
+            if (candidates.isEmpty()) {
+                markClientFailed(client)
+                continue
+            }
 
             var resolved: Triple<String, String?, Int?>? = null
             for (candidate in candidates) {
@@ -1468,6 +1632,7 @@ object YoutubeHelper {
             }
 
             if (resolved != null) {
+                markClientHealthy(client)
                 streamResponse.playbackTracking?.videostatsPlaybackUrl?.baseUrl?.let {
                     playbackTrackingCache[videoId] = it
                 }
@@ -1480,6 +1645,10 @@ object YoutubeHelper {
                 )
                 return@withContext resolved
             }
+
+            // The client answered but produced no playable URL — bench it so the
+            // next resolve starts further down the ladder.
+            markClientFailed(client)
         }
 
         PixelMusicHelper.printe("$videoId : ArchiveTune fallback could not resolve a playable stream")
@@ -1687,7 +1856,8 @@ object YoutubeHelper {
         // Doing a HEAD/range probe here was a major low-connectivity stall source.
         return@withContext url.contains("googlevideo.com", ignoreCase = true) ||
             url.contains("youtube.com", ignoreCase = true) ||
-            url.contains("ggpht.com", ignoreCase = true)
+            url.contains("ggpht.com", ignoreCase = true) ||
+            url.contains("qobuz.com", ignoreCase = true) // Qobuz lossless CDN
     }
 
     fun findObjectsWithKey(element: JsonElement, key: String, result: MutableList<JsonObject>) {

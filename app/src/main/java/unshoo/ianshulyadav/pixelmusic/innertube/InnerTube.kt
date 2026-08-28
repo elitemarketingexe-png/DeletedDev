@@ -227,7 +227,7 @@ class InnerTube {
         headers {
             append("X-Goog-Api-Format-Version", "1")
             append("X-YouTube-Client-Name", client.clientId)
-            append("X-YouTube-Client-Version", client.clientVersion)
+            append("X-YouTube-Client-Version", client.effectiveClientVersion())
             append("X-Origin", requestOrigin)
             append("Referer", requestReferer)
             if (!forceAnonymous) {

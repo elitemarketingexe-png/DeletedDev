@@ -78,6 +78,7 @@ import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -186,6 +187,36 @@ object YouTube {
             .client(bootstrapClient)
             .url(url.toHttpUrl())
             .build()
+    }
+
+    /**
+     * Non-blocking BotGuard minting (LastWave pattern): a cold WebView engine
+     * must never delay stream resolution, so the synchronous mint gets a tiny
+     * budget (50 ms — enough for a warm LRU cache hit, never enough for a cold
+     * bootstrap). On a budget miss, minting continues in the background; the
+     * result lands in BotGuardTokenGenerator's per-video LRU cache so the next
+     * resolve for this video — usually the very next track — is instant.
+     */
+    private const val BOTGUARD_MINT_BUDGET_MS = 50L
+    private val botGuardScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+    )
+
+    private suspend fun mintBotGuardTokens(
+        videoId: String,
+        sessionId: String?,
+    ): com.unshoo.pixelmusic.utils.potoken.PoTokenResult? {
+        if (sessionId.isNullOrBlank()) return null
+        val warmed = runCatching {
+            kotlinx.coroutines.withTimeoutOrNull(BOTGUARD_MINT_BUDGET_MS) {
+                BotGuardTokenGenerator.mintToken(videoId, sessionId)
+            }
+        }.getOrNull()
+        if (warmed != null) return warmed
+        botGuardScope.launch {
+            runCatching { BotGuardTokenGenerator.mintToken(videoId, sessionId) }
+        }
+        return null
     }
 
     private fun resolvePlayerPoToken(
@@ -1462,12 +1493,10 @@ object YouTube {
         authState: PlaybackAuthState = currentPlaybackAuthState(),
     ): Result<PlayerResponse> = runCatching {
         val botGuardTokens = if (authState.webClientPoTokenEnabled) {
-            val sessionId = authState.visitorData ?: authState.dataSyncId ?: authState.sessionId
-            if (!sessionId.isNullOrBlank()) {
-                BotGuardTokenGenerator.mintToken(videoId, sessionId)
-            } else {
-                null
-            }
+            mintBotGuardTokens(
+                videoId = videoId,
+                sessionId = authState.visitorData ?: authState.dataSyncId ?: authState.sessionId,
+            )
         } else {
             null
         }
@@ -1509,8 +1538,10 @@ object YouTube {
         )
 
         val botGuardTokens = if (authState.webClientPoTokenEnabled && !videoId.isNullOrBlank()) {
-            val sessionId = authState.visitorData ?: authState.dataSyncId ?: authState.sessionId
-            if (!sessionId.isNullOrBlank()) BotGuardTokenGenerator.mintToken(videoId, sessionId) else null
+            mintBotGuardTokens(
+                videoId = videoId,
+                sessionId = authState.visitorData ?: authState.dataSyncId ?: authState.sessionId,
+            )
         } else {
             null
         }

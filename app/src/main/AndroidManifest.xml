@@ -90,6 +90,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="music.youtube.com" />
                 <data android:scheme="https" android:host="www.youtube.com" />
+                <data android:scheme="https" android:host="m.youtube.com" />
                 <data android:scheme="https" android:host="youtube.com" />
                 <data android:scheme="https" android:host="youtu.be" />
             </intent-filter>
@@ -99,8 +100,24 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="http" android:host="music.youtube.com" />
                 <data android:scheme="http" android:host="www.youtube.com" />
+                <data android:scheme="http" android:host="m.youtube.com" />
                 <data android:scheme="http" android:host="youtube.com" />
                 <data android:scheme="http" android:host="youtu.be" />
+            </intent-filter>
+            <!-- Open Spotify track links in PixelMusic (resolved by title) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="open.spotify.com" />
+                <data android:scheme="https" android:host="spotify.link" />
+                <data android:scheme="https" android:host="open.spotify.link" />
+            </intent-filter>
+            <!-- "Share → PixelMusic" target for any supported music link -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
             <!-- Open M3U/M3U8 playlists shared from other apps -->
             <intent-filter>

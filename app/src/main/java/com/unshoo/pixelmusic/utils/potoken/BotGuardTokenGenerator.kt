@@ -118,6 +118,13 @@ object BotGuardTokenGenerator {
     suspend fun preWarm(sessionId: String) {
         val ctx = appContext ?: return
         if (permanentlyBroken) return
+        // LastWave guard: some Android 11 OEM devices have a missing/updating
+        // WebView provider — building a headless WebView there can kill the
+        // process. Probe the provider before ever constructing the engine.
+        if (!hasUsableWebView()) {
+            Timber.tag(TAG).w("Pre-warm skipped: no usable WebView provider")
+            return
+        }
         if (engineReady) return
         if (!preWarmStarted.compareAndSet(false, true)) return
 
@@ -152,6 +159,7 @@ object BotGuardTokenGenerator {
             return null
         }
         if (permanentlyBroken) return null
+        if (!hasUsableWebView()) return null
 
         // Check player token cache first
         mutex.withLock {
@@ -280,6 +288,20 @@ object BotGuardTokenGenerator {
         engineReady = false
     }
 
+    /**
+     * Whether the system actually has a usable WebView provider. On devices
+     * with a missing or still-updating provider (some Android 11 OEM builds),
+     * constructing a WebView can terminate the process — every entry point
+     * that would create one checks this first (LastWave pattern).
+     */
+    private fun hasUsableWebView(): Boolean {
+        return runCatching {
+            android.webkit.WebView.getCurrentWebViewPackage() != null
+        }.onFailure {
+            Timber.tag(TAG).w(it, "Unable to inspect WebView provider")
+        }.getOrDefault(false)
+    }
+
     // ── WebView wrapper ──────────────────────────────────────────────
 
     private class BotGuardEngine private constructor(
@@ -287,9 +309,12 @@ object BotGuardTokenGenerator {
         private val readySignal: Continuation<BotGuardEngine>,
     ) {
         private val scope = MainScope()
-        private val pendingMints = Collections.synchronizedMap(
-            ArrayMap<String, Continuation<String>>()
-        )
+        // CompletableDeferred keyed by identifier so two concurrent mints for
+        // the same video share one deferred — the old Continuation map let the
+        // second put orphan the first, leaving its awaiter hanging until the
+        // outer timeout.
+        private val pendingMints = java.util.concurrent.ConcurrentHashMap<
+            String, kotlinx.coroutines.CompletableDeferred<String>>()
         private lateinit var expiry: Instant
 
         val isExpired: Boolean get() = Instant.now().isAfter(expiry)
@@ -371,8 +396,19 @@ object BotGuardTokenGenerator {
 
         suspend fun mint(identifier: String): String {
             return withContext(Dispatchers.Main) {
-                suspendCancellableCoroutine { cont ->
-                    pendingMints[identifier] = cont
+                // Dedup: concurrent mints for the same identifier share one
+                // deferred — the old Continuation map let a second put orphan
+                // the first, leaving its awaiter hanging until the outer timeout.
+                val existing = pendingMints[identifier]
+                if (existing != null) return@withContext existing.await()
+
+                val deferred = kotlinx.coroutines.CompletableDeferred<String>()
+                val raced = pendingMints.putIfAbsent(identifier, deferred)
+                if (raced != null) return@withContext raced.await()
+
+                // We own this mint — drive the WebView; JS bridge callbacks
+                // complete [deferred] below.
+                try {
                     val u8Arg = stringToJsUint8Array(identifier)
                     webView.evaluateJavascript(
                         """
@@ -386,6 +422,13 @@ object BotGuardTokenGenerator {
                         """.trimIndent(),
                         null
                     )
+                    deferred.await()
+                } catch (t: Throwable) {
+                    // Complete (not just remove) so awaiters surface the same
+                    // error instead of hanging against a dead engine.
+                    deferred.completeExceptionally(t)
+                    pendingMints.remove(identifier, deferred)
+                    throw t
                 }
             }
         }
@@ -394,13 +437,13 @@ object BotGuardTokenGenerator {
         fun onMintOk(identifier: String, csvBytes: String) {
             val base64 = commaSeparatedBytesToBase64(csvBytes)
             Timber.tag(TAG).d("Minted token for $identifier (${base64.length} chars)")
-            pendingMints.remove(identifier)?.resume(base64)
+            pendingMints.remove(identifier)?.complete(base64)
         }
 
         @JavascriptInterface
         fun onMintErr(identifier: String, error: String) {
             Timber.tag(TAG).e("Mint failed for $identifier: $error")
-            pendingMints.remove(identifier)?.resumeWithException(classifyJsError(error))
+            pendingMints.remove(identifier)?.completeExceptionally(classifyJsError(error))
         }
 
         private val exceptionHandler = CoroutineExceptionHandler { _, t -> signalError(t) }
@@ -446,6 +489,12 @@ object BotGuardTokenGenerator {
         @MainThread
         fun close() {
             scope.cancel()
+            // Fail in-flight mints so awaiters error out instead of hanging
+            // forever against a destroyed WebView.
+            pendingMints.values.forEach { deferred ->
+                deferred.completeExceptionally(IllegalStateException("BotGuard engine closed"))
+            }
+            pendingMints.clear()
             webView.clearHistory()
             webView.clearCache(true)
             webView.loadUrl("about:blank")
@@ -488,6 +537,15 @@ object BotGuardTokenGenerator {
                         }
                         val engine = BotGuardEngine(wv, cont)
                         wv.addJavascriptInterface(engine, JS_BRIDGE)
+                        // Leak guard (LastWave pattern): when the caller's
+                        // withTimeout/cancellation aborts HERE, the freshly
+                        // created WebView — a full rendering pipeline — used to
+                        // leak every single time. Destroy it on cancellation.
+                        cont.invokeOnCancellation {
+                            kotlinx.coroutines.MainScope().launch {
+                                runCatching { engine.close() }
+                            }
+                        }
                         engine.startBootstrap()
                     }
                 }

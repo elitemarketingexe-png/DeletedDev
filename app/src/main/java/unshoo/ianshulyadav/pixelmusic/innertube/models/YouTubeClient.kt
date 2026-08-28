@@ -11,6 +11,7 @@
 
 package unshoo.ianshulyadav.pixelmusic.innertube.models
 
+import unshoo.ianshulyadav.pixelmusic.innertube.InnerTubeRuntimeConfig
 import kotlinx.serialization.Serializable
 import java.util.Locale
 
@@ -37,7 +38,7 @@ data class YouTubeClient(
     fun toContext(locale: YouTubeLocale, visitorData: String?, dataSyncId: String?) = Context(
         client = Context.Client(
             clientName = clientName,
-            clientVersion = clientVersion,
+            clientVersion = effectiveClientVersion(),
             osName = osName,
             osVersion = osVersion,
             deviceMake = deviceMake,
@@ -45,12 +46,30 @@ data class YouTubeClient(
             androidSdkVersion = androidSdkVersion,
             gl = locale.gl,
             hl = locale.hl,
+            // Anonymous requests fall back to the shell-page VISITOR_DATA so the
+            // bootstrap web client context stays internally consistent.
             visitorData = visitorData
+                ?: InnerTubeRuntimeConfig.currentVisitorData.takeIf { isWebRemixFamily() }
         ),
         user = Context.User(
             onBehalfOfUser = if (loginSupported) dataSyncId else null
         ),
     )
+
+    /**
+     * Live-bootstrapped client version for the WEB_REMIX family; every other
+     * client keeps its compiled-in version. Prevents the stale-baked-version
+     * 400/403 failure mode — see [InnerTubeRuntimeConfig].
+     */
+    fun effectiveClientVersion(): String =
+        if (isWebRemixFamily()) {
+            InnerTubeRuntimeConfig.currentClientVersion ?: clientVersion
+        } else {
+            clientVersion
+        }
+
+    private fun isWebRemixFamily(): Boolean =
+        clientName.equals("WEB_REMIX", ignoreCase = true)
 
     fun requestOrigin(): String {
         return when (clientName.uppercase(Locale.US)) {

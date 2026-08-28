@@ -423,6 +423,16 @@ class DualPlayerEngine @Inject constructor(
     private val localFilePathCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val activeResolutions = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<Uri>>()
 
+    // URIs a provider has authoritatively declared unplayable (age gate, geo
+    // block, private, removed). The player consults this to skip instantly
+    // instead of burning recovery attempts (LastWave ConfirmedUnplayable parity).
+    private val confirmedUnplayableUris = java.util.Collections.newSetFromMap(
+        java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    )
+
+    fun isConfirmedUnplayable(uriString: String?): Boolean =
+        uriString != null && confirmedUnplayableUris.contains(uriString)
+
     /** Fire-and-forget stream resolve used by the non-blocking ResolvingDataSource path. */
     private fun kickBackgroundResolve(uri: Uri) {
         val uriString = uri.toString()
@@ -1261,6 +1271,10 @@ class DualPlayerEngine @Inject constructor(
                 }
             }
 
+            // A later successful resolve (e.g. the track was downloaded since)
+            // always clears a stale confirmed-unplayable verdict.
+            confirmedUnplayableUris.remove(uriString)
+
             if (!path.startsWith("http")) {
                 com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
                     .registerLocalFilePath(youtubeId, path)
@@ -1270,6 +1284,12 @@ class DualPlayerEngine @Inject constructor(
 
             preCacheFirstChunk(path)
             Uri.parse(path)
+        } catch (confirmed: com.unshoo.pixelmusic.data.remote.youtube.ConfirmedUnplayableMediaException) {
+            Timber.tag("DualPlayerEngine").w(
+                confirmed, "Confirmed unplayable (no ladder burn, no low-quality retry): $uriString"
+            )
+            confirmedUnplayableUris.add(uriString)
+            null
         } catch (e: Exception) {
             Timber.tag("DualPlayerEngine").e(e, "resolveYoutubeUriAsync failed for $uriString")
             // Last-ditch: lowest stream so weak nets still get audio

@@ -228,6 +228,17 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
                 Timber.w(e, "DNS pre-warming failed")
             }
 
+            // Runtime InnerTube config bootstrap (LastWave pattern): fetch the
+            // live WEB_REMIX clientVersion + VISITOR_DATA from the
+            // music.youtube.com shell so search/player calls never depend on a
+            // stale baked-in version. Fire-and-forget; failures fall back to
+            // the compiled-in constants.
+            try {
+                unshoo.ianshulyadav.pixelmusic.innertube.InnerTubeRuntimeConfig.warmAsync()
+            } catch (e: Throwable) {
+                Timber.w(e, "InnerTube runtime config bootstrap failed")
+            }
+
             awaitMainThreadIdle()
             try {
                 BotGuardTokenGenerator.preWarm("warmup_session")

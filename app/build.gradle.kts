@@ -95,6 +95,18 @@ android {
             ?: ""
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastfmApiKey\"")
         buildConfigField("String", "LASTFM_SECRET", "\"$lastfmSecret\"")
+
+        // Qobuz Hi-Res tier (optional): point these at a deployed instance of
+        // qobuz-worker-backend/ (see docs/qobuz-backend.md). Empty URL disables
+        // the tier entirely — YouTube Music remains the only source.
+        val qobuzBackendUrl = localProperties.getProperty("QOBUZ_BACKEND_URL")
+            ?: System.getenv("QOBUZ_BACKEND_URL")
+            ?: ""
+        val qobuzApiKey = localProperties.getProperty("QOBUZ_API_KEY")
+            ?: System.getenv("QOBUZ_API_KEY")
+            ?: ""
+        buildConfigField("String", "QOBUZ_BACKEND_URL", "\"$qobuzBackendUrl\"")
+        buildConfigField("String", "QOBUZ_API_KEY", "\"$qobuzApiKey\"")
     }
 
     val keystoreExists = rootProject.file("keystore.properties").exists() && rootProject.file("vz-pixelmusic.jks").exists()
