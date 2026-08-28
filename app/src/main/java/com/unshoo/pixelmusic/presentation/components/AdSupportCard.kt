@@ -1,7 +1,7 @@
 package com.unshoo.pixelmusic.presentation.components
 
 import android.app.Activity
-import android.widget.Toast
+import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,9 +9,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Star
-import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -24,10 +23,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.unshoo.pixelmusic.data.ads.AdManager
+import com.unshoo.pixelmusic.R
+import com.unshoo.pixelmusic.presentation.screens.DonateOptionsDialog
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 
 @Composable
@@ -35,65 +36,58 @@ fun AdSupportCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
     
-    // Dynamic theme-derived support colors
-    val backgroundColor = MaterialTheme.colorScheme.primaryContainer
-    val circleBackgroundColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)
-    val textColor = MaterialTheme.colorScheme.onPrimaryContainer
-    val iconColor = MaterialTheme.colorScheme.onPrimaryContainer
+    // Dynamic theme-derived support colors using tertiaryContainer (warm/supportive)
+    val backgroundColor = MaterialTheme.colorScheme.tertiaryContainer
+    val circleBackgroundColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
+    val textColor = MaterialTheme.colorScheme.onTertiaryContainer
+    val iconColor = MaterialTheme.colorScheme.onTertiaryContainer
+
+    val sharedPrefs = remember(context) {
+        context.getSharedPreferences("pixelmusic_donation_prefs", Context.MODE_PRIVATE)
+    }
 
     var isDismissed by remember {
-        mutableStateOf(AdManager.isSupportCardDismissed(context))
+        mutableStateOf(sharedPrefs.getBoolean("donation_explore_card_dismissed", false))
+    }
+    var showDonateDialog by remember { mutableStateOf(false) }
+
+    if (showDonateDialog) {
+        DonateOptionsDialog(
+            onDismiss = { showDonateDialog = false }
+        )
     }
 
     if (isDismissed) return
 
     Card(
         modifier = modifier.clickable {
-            if (activity != null) {
-                if (AdManager.isAdLoaded()) {
-                    Toast.makeText(context, "Opening support ad...", Toast.LENGTH_SHORT).show()
-                    AdManager.showRewardedAd(activity) { success ->
-                        if (success) {
-                            Toast.makeText(context, "Thank you for supporting PixelMusic!", Toast.LENGTH_LONG).show()
-                            // Force-refresh local watch state
-                            AdManager.recordAdWatched(context.applicationContext)
-                            isDismissed = true
-                        } else {
-                            Toast.makeText(context, "Ad was closed early. Support incomplete.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                } else {
-                    Toast.makeText(context, "Loading ad, please try again in a few seconds...", Toast.LENGTH_SHORT).show()
-                    AdManager.loadRewardedAd(context.applicationContext)
-                }
-            }
+            showDonateDialog = true
         },
         shape = AbsoluteSmoothCornerShape(24.dp, 60),
         colors = CardDefaults.cardColors(containerColor = backgroundColor),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Star Icon with circle background
+            // Heart Icon with soft circle background
             Surface(
                 shape = CircleShape,
                 color = circleBackgroundColor,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(38.dp)
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.fillMaxSize()
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.StarBorder,
+                        painter = painterResource(R.drawable.rounded_favorite_24),
                         contentDescription = null,
                         tint = iconColor,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
@@ -110,12 +104,12 @@ fun AdSupportCard(
                     maxLines = 1,
                     softWrap = false
                 )
-                Spacer(modifier = Modifier.height(1.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Love the app? Tap to watch a quick ad & support its development!",
-                    color = textColor.copy(alpha = 0.8f),
+                    text = "Love the app? Tap to donate for supporting development!",
+                    color = textColor.copy(alpha = 0.82f),
                     fontSize = 11.sp,
-                    lineHeight = 14.sp,
+                    lineHeight = 15.sp,
                     fontWeight = FontWeight.Normal
                 )
             }
@@ -123,10 +117,10 @@ fun AdSupportCard(
             // Close (Cross) Icon
             IconButton(
                 onClick = {
-                    AdManager.recordSupportCardDismissed(context)
+                    sharedPrefs.edit().putBoolean("donation_explore_card_dismissed", true).apply()
                     isDismissed = true
                 },
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(28.dp)
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Close,

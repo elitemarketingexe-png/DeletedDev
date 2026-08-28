@@ -90,6 +90,36 @@ fun popExitTransition(): ExitTransition = slideOutHorizontally(
 )
 
 // ────────────────────────────────────────────────────────────────────────────────
+// FAST RESPONSIVE SETTINGS DISMISS TRANSITIONS (260–280ms quick exit)
+// ────────────────────────────────────────────────────────────────────────────────
+private const val SETTINGS_DISMISS_TOTAL_MS = 280
+private const val SETTINGS_DISMISS_FADE_MS = 220
+
+// Fast Pop Exit for Settings: Swift slide-out to right (80%) with clean crisp fade
+fun settingsPopExitTransition(): ExitTransition = slideOutHorizontally(
+    animationSpec = tween(durationMillis = SETTINGS_DISMISS_TOTAL_MS, easing = EmphasizedAccelerateEasing),
+    targetOffsetX = { (it * 0.80f).toInt() }
+) + scaleOut(
+    animationSpec = tween(durationMillis = SETTINGS_DISMISS_TOTAL_MS, easing = EmphasizedAccelerateEasing),
+    targetScale = 0.97f,
+    transformOrigin = TransformOrigin(0.5f, 0.5f)
+) + fadeOut(
+    animationSpec = tween(durationMillis = SETTINGS_DISMISS_FADE_MS, easing = EmphasizedAccelerateEasing)
+)
+
+// Fast Pop Enter for the screen being returned to from Settings
+fun settingsPopEnterTransition(): EnterTransition = slideInHorizontally(
+    animationSpec = tween(durationMillis = SETTINGS_DISMISS_TOTAL_MS, easing = EmphasizedDecelerateEasing),
+    initialOffsetX = { -(it * 0.12f).toInt() }
+) + scaleIn(
+    animationSpec = tween(durationMillis = SETTINGS_DISMISS_TOTAL_MS, easing = EmphasizedDecelerateEasing),
+    initialScale = 0.98f,
+    transformOrigin = TransformOrigin(0.5f, 0.5f)
+) + fadeIn(
+    animationSpec = tween(durationMillis = SETTINGS_DISMISS_FADE_MS, easing = StandardDecelerateEasing)
+)
+
+// ────────────────────────────────────────────────────────────────────────────────
 // MAIN TAB PEER NAVIGATION (Home <-> Explore <-> Search <-> Library)
 // Bidirectional Left-to-Right / Right-to-Left with micro scale & clean fade
 // ────────────────────────────────────────────────────────────────────────────────

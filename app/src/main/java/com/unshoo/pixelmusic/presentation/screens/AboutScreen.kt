@@ -634,7 +634,7 @@ private fun SocialLinksColumn() {
 }
 
 @Composable
-private fun DonateOptionsDialog(
+fun DonateOptionsDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
