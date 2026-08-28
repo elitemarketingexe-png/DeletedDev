@@ -442,13 +442,14 @@ private fun SocialLinksColumn() {
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // Ko-fi Support / Donations button
+        var showDonateDialog by remember { mutableStateOf(false) }
+
+        // Donate for Support button
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ko-fi.com/ianshulyadav"))
-                    try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
+                    showDonateDialog = true
                 },
             shape = buttonShape,
             color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -478,14 +479,14 @@ private fun SocialLinksColumn() {
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Support the development",
+                        text = "Donate for Support",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                         maxLines = 1,
                     )
                     Text(
-                        text = "ko-fi.com/ianshulyadav",
+                        text = "UPI (India) & Ko-fi (Global)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.75f),
                         maxLines = 1,
@@ -502,6 +503,12 @@ private fun SocialLinksColumn() {
             }
         }
 
+        if (showDonateDialog) {
+            DonateOptionsDialog(
+                onDismiss = { showDonateDialog = false }
+            )
+        }
+
         // Telegram button
         Surface(
             modifier = Modifier
@@ -511,7 +518,7 @@ private fun SocialLinksColumn() {
                     try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
                 },
             shape = buttonShape,
-            color = MaterialTheme.colorScheme.primary,
+            color = MaterialTheme.colorScheme.secondaryContainer,
         ) {
             Row(
                 modifier = Modifier
@@ -521,14 +528,14 @@ private fun SocialLinksColumn() {
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.18f),
+                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
                     modifier = Modifier.size(36.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                         Icon(
                             painter = painterResource(R.drawable.telegram),
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -541,13 +548,13 @@ private fun SocialLinksColumn() {
                         text = "Telegram",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                         maxLines = 1,
                     )
                     Text(
                         text = "t.me/PixelMusicApp",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -556,7 +563,7 @@ private fun SocialLinksColumn() {
                 Icon(
                     imageVector = Icons.Rounded.ChevronRight,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.8f),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -622,6 +629,201 @@ private fun SocialLinksColumn() {
             }
         }
     }
+}
+
+@Composable
+private fun DonateOptionsDialog(
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val upiId = "anshulyadavv@fam"
+    val payeeName = "Anshul Yadav"
+    val dialogShape = AbsoluteSmoothCornerShape(28.dp, 60)
+    val optionShape = AbsoluteSmoothCornerShape(16.dp, 60)
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = dialogShape,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Icon(
+                            painter = painterResource(R.drawable.rounded_favorite_24),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = "Support Development",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Choose your preferred payment method:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+
+                // Option 1: UPI (India)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onDismiss()
+                            // Standard NPCI UPI URI Scheme
+                            val encodedName = Uri.encode(payeeName)
+                            val encodedNote = Uri.encode("Support PixelMusic")
+                            val upiUri = Uri.parse("upi://pay?pa=$upiId&pn=$encodedName&cu=INR&tn=$encodedNote")
+                            val upiIntent = Intent(Intent.ACTION_VIEW, upiUri)
+
+                            try {
+                                val chooser = Intent.createChooser(upiIntent, "Pay with UPI")
+                                context.startActivity(chooser)
+                            } catch (e: Exception) {
+                                // Fallback: copy UPI ID to clipboard if no UPI app handles the intent
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                val clip = android.content.ClipData.newPlainText("UPI ID", upiId)
+                                clipboard.setPrimaryClip(clip)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "No UPI app found. UPI ID copied: $upiId",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        },
+                    shape = optionShape,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                Text(
+                                    text = "₹",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "UPI (India Only)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = upiId,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Rounded.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                // Option 2: Ko-fi (Global)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onDismiss()
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://ko-fi.com/ianshulyadav"))
+                            try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
+                        },
+                    shape = optionShape,
+                    color = MaterialTheme.colorScheme.tertiaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                Icon(
+                                    painter = painterResource(R.drawable.rounded_favorite_24),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Ko-fi (International)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Text(
+                                text = "Card / PayPal / Global",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.75f)
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Rounded.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
