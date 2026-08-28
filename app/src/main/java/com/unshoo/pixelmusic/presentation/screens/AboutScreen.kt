@@ -54,9 +54,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.MusicNote
@@ -636,10 +638,15 @@ private fun DonateOptionsDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val upiId = "anshulyadavv@fam"
-    val payeeName = "Anshul Yadav"
     val dialogShape = AbsoluteSmoothCornerShape(28.dp, 60)
     val optionShape = AbsoluteSmoothCornerShape(16.dp, 60)
+    var showUpiDetailsDialog by remember { mutableStateOf(false) }
+
+    if (showUpiDetailsDialog) {
+        UpiPaymentDialog(
+            onDismiss = { showUpiDetailsDialog = false }
+        )
+    }
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -683,32 +690,12 @@ private fun DonateOptionsDialog(
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
 
-                // Option 1: UPI (India)
+                // Option 1: UPI (India Only)
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            onDismiss()
-                            // Standard NPCI UPI URI Scheme
-                            val encodedName = Uri.encode(payeeName)
-                            val encodedNote = Uri.encode("Support PixelMusic")
-                            val upiUri = Uri.parse("upi://pay?pa=$upiId&pn=$encodedName&cu=INR&tn=$encodedNote")
-                            val upiIntent = Intent(Intent.ACTION_VIEW, upiUri)
-
-                            try {
-                                val chooser = Intent.createChooser(upiIntent, "Pay with UPI")
-                                context.startActivity(chooser)
-                            } catch (e: Exception) {
-                                // Fallback: copy UPI ID to clipboard if no UPI app handles the intent
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                val clip = android.content.ClipData.newPlainText("UPI ID", upiId)
-                                clipboard.setPrimaryClip(clip)
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "No UPI app found. UPI ID copied: $upiId",
-                                    android.widget.Toast.LENGTH_LONG
-                                ).show()
-                            }
+                            showUpiDetailsDialog = true
                         },
                     shape = optionShape,
                     color = MaterialTheme.colorScheme.primaryContainer
@@ -738,13 +725,13 @@ private fun DonateOptionsDialog(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "UPI (India Only)",
+                                text = "UPI (India)",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                             Text(
-                                text = upiId,
+                                text = "UPI Apps (Only for India)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                             )
@@ -820,7 +807,166 @@ private fun DonateOptionsDialog(
         },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun UpiPaymentDialog(
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val upiId = "anshulyadavv@fam"
+    val payeeName = "PixelMusic Development"
+    val dialogShape = AbsoluteSmoothCornerShape(28.dp, 60)
+    val cardShape = AbsoluteSmoothCornerShape(18.dp, 60)
+
+    val encodedName = Uri.encode(payeeName)
+    val encodedNote = Uri.encode("Support PixelMusic")
+    val upiUriString = "upi://pay?pa=$upiId&pn=$encodedName&cu=INR&tn=$encodedNote"
+    val qrEncoded = Uri.encode(upiUriString)
+    val qrApiUrl = "https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=$qrEncoded&margin=6"
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = dialogShape,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            text = "₹",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+                Text(
+                    text = "UPI Payment",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Scan QR code or launch any installed UPI app",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+
+                // MD3 Expressive Surface for QR Code
+                Surface(
+                    shape = cardShape,
+                    color = Color.White,
+                    modifier = Modifier
+                        .size(200.dp)
+                        .padding(4.dp)
+                ) {
+                    coil.compose.AsyncImage(
+                        model = coil.request.ImageRequest.Builder(context)
+                            .data(qrApiUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "UPI QR Code",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                // 1-Tap Copy UPI ID Pill (Material 3 Expressive Full-Round Pill)
+                Surface(
+                    modifier = Modifier
+                        .clickable {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("UPI ID", upiId)
+                            clipboard.setPrimaryClip(clip)
+                            android.widget.Toast.makeText(context, "UPI ID copied: $upiId", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.ContentCopy,
+                            contentDescription = "Copy UPI ID",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = upiId,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                // Direct "Pay with UPI App" Action Button
+                androidx.compose.material3.Button(
+                    onClick = {
+                        val upiUri = Uri.parse(upiUriString)
+                        val upiIntent = Intent(Intent.ACTION_VIEW, upiUri)
+                        try {
+                            val chooser = Intent.createChooser(upiIntent, "Pay with UPI")
+                            context.startActivity(chooser)
+                        } catch (e: Exception) {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("UPI ID", upiId)
+                            clipboard.setPrimaryClip(clip)
+                            android.widget.Toast.makeText(
+                                context,
+                                "No UPI app found. UPI ID copied: $upiId",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AbsoluteSmoothCornerShape(16.dp, 60),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.rounded_favorite_24),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Pay with UPI App",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text("Done")
             }
         }
     )
