@@ -1095,10 +1095,10 @@ private fun ShareableCard(
                 // ── SONG CARD (Full Player Sheet Layout) ──────────────────────
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.88f)
-                        .clip(AbsoluteSmoothCornerShape(20.dp, 60))
+                        .fillMaxWidth(0.78f)
+                        .clip(AbsoluteSmoothCornerShape(18.dp, 60))
                         .background(activeCardScheme.primaryContainer)
-                        .padding(10.dp),
+                        .padding(horizontal = 9.dp, vertical = 9.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     SongMiniCard(song = song, albumScheme = activeCardScheme, isCardDark = isCardDark)
@@ -1241,9 +1241,6 @@ private fun SongMiniCard(
         parts.takeIf { it.isNotEmpty() }?.joinToString(" \u2022 ") ?: "48.0 kHz \u2022 164 kbps \u2022 OPUS"
     }
 
-    val chipColor = albumScheme.onPrimary.copy(alpha = 0.8f)
-    val chipContentColor = albumScheme.primary
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1279,8 +1276,8 @@ private fun SongMiniCard(
                 text = song.title,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-                lineHeight = 16.sp,
+                fontSize = 12.sp,
+                lineHeight = 15.sp,
                 color = albumScheme.onPrimaryContainer,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1289,8 +1286,8 @@ private fun SongMiniCard(
                 text = song.displayArtist,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Medium,
-                fontSize = 10.sp,
-                lineHeight = 13.sp,
+                fontSize = 9.5.sp,
+                lineHeight = 12.sp,
                 color = albumScheme.onPrimaryContainer.copy(alpha = 0.75f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1300,25 +1297,25 @@ private fun SongMiniCard(
         // ── 3. Wavy Progress Bar Slider + Thumb Indicator ──────────────────
         val density = LocalDensity.current
         val stroke = remember(density) {
-            Stroke(width = with(density) { 2.5.dp.toPx() }, cap = StrokeCap.Round)
+            Stroke(width = with(density) { 2.2.dp.toPx() }, cap = StrokeCap.Round)
         }
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(10.dp),
+                .height(9.dp),
             contentAlignment = Alignment.CenterStart
         ) {
             LinearWavyProgressIndicator(
                 progress = { progressRatio },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(8.dp),
+                    .height(7.dp),
                 color = albumScheme.primary,
                 trackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.2f),
                 stroke = stroke,
                 trackStroke = stroke,
-                wavelength = 11.dp,
+                wavelength = 10.dp,
                 amplitude = { 0.35f },
                 waveSpeed = 4.dp
             )
@@ -1327,9 +1324,9 @@ private fun SongMiniCard(
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(10.dp)
+                    .height(9.dp)
             ) {
-                val thumbRadiusPx = 4.dp.toPx()
+                val thumbRadiusPx = 3.5.dp.toPx()
                 val thumbX = size.width * progressRatio
                 drawCircle(
                     color = albumScheme.onPrimaryContainer,
@@ -1343,7 +1340,7 @@ private fun SongMiniCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .offset(y = (-3).dp)
+                .offset(y = (-2).dp)
                 .padding(horizontal = 0.dp)
         ) {
             Row(
@@ -1357,14 +1354,14 @@ private fun SongMiniCard(
                     formattedProgress,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 7.sp,
+                    fontSize = 6.5.sp,
                     color = albumScheme.onPrimaryContainer.copy(alpha = 0.85f)
                 )
                 Text(
                     formattedDuration,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 7.sp,
+                    fontSize = 6.5.sp,
                     color = albumScheme.onPrimaryContainer.copy(alpha = 0.85f)
                 )
             }
@@ -1372,7 +1369,7 @@ private fun SongMiniCard(
             Surface(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(horizontal = 30.dp),
+                    .padding(horizontal = 26.dp),
                 shape = RoundedCornerShape(999.dp),
                 color = albumScheme.onPrimaryContainer.copy(alpha = 0.14f),
                 contentColor = albumScheme.onPrimaryContainer.copy(alpha = 0.96f)
@@ -1382,30 +1379,27 @@ private fun SongMiniCard(
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = GoogleSansRounded,
                         fontWeight = FontWeight.Medium,
-                        fontSize = 6.5.sp
+                        fontSize = 6.sp
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                 )
             }
         }
 
         // ── 5. Expressive Playback Transport Controls (Prev | Pause | Next) ──
-        // Exactly matching the full player sheet's button colors in both Light & Dark modes:
-        // Play/Pause = tertiaryFixedDim (container) + onTertiaryFixed (content)
-        // Skip Prev/Next = primary (container) + onPrimary (content)
         val playPauseBg = albumScheme.tertiaryFixedDim
         val playPauseTint = albumScheme.onTertiaryFixed
         val skipBg = albumScheme.primary
         val skipTint = albumScheme.onPrimary
-        val heroCorner = 14.dp
+        val heroCorner = 12.dp
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 1.dp)
-                .height(38.dp),
+                .height(34.dp),
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1422,7 +1416,7 @@ private fun SongMiniCard(
                     imageVector = Icons.Rounded.SkipPrevious,
                     contentDescription = null,
                     tint = skipTint,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(15.dp)
                 )
             }
 
@@ -1450,7 +1444,7 @@ private fun SongMiniCard(
                     imageVector = Icons.Rounded.Pause,
                     contentDescription = null,
                     tint = playPauseTint,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(17.dp)
                 )
             }
 
@@ -1467,7 +1461,7 @@ private fun SongMiniCard(
                     imageVector = Icons.Rounded.SkipNext,
                     contentDescription = null,
                     tint = skipTint,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(15.dp)
                 )
             }
         }
