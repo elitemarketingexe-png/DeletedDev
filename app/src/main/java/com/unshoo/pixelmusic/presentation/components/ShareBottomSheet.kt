@@ -970,7 +970,10 @@ private fun ShareableCard(
                         .fillMaxSize()
                         .background(
                             brush = Brush.verticalGradient(
-                                colors = listOf(primaryContainer, surfaceContainerLowest)
+                                0.0f to primaryContainer.copy(alpha = 0.95f),
+                                0.45f to primaryContainer.copy(alpha = 0.65f),
+                                0.80f to surfaceContainerLowest,
+                                1.0f to Color(0xFF070707)
                             )
                         )
                 ) {
@@ -979,8 +982,9 @@ private fun ShareableCard(
                             .fillMaxSize()
                             .background(
                                 brush = Brush.radialGradient(
-                                    colors = listOf(primaryColor.copy(alpha = 0.45f), Color.Transparent),
-                                    radius = 700f
+                                    colors = listOf(primaryColor.copy(alpha = 0.55f), Color.Transparent),
+                                    radius = 850f,
+                                    center = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY / 2, 0f)
                                 )
                             )
                     )
@@ -992,7 +996,10 @@ private fun ShareableCard(
                         .fillMaxSize()
                         .background(
                             brush = Brush.verticalGradient(
-                                colors = listOf(primaryContainer, secondaryContainer, surfaceContainerLowest)
+                                0.0f to primaryContainer,
+                                0.35f to secondaryContainer,
+                                0.70f to surfaceContainerLowest,
+                                1.0f to Color(0xFF080808)
                             )
                         )
                 )
@@ -1015,10 +1022,10 @@ private fun ShareableCard(
                             .fillMaxSize()
                             .background(
                                 brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        primaryContainer.copy(alpha = 0.65f),
-                                        surfaceContainerLowest.copy(alpha = 0.85f)
-                                    )
+                                    0.0f to primaryContainer.copy(alpha = 0.75f),
+                                    0.40f to primaryContainer.copy(alpha = 0.45f),
+                                    0.80f to surfaceContainerLowest.copy(alpha = 0.92f),
+                                    1.0f to Color(0xFF050505)
                                 )
                             )
                     )
@@ -1028,16 +1035,21 @@ private fun ShareableCard(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(surfaceContainerLowest)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                0.0f to surfaceContainerLowest,
+                                1.0f to Color(0xFF060606)
+                            )
+                        )
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(420.dp)
+                            .size(460.dp)
                             .align(Alignment.TopStart)
-                            .offset(x = (-120).dp, y = (-60).dp)
+                            .offset(x = (-100).dp, y = (-40).dp)
                             .background(
                                 brush = Brush.radialGradient(
-                                    colors = listOf(primaryColor.copy(alpha = 0.18f), Color.Transparent)
+                                    colors = listOf(primaryColor.copy(alpha = 0.25f), Color.Transparent)
                                 )
                             )
                     )
@@ -1049,7 +1061,9 @@ private fun ShareableCard(
                         .fillMaxSize()
                         .background(
                             brush = Brush.verticalGradient(
-                                colors = listOf(primaryContainer, surfaceContainerLowest)
+                                0.0f to primaryContainer,
+                                0.50f to surfaceContainerLowest,
+                                1.0f to Color(0xFF080808)
                             )
                         )
                 ) {
@@ -1059,8 +1073,8 @@ private fun ShareableCard(
                             .background(
                                 brush = Brush.linearGradient(
                                     colors = listOf(
-                                        primaryColor.copy(alpha = 0.38f),
-                                        secondaryColor.copy(alpha = 0.28f),
+                                        primaryColor.copy(alpha = 0.42f),
+                                        secondaryColor.copy(alpha = 0.32f),
                                         Color.Transparent
                                     )
                                 )
@@ -1069,14 +1083,14 @@ private fun ShareableCard(
                 }
             }
         }
-        // Vignette for depth
+        // Smooth Vignette for rich depth at the device borders
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     brush = Brush.radialGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f)),
-                        radius = 1200f
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.50f)),
+                        radius = 1300f
                     )
                 )
         )
@@ -1085,20 +1099,20 @@ private fun ShareableCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
 
             if (!isLyricsMode) {
                 // ── SONG CARD (Full Player Sheet Layout) ──────────────────────
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
-                        .clip(AbsoluteSmoothCornerShape(20.dp, 60))
+                        .clip(AbsoluteSmoothCornerShape(22.dp, 60))
                         .background(activeCardScheme.primaryContainer)
-                        .padding(10.dp),
+                        .padding(horizontal = 11.dp, vertical = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     SongMiniCard(song = song, albumScheme = activeCardScheme, isCardDark = isCardDark)
@@ -1249,14 +1263,14 @@ private fun SongMiniCard(
             .fillMaxWidth()
             .background(Color.Transparent),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // ── 1. Album Artwork (Rounded corners matching full player sheet) ─────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(albumScheme.surfaceContainerHighest),
             contentAlignment = Alignment.Center
         ) {
@@ -1272,15 +1286,15 @@ private fun SongMiniCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 1.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp)
+                .padding(top = 3.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
             Text(
                 text = song.title,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-                lineHeight = 16.sp,
+                fontSize = 13.5.sp,
+                lineHeight = 17.sp,
                 color = albumScheme.onPrimaryContainer,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1289,8 +1303,8 @@ private fun SongMiniCard(
                 text = song.displayArtist,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Medium,
-                fontSize = 10.sp,
-                lineHeight = 13.sp,
+                fontSize = 10.5.sp,
+                lineHeight = 14.sp,
                 color = albumScheme.onPrimaryContainer.copy(alpha = 0.75f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1306,7 +1320,7 @@ private fun SongMiniCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(10.dp),
+                .height(12.dp),
             contentAlignment = Alignment.CenterStart
         ) {
             LinearWavyProgressIndicator(
@@ -1327,7 +1341,7 @@ private fun SongMiniCard(
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(10.dp)
+                    .height(12.dp)
             ) {
                 val thumbRadiusPx = 4.dp.toPx()
                 val thumbX = size.width * progressRatio
@@ -1343,7 +1357,7 @@ private fun SongMiniCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .offset(y = (-3).dp)
+                .offset(y = (-2).dp)
                 .padding(horizontal = 0.dp)
         ) {
             Row(
@@ -1399,14 +1413,14 @@ private fun SongMiniCard(
         val playPauseTint = albumScheme.onTertiaryFixed
         val skipBg = albumScheme.primary
         val skipTint = albumScheme.onPrimary
-        val heroCorner = 14.dp
+        val heroCorner = 15.dp
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 1.dp)
-                .height(38.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                .padding(top = 2.dp)
+                .height(44.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Previous Button
