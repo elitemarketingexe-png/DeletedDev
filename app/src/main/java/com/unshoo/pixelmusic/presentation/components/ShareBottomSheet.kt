@@ -491,7 +491,8 @@ fun ShareBottomSheet(
                                         activeThemeStyle = style
                                     }
                             ) {
-                                // Draw preview inside swatch circle
+                                // Draw preview inside swatch circle (Always rich dark theme palette)
+                                val darkPalette = albumColorSchemeState?.dark ?: DarkColorScheme
                                 when (style) {
                                     ShareThemeStyle.DYNAMIC_PALETTE -> {
                                         Box(
@@ -500,9 +501,9 @@ fun ShareBottomSheet(
                                                 .background(
                                                     brush = Brush.linearGradient(
                                                         colors = listOf(
-                                                            colorScheme.primaryContainer,
-                                                            colorScheme.secondaryContainer.copy(alpha = 0.6f),
-                                                            colorScheme.surfaceContainerLow
+                                                            darkPalette.primaryContainer,
+                                                            darkPalette.secondaryContainer.copy(alpha = 0.6f),
+                                                            darkPalette.surfaceContainerLow
                                                         )
                                                     )
                                                 )
@@ -523,9 +524,9 @@ fun ShareBottomSheet(
                                                 .background(
                                                     brush = Brush.linearGradient(
                                                         colors = listOf(
-                                                            primaryColor.copy(alpha = 0.85f),
-                                                            tertiaryColor.copy(alpha = 0.7f),
-                                                            colorScheme.surfaceContainerHighest
+                                                            darkPalette.primary.copy(alpha = 0.85f),
+                                                            darkPalette.tertiary.copy(alpha = 0.7f),
+                                                            darkPalette.surfaceContainerHighest
                                                         )
                                                     )
                                                 )
@@ -543,7 +544,7 @@ fun ShareBottomSheet(
                                                     .align(Alignment.Center)
                                                     .background(
                                                         brush = Brush.radialGradient(
-                                                            colors = listOf(primaryColor.copy(alpha = 0.6f), Color.Transparent)
+                                                            colors = listOf(darkPalette.primary.copy(alpha = 0.6f), Color.Transparent)
                                                         )
                                                     )
                                             )
@@ -556,9 +557,9 @@ fun ShareBottomSheet(
                                                 .background(
                                                     brush = Brush.linearGradient(
                                                         colors = listOf(
-                                                            primaryColor,
-                                                            secondaryColor,
-                                                            tertiaryColor
+                                                            darkPalette.primary,
+                                                            darkPalette.secondary,
+                                                            darkPalette.tertiary
                                                         )
                                                     )
                                                 )
@@ -820,13 +821,14 @@ private fun ShareableCard(
     val cardRatio = 9f / 16f
     val darkScheme = albumColorScheme?.dark ?: DarkColorScheme
     val lightScheme = albumColorScheme?.light ?: LightColorScheme
-    val activeScheme = colorScheme
 
-    val primaryColor = activeScheme.primary
-    val secondaryColor = activeScheme.secondary
-    val tertiaryColor = activeScheme.tertiary
-    val surfaceContainerLow = activeScheme.surfaceContainerLow
-    val surfaceContainerLowest = activeScheme.surfaceContainerLowest
+    // Outer card background is ALWAYS dark & rich for Instagram / Snapchat share cards
+    val bgScheme = darkScheme
+    val primaryColor = bgScheme.primary
+    val secondaryColor = bgScheme.secondary
+    val tertiaryColor = bgScheme.tertiary
+    val surfaceContainerLow = bgScheme.surfaceContainerLow
+    val surfaceContainerLowest = bgScheme.surfaceContainerLowest
 
     Box(
         modifier = modifier
@@ -834,11 +836,11 @@ private fun ShareableCard(
             .shadow(elevation = 16.dp, shape = cardShape, clip = true)
             .clip(cardShape)
     ) {
-        // ── 1. Outer Background ─────────────────────────────────────────────
+        // ── 1. Outer Background (Always Dark & Dynamic) ─────────────────────
         // Lyrics card: full-bleed album art as background
         // Song card: themeStyle dynamic dark bg
-        val primaryContainer = activeScheme.primaryContainer
-        val secondaryContainer = activeScheme.secondaryContainer
+        val primaryContainer = bgScheme.primaryContainer
+        val secondaryContainer = bgScheme.secondaryContainer
 
         when (themeStyle) {
             ShareThemeStyle.DYNAMIC_PALETTE -> {
@@ -974,11 +976,11 @@ private fun ShareableCard(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .clip(AbsoluteSmoothCornerShape(20.dp, 60))
-                        .background(activeScheme.primaryContainer)
+                        .background(darkScheme.primaryContainer)
                         .padding(10.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    SongMiniCard(song = song, albumScheme = activeScheme)
+                    SongMiniCard(song = song, albumScheme = darkScheme)
                 }
             } else {
                 // ── LYRICS PANEL ─────────────────────────────────────────────
@@ -1173,25 +1175,47 @@ private fun SongMiniCard(
             )
         }
 
-        // ── 3. Wavy Progress Bar Slider (from commit 5c92eab) ───────────────
+        // ── 3. Wavy Progress Bar Slider + Thumb Indicator ──────────────────
         val density = LocalDensity.current
         val stroke = remember(density) {
             Stroke(width = with(density) { 2.5.dp.toPx() }, cap = StrokeCap.Round)
         }
 
-        LinearWavyProgressIndicator(
-            progress = { progressRatio },
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(8.dp),
-            color = albumScheme.primary,
-            trackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.2f),
-            stroke = stroke,
-            trackStroke = stroke,
-            wavelength = 8.dp,
-            amplitude = { 0.35f },
-            waveSpeed = 4.dp
-        )
+                .height(10.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            LinearWavyProgressIndicator(
+                progress = { progressRatio },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp),
+                color = albumScheme.primary,
+                trackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.2f),
+                stroke = stroke,
+                trackStroke = stroke,
+                wavelength = 11.dp,
+                amplitude = { 0.35f },
+                waveSpeed = 4.dp
+            )
+
+            // Thumb Indicator dot
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+            ) {
+                val thumbRadiusPx = 4.dp.toPx()
+                val thumbX = size.width * progressRatio
+                drawCircle(
+                    color = albumScheme.onPrimaryContainer,
+                    radius = thumbRadiusPx,
+                    center = Offset(thumbX.coerceIn(thumbRadiusPx, size.width - thumbRadiusPx), size.height / 2)
+                )
+            }
+        }
 
         // ── 4. Timestamps & Audio Meta Badge ─────────────────────────────────
         Box(
