@@ -813,8 +813,7 @@ private fun ShareableCard(
     val cardRatio = 9f / 16f
     val darkScheme = albumColorScheme?.dark ?: DarkColorScheme
     val lightScheme = albumColorScheme?.light ?: LightColorScheme
-    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val activeScheme = if (isDark) darkScheme else lightScheme
+    val activeScheme = colorScheme
 
     val primaryColor = activeScheme.primary
     val secondaryColor = activeScheme.secondary
@@ -1149,8 +1148,8 @@ private fun SongMiniCard(
                 text = song.title,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                lineHeight = 20.sp,
+                fontSize = 13.sp,
+                lineHeight = 16.sp,
                 color = albumScheme.onPrimaryContainer,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1159,38 +1158,38 @@ private fun SongMiniCard(
                 text = song.displayArtist,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Medium,
-                fontSize = 12.sp,
-                lineHeight = 15.sp,
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
                 color = albumScheme.onPrimaryContainer.copy(alpha = 0.75f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
 
-        // ── 3. Wavy Progress Bar Slider ──────────────────────────────────────
-        WavySliderExpressive(
-            value = progressRatio,
-            onValueChange = {},
-            activeTrackColor = albumScheme.onPrimaryContainer,
-            inactiveTrackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.22f),
-            thumbColor = albumScheme.onPrimaryContainer,
-            isPlaying = true,
-            strokeWidth = 2.dp,
-            thumbRadius = 3.5.dp,
-            thumbLineHeightWhenInteracting = 7.dp,
-            waveAmplitudeWhenPlaying = 2.dp,
-            wavelength = 14.dp,
-            trackEdgePadding = 0.dp,
+        // ── 3. Wavy Progress Bar Slider (from commit 5c92eab) ───────────────
+        val density = LocalDensity.current
+        val stroke = remember(density) {
+            Stroke(width = with(density) { 2.5.dp.toPx() }, cap = StrokeCap.Round)
+        }
+
+        LinearWavyProgressIndicator(
+            progress = { progressRatio },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 0.dp, bottom = 0.dp)
+                .height(8.dp),
+            color = albumScheme.primary,
+            trackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.2f),
+            stroke = stroke,
+            trackStroke = stroke,
+            wavelength = 8.dp,
+            amplitude = { 0.35f },
+            waveSpeed = 4.dp
         )
 
         // ── 4. Timestamps & Audio Meta Badge ─────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .offset(y = (-4).dp)
                 .padding(horizontal = 0.dp)
         ) {
             Row(
@@ -1204,14 +1203,14 @@ private fun SongMiniCard(
                     text = formattedProgress,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 9.sp,
+                    fontSize = 7.sp,
                     color = albumScheme.onPrimaryContainer.copy(alpha = 0.85f)
                 )
                 Text(
                     text = formattedDuration,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 9.sp,
+                    fontSize = 7.sp,
                     color = albumScheme.onPrimaryContainer.copy(alpha = 0.85f)
                 )
             }
@@ -1219,7 +1218,7 @@ private fun SongMiniCard(
             Surface(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(horizontal = 36.dp),
+                    .padding(horizontal = 30.dp),
                 shape = RoundedCornerShape(999.dp),
                 color = albumScheme.onPrimaryContainer.copy(alpha = 0.14f),
                 contentColor = albumScheme.onPrimaryContainer.copy(alpha = 0.96f)
@@ -1229,11 +1228,11 @@ private fun SongMiniCard(
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = GoogleSansRounded,
                         fontWeight = FontWeight.Medium,
-                        fontSize = 3.sp
+                        fontSize = 6.5.sp
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp)
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
                 )
             }
         }
