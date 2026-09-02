@@ -1085,11 +1085,12 @@ private fun ShareableCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(4.dp))
+            // Spacer to gracefully push the song minicard downward and eliminate excessive gap between card & pill
+            Spacer(Modifier.height(18.dp))
 
             if (!isLyricsMode) {
                 // ── SONG CARD (Full Player Sheet Layout) ──────────────────────
@@ -1148,45 +1149,45 @@ private fun ShareableCard(
             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(14.dp))
                         .background(Color.Black.copy(alpha = 0.35f))
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp))
                         .clickable {
                             try { uriHandler.openUri(GITHUB_LINK) } catch (e: Exception) { }
                         }
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                        .padding(horizontal = 10.dp, vertical = 3.5.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Link,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(10.dp)
                     )
                     Text(
                         text = "PixelMusic",
                         fontFamily = GoogleSansRounded,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp,
+                        fontSize = 9.5.sp,
                         color = Color.White
                     )
                     Icon(
                         imageVector = Icons.Rounded.ChevronRight,
                         contentDescription = null,
                         tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(13.dp)
+                        modifier = Modifier.size(11.dp)
                     )
                 }
                 Text(
                     text = "github.com/ianshulyadav",
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 8.sp,
+                    fontSize = 7.sp,
                     color = Color.White.copy(alpha = 0.45f),
                     textAlign = TextAlign.Center
                 )
