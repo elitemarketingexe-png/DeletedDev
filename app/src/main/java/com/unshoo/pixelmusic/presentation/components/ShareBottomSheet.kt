@@ -198,9 +198,10 @@ fun ShareBottomSheet(
             try {
                 val rawBitmap = captureController.captureAsync().await().asAndroidBitmap()
                 val targetWidth = 1080
-                val targetHeight = 2160 // Exact 10:20 (1:2) aspect ratio canvas (1080x2160)
+                // Exact 11:20 aspect ratio canvas: width : height = 11 : 20 -> 1080 x (1080 * 20 / 11) = 1080 x 1964
+                val targetHeight = (targetWidth * 20f / 11f).toInt()
 
-                // Render into tall 10:20 (1080x2160) canvas extending top/bottom gradient colors
+                // Render into 11:20 canvas extending top/bottom gradient colors
                 val fullStoryBitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
                 val canvas = android.graphics.Canvas(fullStoryBitmap)
 
@@ -224,7 +225,7 @@ fun ShareBottomSheet(
                 }
                 canvas.drawRect(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat(), bgPaint)
 
-                // Scale the 9:16 captured card cleanly (1080x1920) and center vertically on the tall canvas
+                // Scale the 9:16 captured card cleanly (1080x1920) and center vertically on the 11:20 canvas
                 val cardHeight = 1920
                 val scaledCard = Bitmap.createScaledBitmap(rawBitmap, targetWidth, cardHeight, true)
                 val topOffset = ((targetHeight - cardHeight) / 2f).coerceAtLeast(0f)
