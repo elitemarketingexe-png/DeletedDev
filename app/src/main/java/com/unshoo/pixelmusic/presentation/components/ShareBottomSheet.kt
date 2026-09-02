@@ -1223,11 +1223,11 @@ private fun SongMiniCard(
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = GoogleSansRounded,
                         fontWeight = FontWeight.Medium,
-                        fontSize = 7.sp
+                        fontSize = 3.sp
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp)
                 )
             }
         }
