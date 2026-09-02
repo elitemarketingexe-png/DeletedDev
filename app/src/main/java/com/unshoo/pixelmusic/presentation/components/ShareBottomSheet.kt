@@ -1117,7 +1117,7 @@ private fun SongMiniCard(
             .fillMaxWidth()
             .background(Color.Transparent),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         // ── 1. Album Artwork (Rounded corners matching full player sheet) ─────
         Box(
@@ -1136,17 +1136,17 @@ private fun SongMiniCard(
             )
         }
 
-        Spacer(Modifier.height(2.dp))
-
         // ── 2. Song Info + [Lyrics] [More] Pill Action Buttons ────────────────
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(1.dp)
+                verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
                 Text(
                     text = song.title,
@@ -1227,7 +1227,7 @@ private fun SongMiniCard(
             trackEdgePadding = 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 1.dp)
+                .padding(vertical = 0.dp)
         )
 
         // ── 4. Timestamps & Audio Meta Badge ─────────────────────────────────
@@ -1281,8 +1281,6 @@ private fun SongMiniCard(
             }
         }
 
-        Spacer(Modifier.height(2.dp))
-
         // ── 5. Expressive Playback Transport Controls (Prev | Pause | Next) ──
         val playPauseBg = albumScheme.tertiaryFixedDim
         val playPauseTint = albumScheme.onTertiaryFixed
@@ -1293,6 +1291,7 @@ private fun SongMiniCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(top = 1.dp)
                 .height(38.dp),
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically
