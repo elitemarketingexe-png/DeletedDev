@@ -1288,13 +1288,13 @@ private fun SongMiniCard(
         val playPauseTint = albumScheme.onTertiaryFixed
         val skipBg = albumScheme.secondaryFixedDim
         val skipTint = albumScheme.onSecondaryFixed
-        val heroCorner = 18.dp
+        val heroCorner = 14.dp
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                .height(38.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Previous Button
@@ -1310,7 +1310,7 @@ private fun SongMiniCard(
                     imageVector = Icons.Rounded.SkipPrevious,
                     contentDescription = null,
                     tint = skipTint,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
 
@@ -1338,7 +1338,7 @@ private fun SongMiniCard(
                     imageVector = Icons.Rounded.Pause,
                     contentDescription = null,
                     tint = playPauseTint,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
 
@@ -1355,7 +1355,7 @@ private fun SongMiniCard(
                     imageVector = Icons.Rounded.SkipNext,
                     contentDescription = null,
                     tint = skipTint,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
         }
