@@ -84,6 +84,9 @@ import java.io.File
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
+import com.unshoo.pixelmusic.utils.AudioMetaUtils.mimeTypeToFormat
+import com.unshoo.pixelmusic.utils.formatDuration
+import java.util.Locale
 import com.snapchat.kit.sdk.SnapCreative
 import com.snapchat.kit.sdk.creative.models.SnapPhotoContent
 import com.snapchat.kit.sdk.creative.models.SnapVideoContent
@@ -951,57 +954,24 @@ private fun ShareableCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.Top,
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(4.dp))
 
             if (!isLyricsMode) {
-                // ── SONG MINI CARD ───────────────────────────────────────────
-                // Inner card: album-art extracted dynamic color (lightScheme) with glass outline and reduced roundedness
-                // Soft bloom wrapper — blends card edges into gradient bg
+                // ── SONG CARD (Full Player Sheet Layout) ──────────────────────
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                        .drawWithContent {
-                            val centerOffset = Offset(size.width / 2f, size.height / 2f)
-                            val bloomRadius = size.width * 0.55f
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(
-                                        lightScheme.primaryContainer.copy(alpha = 0.22f),
-                                        Color.Transparent
-                                    ),
-                                    center = centerOffset,
-                                    radius = bloomRadius
-                                ),
-                                radius = bloomRadius,
-                                center = centerOffset
-                            )
-                            drawContent()
-                        },
+                        .fillMaxWidth(0.82f)
+                        .clip(AbsoluteSmoothCornerShape(20.dp, 60))
+                        .background(darkScheme.primaryContainer)
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
                     contentAlignment = Alignment.Center
-                ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.88f)
-                        .shadow(
-                            elevation = 24.dp,
-                            shape = RoundedCornerShape(16.dp),
-                            ambientColor = Color.Black.copy(alpha = 0.5f),
-                            spotColor = primaryColor.copy(alpha = 0.5f)
-                        ),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = darkScheme.primaryContainer
-                    ),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
                 ) {
                     SongMiniCard(song = song, albumScheme = darkScheme)
                 }
-                } // end bloom Box
             } else {
                 // ── LYRICS PANEL ─────────────────────────────────────────────
                 val containerColor = if (useSolidLyricsCard) {
@@ -1043,13 +1013,11 @@ private fun ShareableCard(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
-
             // ── PixelMusic pill — OUTSIDE mini card, in outer column ─────────
             val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(5.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
                     modifier = Modifier
@@ -1059,7 +1027,7 @@ private fun ShareableCard(
                         .clickable {
                             try { uriHandler.openUri(GITHUB_LINK) } catch (e: Exception) { }
                         }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
@@ -1088,7 +1056,7 @@ private fun ShareableCard(
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.Medium,
                     fontSize = 8.sp,
-                    color = Color.White.copy(alpha = 0.38f),
+                    color = Color.White.copy(alpha = 0.45f),
                     textAlign = TextAlign.Center
                 )
             }
@@ -1101,7 +1069,7 @@ private fun ShareableCard(
 // Layout: flush full-width art → title → artist → thin progress bar
 // NO controls. NO branding inside this card.
 // ────────────────────────────────────────────────────────────────────────────
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun SongMiniCard(
     song: Song,
@@ -1114,7 +1082,7 @@ private fun SongMiniCard(
         val secs = totalSecs % 60
         String.format("%02d:%02d", mins, secs)
     }
-    val progressRatio = 0.42f
+    val progressRatio = 0.31f
     val formattedProgress = remember(durationMs, progressRatio) {
         val progressSecs = ((durationMs * progressRatio) / 1000).toLong()
         val mins = progressSecs / 60
@@ -1122,98 +1090,272 @@ private fun SongMiniCard(
         String.format("%02d:%02d", mins, secs)
     }
 
-    val density = LocalDensity.current
-    val stroke = remember(density) {
-        Stroke(width = with(density) { 2.5.dp.toPx() }, cap = StrokeCap.Round)
+    val audioMetaLabel = remember(song.mimeType, song.bitrate, song.sampleRate) {
+        val formatLabel = mimeTypeToFormat(song.mimeType)
+            .takeIf { it != "-" }
+            ?.uppercase(Locale.getDefault())
+
+        val parts = buildList {
+            song.sampleRate?.takeIf { it > 0 }?.let { add(String.format(Locale.US, "%.1f kHz", it / 1000.0)) }
+            song.bitrate?.takeIf { it > 0 }?.let { bitrateValue ->
+                val kbpsLabel = "${bitrateValue / 1000} kbps"
+                if (formatLabel != null) {
+                    add("$kbpsLabel \u2022 $formatLabel")
+                } else {
+                    add(kbpsLabel)
+                }
+            } ?: formatLabel?.let { add(it) }
+        }
+        parts.takeIf { it.isNotEmpty() }?.joinToString(" \u2022 ") ?: "48.0 kHz \u2022 164 kbps \u2022 OPUS"
     }
+
+    val chipColor = albumScheme.onPrimary.copy(alpha = 0.8f)
+    val chipContentColor = albumScheme.primary
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        albumScheme.primaryContainer,
-                        albumScheme.surfaceContainerLowest
-                    )
-                )
-            ),
-        horizontalAlignment = Alignment.Start
+            .background(Color.Transparent),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // Flush Album Artwork
-        SmartImage(
-            model = song.albumArtUriString,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
+        // ── 1. Album Artwork (Rounded corners matching full player sheet) ─────
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-        )
+                .clip(RoundedCornerShape(14.dp))
+                .background(albumScheme.surfaceContainerHighest),
+            contentAlignment = Alignment.Center
+        ) {
+            SmartImage(
+                model = song.albumArtUriString,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
-        // Refined Info Section
-        Column(
+        Spacer(Modifier.height(2.dp))
+
+        // ── 2. Song Info + [Lyrics] [More] Pill Action Buttons ────────────────
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                Text(
+                    text = song.title,
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    lineHeight = 18.sp,
+                    color = albumScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = song.displayArtist,
+                    fontFamily = GoogleSansRounded,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // [Lyrics] and [More Options] pill buttons matching full player sheet
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilledIconButton(
+                    modifier = Modifier.size(width = 32.dp, height = 34.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = chipColor,
+                        contentColor = chipContentColor
+                    ),
+                    shape = RoundedCornerShape(
+                        topStart = 50.dp, topEnd = 5.dp,
+                        bottomStart = 50.dp, bottomEnd = 5.dp
+                    ),
+                    onClick = {}
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.rounded_lyrics_24),
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                FilledIconButton(
+                    modifier = Modifier.size(width = 32.dp, height = 34.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = chipColor,
+                        contentColor = chipContentColor
+                    ),
+                    shape = RoundedCornerShape(
+                        topStart = 5.dp, topEnd = 50.dp,
+                        bottomStart = 5.dp, bottomEnd = 50.dp
+                    ),
+                    onClick = {}
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.rounded_more_vert_24),
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+        }
+
+        // ── 3. Wavy Progress Bar Slider ──────────────────────────────────────
+        WavySliderExpressive(
+            value = progressRatio,
+            onValueChange = {},
+            activeTrackColor = albumScheme.onPrimaryContainer,
+            inactiveTrackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.22f),
+            thumbColor = albumScheme.onPrimaryContainer,
+            isPlaying = true,
+            strokeWidth = 2.5.dp,
+            thumbRadius = 5.dp,
+            trackEdgePadding = 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+                .padding(vertical = 1.dp)
+        )
+
+        // ── 4. Timestamps & Audio Meta Badge ─────────────────────────────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 0.dp)
         ) {
-            // Song Title
-            Text(
-                text = song.title,
-                fontFamily = GoogleSansRounded,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-                lineHeight = 16.sp,
-                color = albumScheme.onPrimaryContainer,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            // Artist
-            Text(
-                text = song.displayArtist,
-                fontFamily = GoogleSansRounded,
-                fontWeight = FontWeight.Medium,
-                fontSize = 10.sp,
-                lineHeight = 13.sp,
-                color = albumScheme.onPrimaryContainer.copy(alpha = 0.75f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(Modifier.height(2.dp))
-
-            // Expressive Wavy Progress Bar + Timestamps
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.Center),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = formattedProgress,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 8.sp,
-                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.65f)
-                )
-                LinearWavyProgressIndicator(
-                    progress = { progressRatio },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(8.dp),
-                    color = albumScheme.primary,
-                    trackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.2f),
-                    stroke = stroke,
-                    trackStroke = stroke,
-                    wavelength = 8.dp,
-                    amplitude = { 0.35f },
-                    waveSpeed = 4.dp
+                    fontSize = 9.sp,
+                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.85f)
                 )
                 Text(
                     text = formattedDuration,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 8.sp,
-                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.65f)
+                    fontSize = 9.sp,
+                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                )
+            }
+
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 36.dp),
+                shape = RoundedCornerShape(999.dp),
+                color = albumScheme.onPrimaryContainer.copy(alpha = 0.14f),
+                contentColor = albumScheme.onPrimaryContainer.copy(alpha = 0.96f)
+            ) {
+                Text(
+                    text = audioMetaLabel,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = GoogleSansRounded,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 7.5.sp
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                )
+            }
+        }
+
+        Spacer(Modifier.height(2.dp))
+
+        // ── 5. Expressive Playback Transport Controls (Prev | Pause | Next) ──
+        val playPauseBg = albumScheme.tertiaryFixedDim
+        val playPauseTint = albumScheme.onTertiaryFixed
+        val skipBg = albumScheme.secondaryFixedDim
+        val skipTint = albumScheme.onSecondaryFixed
+        val heroCorner = 18.dp
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Previous Button
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(skipBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SkipPrevious,
+                    contentDescription = null,
+                    tint = skipTint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            // Hero Play/Pause Button
+            Box(
+                modifier = Modifier
+                    .weight(1.15f)
+                    .fillMaxHeight()
+                    .clip(
+                        AbsoluteSmoothCornerShape(
+                            cornerRadiusTL = heroCorner,
+                            smoothnessAsPercentTR = 60,
+                            cornerRadiusBL = heroCorner,
+                            smoothnessAsPercentTL = 60,
+                            cornerRadiusTR = heroCorner,
+                            smoothnessAsPercentBL = 60,
+                            cornerRadiusBR = heroCorner,
+                            smoothnessAsPercentBR = 60
+                        )
+                    )
+                    .background(playPauseBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Pause,
+                    contentDescription = null,
+                    tint = playPauseTint,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            // Next Button
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(skipBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.SkipNext,
+                    contentDescription = null,
+                    tint = skipTint,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
