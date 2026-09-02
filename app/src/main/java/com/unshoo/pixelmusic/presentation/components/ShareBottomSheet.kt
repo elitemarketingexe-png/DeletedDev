@@ -186,13 +186,20 @@ fun ShareBottomSheet(
         cornerRadiusBL = 24.dp, smoothnessAsPercentTR = 60
     )
 
-    // Capture bitmap and run share operation
+    // Capture bitmap and run share operation (scaled to high quality 1080x1920 9:16)
     fun captureAndShare(action: suspend (Bitmap) -> Unit) {
         isCapturing = true
         scope.launch {
             try {
-                val bitmap = captureController.captureAsync().await().asAndroidBitmap()
-                action(bitmap)
+                val rawBitmap = captureController.captureAsync().await().asAndroidBitmap()
+                val targetWidth = 1080
+                val targetHeight = 1920
+                val scaledBitmap = if (rawBitmap.width != targetWidth || rawBitmap.height != targetHeight) {
+                    Bitmap.createScaledBitmap(rawBitmap, targetWidth, targetHeight, true)
+                } else {
+                    rawBitmap
+                }
+                action(scaledBitmap)
             } catch (e: Exception) {
                 Toast.makeText(context, "Failed to capture card", Toast.LENGTH_SHORT).show()
             } finally {
@@ -201,7 +208,7 @@ fun ShareBottomSheet(
         }
     }
 
-    // Save generated bitmap to cache
+    // Save generated bitmap to cache (1080x1920 9:16 PNG)
     suspend fun saveBitmapToCache(bitmap: Bitmap): File = withContext(Dispatchers.IO) {
         val cacheDir = File(context.cacheDir, "share_cards").also { it.mkdirs() }
         val file = File(cacheDir, "pixelmusic_share_${System.currentTimeMillis()}.png")
