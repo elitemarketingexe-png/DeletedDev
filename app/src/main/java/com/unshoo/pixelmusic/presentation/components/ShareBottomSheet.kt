@@ -1935,7 +1935,8 @@ private fun shareToInstagramStory(
 
     val storyIntent = Intent("com.instagram.share.ADD_TO_STORY").apply {
         setDataAndType(imageUri, "image/png")
-        putExtra("interactive_asset_uri", imageUri)
+        // Use background_asset_uri so the rendered card fills the story as the background without creating a floating duplicate sticker
+        putExtra("background_asset_uri", imageUri)
         putExtra("source_application", context.packageName)
         putExtra("content_url", GITHUB_LINK)
         if (topColorHex != null) putExtra("top_background_color", topColorHex)
