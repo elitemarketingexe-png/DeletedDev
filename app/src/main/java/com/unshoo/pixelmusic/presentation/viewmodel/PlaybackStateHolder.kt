@@ -404,27 +404,28 @@ class PlaybackStateHolder @Inject constructor(
                 controller.pause()
             } else {
                 _stablePlayerState.update { it.copy(isBuffering = true) }
-                scope?.launch {
+                scope.launch {
                     try {
                         dualPlayerEngine.ensureFreshStreamForResume()
-                        // BUGFIX: if the player is IDLE (after error) or ENDED, play() alone
-                        // does nothing. Call prepare() first so playback can actually start.
-                        val player = dualPlayerEngine.masterPlayer
-                        if (player.playbackState == androidx.media3.exoplayer.ExoPlayer.STATE_IDLE ||
-                            player.playbackState == androidx.media3.exoplayer.ExoPlayer.STATE_ENDED) {
-                            controller.prepare()
+                        withContext(Dispatchers.Main.immediate) {
+                            val activeCtrl = mediaController ?: controller
+                            val player = dualPlayerEngine.masterPlayer
+                            if (player.playbackState == androidx.media3.exoplayer.ExoPlayer.STATE_IDLE ||
+                                player.playbackState == androidx.media3.exoplayer.ExoPlayer.STATE_ENDED) {
+                                activeCtrl.prepare()
+                            }
+                            activeCtrl.play()
                         }
-                        controller.play()
                     } catch (e: Exception) {
                         timber.log.Timber.w(e, "ensureFreshStreamForResume failed; playing anyway")
-                        controller.play()
+                        withContext(Dispatchers.Main.immediate) {
+                            val activeCtrl = mediaController ?: controller
+                            activeCtrl.play()
+                        }
                     } finally {
-                        // BUGFIX: always clear isBuffering, even on exception.
-                        // Without this, a thrown ensureFreshStreamForResume() leaked the spinner
-                        // AND skipped controller.play() entirely.
                         _stablePlayerState.update { it.copy(isBuffering = false) }
                     }
-                } ?: controller.play()
+                }
             }
         }
     }
