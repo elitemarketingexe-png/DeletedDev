@@ -189,49 +189,22 @@ fun ShareBottomSheet(
         cornerRadiusBL = 24.dp, smoothnessAsPercentTR = 60
     )
 
-    // Capture bitmap and run share operation (captures full 9:16 / device aspect ratio image)
+    // Capture bitmap and run share operation (scaled to high quality 1080x1920 9:16)
     fun captureAndShare(action: suspend (Bitmap) -> Unit) {
         isCapturing = true
         scope.launch {
             try {
                 val rawBitmap = captureController.captureAsync().await().asAndroidBitmap()
-                val displayMetrics = context.resources.displayMetrics
-                val screenW = displayMetrics.widthPixels.coerceAtLeast(1080)
-                val screenH = displayMetrics.heightPixels.coerceAtLeast(1920)
-
                 val targetWidth = 1080
-                val targetHeight = ((1080f / screenW) * screenH).toInt().coerceAtLeast(1920)
-
-                // Scale the captured card to fit nicely inside the full canvas while keeping its native 9:16 proportions
+                val targetHeight = 1920
                 val scaledBitmap = if (rawBitmap.width != targetWidth || rawBitmap.height != targetHeight) {
-                    val fullCanvasBitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
-                    val canvas = android.graphics.Canvas(fullCanvasBitmap)
-
-                    // Fill canvas with edge colors from captured bitmap to guarantee 100% full background coverage
-                    val topPixel = rawBitmap.getPixel(rawBitmap.width / 2, 2.coerceAtMost(rawBitmap.height - 1))
-                    val bottomPixel = rawBitmap.getPixel(rawBitmap.width / 2, (rawBitmap.height - 3).coerceAtLeast(0))
-
-                    val bgPaint = android.graphics.Paint().apply {
-                        shader = android.graphics.LinearGradient(
-                            0f, 0f, 0f, targetHeight.toFloat(),
-                            topPixel, bottomPixel,
-                            android.graphics.Shader.TileMode.CLAMP
-                        )
-                    }
-                    canvas.drawRect(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat(), bgPaint)
-
-                    // Draw the card centered without stretching
-                    val cardHeight = (targetWidth * (16f / 9f)).toInt().coerceAtMost(targetHeight)
-                    val scaledCard = Bitmap.createScaledBitmap(rawBitmap, targetWidth, cardHeight, true)
-                    val topOffset = ((targetHeight - cardHeight) / 2f).coerceAtLeast(0f)
-                    canvas.drawBitmap(scaledCard, 0f, topOffset, null)
-
-                    fullCanvasBitmap
+                    Bitmap.createScaledBitmap(rawBitmap, targetWidth, targetHeight, true)
                 } else {
                     rawBitmap
                 }
                 action(scaledBitmap)
             } catch (e: Exception) {
+                android.util.Log.e("ShareBottomSheet", "Failed to capture card", e)
                 Toast.makeText(context, "Failed to capture card", Toast.LENGTH_SHORT).show()
             } finally {
                 isCapturing = false
@@ -1419,11 +1392,13 @@ private fun SongMiniCard(
         }
 
         // ── 5. Expressive Playback Transport Controls (Prev | Pause | Next) ──
-        // Matching the full player's exact color tokens for Light vs Dark
-        val playPauseBg = if (isCardDark) albumScheme.tertiaryFixedDim else albumScheme.primary
-        val playPauseTint = if (isCardDark) albumScheme.onTertiaryFixed else albumScheme.onPrimary
-        val skipBg = if (isCardDark) albumScheme.secondaryFixedDim else albumScheme.primary
-        val skipTint = if (isCardDark) albumScheme.onSecondaryFixed else albumScheme.onPrimary
+        // Exactly matching the full player sheet's button colors in both Light & Dark modes:
+        // Play/Pause = tertiaryFixedDim (container) + onTertiaryFixed (content)
+        // Skip Prev/Next = primary (container) + onPrimary (content)
+        val playPauseBg = albumScheme.tertiaryFixedDim
+        val playPauseTint = albumScheme.onTertiaryFixed
+        val skipBg = albumScheme.primary
+        val skipTint = albumScheme.onPrimary
         val heroCorner = 14.dp
 
         Row(
