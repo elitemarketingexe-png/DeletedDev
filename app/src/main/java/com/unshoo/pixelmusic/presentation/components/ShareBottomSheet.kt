@@ -1138,82 +1138,33 @@ private fun SongMiniCard(
             )
         }
 
-        // ── 2. Song Info + [Lyrics] [More] Pill Action Buttons ────────────────
-        Row(
+        // ── 2. Song Info (Full width, no action buttons) ───────────────────
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 1.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(0.dp)
-            ) {
-                Text(
-                    text = song.title,
-                    fontFamily = GoogleSansRounded,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    lineHeight = 18.sp,
-                    color = albumScheme.onPrimaryContainer,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = song.displayArtist,
-                    fontFamily = GoogleSansRounded,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.75f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            // [Lyrics] and [More Options] pill buttons matching full player sheet
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FilledIconButton(
-                    modifier = Modifier.size(width = 32.dp, height = 34.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = chipColor,
-                        contentColor = chipContentColor
-                    ),
-                    shape = RoundedCornerShape(
-                        topStart = 50.dp, topEnd = 5.dp,
-                        bottomStart = 50.dp, bottomEnd = 5.dp
-                    ),
-                    onClick = {}
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.rounded_lyrics_24),
-                        contentDescription = null,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-                FilledIconButton(
-                    modifier = Modifier.size(width = 32.dp, height = 34.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = chipColor,
-                        contentColor = chipContentColor
-                    ),
-                    shape = RoundedCornerShape(
-                        topStart = 5.dp, topEnd = 50.dp,
-                        bottomStart = 5.dp, bottomEnd = 50.dp
-                    ),
-                    onClick = {}
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.rounded_more_vert_24),
-                        contentDescription = null,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-            }
+            Text(
+                text = song.title,
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                lineHeight = 20.sp,
+                color = albumScheme.onPrimaryContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = song.displayArtist,
+                fontFamily = GoogleSansRounded,
+                fontWeight = FontWeight.Medium,
+                fontSize = 12.sp,
+                lineHeight = 15.sp,
+                color = albumScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
 
         // ── 3. Wavy Progress Bar Slider ──────────────────────────────────────
@@ -1224,18 +1175,22 @@ private fun SongMiniCard(
             inactiveTrackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.22f),
             thumbColor = albumScheme.onPrimaryContainer,
             isPlaying = true,
-            strokeWidth = 2.5.dp,
-            thumbRadius = 5.dp,
+            strokeWidth = 2.dp,
+            thumbRadius = 3.5.dp,
+            thumbLineHeightWhenInteracting = 7.dp,
+            waveAmplitudeWhenPlaying = 2.dp,
+            wavelength = 14.dp,
             trackEdgePadding = 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 0.dp)
+                .padding(top = 0.dp, bottom = 0.dp)
         )
 
         // ── 4. Timestamps & Audio Meta Badge ─────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .offset(y = (-4).dp)
                 .padding(horizontal = 0.dp)
         ) {
             Row(
