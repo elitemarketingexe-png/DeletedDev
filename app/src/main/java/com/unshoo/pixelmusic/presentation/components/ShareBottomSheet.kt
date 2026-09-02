@@ -1287,8 +1287,8 @@ private fun SongMiniCard(
                 text = song.displayArtist,
                 fontFamily = GoogleSansRounded,
                 fontWeight = FontWeight.Medium,
-                fontSize = 9.5.sp,
-                lineHeight = 12.sp,
+                fontSize = 8.5.sp,
+                lineHeight = 11.sp,
                 color = albumScheme.onPrimaryContainer.copy(alpha = 0.75f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
