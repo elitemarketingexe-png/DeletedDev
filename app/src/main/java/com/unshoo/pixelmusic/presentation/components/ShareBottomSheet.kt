@@ -189,16 +189,44 @@ fun ShareBottomSheet(
         cornerRadiusBL = 24.dp, smoothnessAsPercentTR = 60
     )
 
-    // Capture bitmap and run share operation (scaled to high quality 1080x1920 9:16)
+    // Capture bitmap and run share operation (captures full 9:16 / device aspect ratio image)
     fun captureAndShare(action: suspend (Bitmap) -> Unit) {
         isCapturing = true
         scope.launch {
             try {
                 val rawBitmap = captureController.captureAsync().await().asAndroidBitmap()
+                val displayMetrics = context.resources.displayMetrics
+                val screenW = displayMetrics.widthPixels.coerceAtLeast(1080)
+                val screenH = displayMetrics.heightPixels.coerceAtLeast(1920)
+
                 val targetWidth = 1080
-                val targetHeight = 1920
+                val targetHeight = ((1080f / screenW) * screenH).toInt().coerceAtLeast(1920)
+
+                // Scale the captured card to fit nicely inside the full canvas while keeping its native 9:16 proportions
                 val scaledBitmap = if (rawBitmap.width != targetWidth || rawBitmap.height != targetHeight) {
-                    Bitmap.createScaledBitmap(rawBitmap, targetWidth, targetHeight, true)
+                    val fullCanvasBitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(fullCanvasBitmap)
+
+                    // Fill canvas with edge colors from captured bitmap to guarantee 100% full background coverage
+                    val topPixel = rawBitmap.getPixel(rawBitmap.width / 2, 2.coerceAtMost(rawBitmap.height - 1))
+                    val bottomPixel = rawBitmap.getPixel(rawBitmap.width / 2, (rawBitmap.height - 3).coerceAtLeast(0))
+
+                    val bgPaint = android.graphics.Paint().apply {
+                        shader = android.graphics.LinearGradient(
+                            0f, 0f, 0f, targetHeight.toFloat(),
+                            topPixel, bottomPixel,
+                            android.graphics.Shader.TileMode.CLAMP
+                        )
+                    }
+                    canvas.drawRect(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat(), bgPaint)
+
+                    // Draw the card centered without stretching
+                    val cardHeight = (targetWidth * (16f / 9f)).toInt().coerceAtMost(targetHeight)
+                    val scaledCard = Bitmap.createScaledBitmap(rawBitmap, targetWidth, cardHeight, true)
+                    val topOffset = ((targetHeight - cardHeight) / 2f).coerceAtLeast(0f)
+                    canvas.drawBitmap(scaledCard, 0f, topOffset, null)
+
+                    fullCanvasBitmap
                 } else {
                     rawBitmap
                 }
@@ -768,19 +796,20 @@ fun ShareBottomSheet(
                                             "${context.packageName}.fileprovider",
                                             file
                                         )
+                                        val activeDarkScheme = albumColorSchemeState?.dark ?: DarkColorScheme
                                         val topColor = when (activeThemeStyle) {
-                                            ShareThemeStyle.DYNAMIC_PALETTE -> colorScheme.primaryContainer
-                                            ShareThemeStyle.SOOTHING_GRADIENT -> primaryColor
-                                            ShareThemeStyle.BLURRED_ARTWORK -> primaryColor.copy(alpha = 0.5f)
-                                            ShareThemeStyle.MIDNIGHT_MINIMAL -> Color(0xFF0A0A0A)
-                                            ShareThemeStyle.VIBRANT_GLOW -> primaryColor
+                                            ShareThemeStyle.DYNAMIC_PALETTE -> activeDarkScheme.primaryContainer
+                                            ShareThemeStyle.SOOTHING_GRADIENT -> activeDarkScheme.primary
+                                            ShareThemeStyle.BLURRED_ARTWORK -> activeDarkScheme.primaryContainer
+                                            ShareThemeStyle.MIDNIGHT_MINIMAL -> Color(0xFF0C0C0C)
+                                            ShareThemeStyle.VIBRANT_GLOW -> activeDarkScheme.primaryContainer
                                         }
                                         val bottomColor = when (activeThemeStyle) {
-                                            ShareThemeStyle.DYNAMIC_PALETTE -> colorScheme.surfaceContainerLow
-                                            ShareThemeStyle.SOOTHING_GRADIENT -> colorScheme.surfaceContainerHighest
-                                            ShareThemeStyle.BLURRED_ARTWORK -> Color(0xFF141414)
-                                            ShareThemeStyle.MIDNIGHT_MINIMAL -> Color(0xFF0A0A0A)
-                                            ShareThemeStyle.VIBRANT_GLOW -> secondaryColor
+                                            ShareThemeStyle.DYNAMIC_PALETTE -> activeDarkScheme.surfaceContainerLowest
+                                            ShareThemeStyle.SOOTHING_GRADIENT -> activeDarkScheme.surfaceContainerLowest
+                                            ShareThemeStyle.BLURRED_ARTWORK -> activeDarkScheme.surfaceContainerLowest
+                                            ShareThemeStyle.MIDNIGHT_MINIMAL -> Color(0xFF0C0C0C)
+                                            ShareThemeStyle.VIBRANT_GLOW -> activeDarkScheme.surfaceContainerLowest
                                         }
                                         shareToInstagramStory(
                                             context = context,
@@ -1083,7 +1112,7 @@ private fun ShareableCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 20.dp),
+                .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -1099,7 +1128,7 @@ private fun ShareableCard(
                         .padding(10.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    SongMiniCard(song = song, albumScheme = activeCardScheme)
+                    SongMiniCard(song = song, albumScheme = activeCardScheme, isCardDark = isCardDark)
                 }
             } else {
                 // ── LYRICS PANEL ─────────────────────────────────────────────
@@ -1202,7 +1231,8 @@ private fun ShareableCard(
 @Composable
 private fun SongMiniCard(
     song: Song,
-    albumScheme: ColorScheme
+    albumScheme: ColorScheme,
+    isCardDark: Boolean = true
 ) {
     val durationMs = remember(song.duration) { if (song.duration > 0) song.duration else 180000L }
     val formattedDuration = remember(durationMs) {
@@ -1351,14 +1381,14 @@ private fun SongMiniCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = formattedProgress,
+                    formattedProgress,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 7.sp,
                     color = albumScheme.onPrimaryContainer.copy(alpha = 0.85f)
                 )
                 Text(
-                    text = formattedDuration,
+                    formattedDuration,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 7.sp,
@@ -1389,10 +1419,11 @@ private fun SongMiniCard(
         }
 
         // ── 5. Expressive Playback Transport Controls (Prev | Pause | Next) ──
-        val playPauseBg = albumScheme.tertiaryFixedDim
-        val playPauseTint = albumScheme.onTertiaryFixed
-        val skipBg = albumScheme.secondaryFixedDim
-        val skipTint = albumScheme.onSecondaryFixed
+        // Matching the full player's exact color tokens for Light vs Dark
+        val playPauseBg = if (isCardDark) albumScheme.tertiaryFixedDim else albumScheme.primary
+        val playPauseTint = if (isCardDark) albumScheme.onTertiaryFixed else albumScheme.onPrimary
+        val skipBg = if (isCardDark) albumScheme.secondaryFixedDim else albumScheme.primary
+        val skipTint = if (isCardDark) albumScheme.onSecondaryFixed else albumScheme.onPrimary
         val heroCorner = 14.dp
 
         Row(
@@ -1935,7 +1966,6 @@ private fun shareToInstagramStory(
 
     val storyIntent = Intent("com.instagram.share.ADD_TO_STORY").apply {
         setDataAndType(imageUri, "image/png")
-        putExtra("background_asset_uri", imageUri)
         putExtra("interactive_asset_uri", imageUri)
         putExtra("source_application", context.packageName)
         putExtra("content_url", GITHUB_LINK)
