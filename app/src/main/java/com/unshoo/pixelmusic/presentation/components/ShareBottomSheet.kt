@@ -964,10 +964,10 @@ private fun ShareableCard(
                 // ── SONG CARD (Full Player Sheet Layout) ──────────────────────
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.82f)
+                        .fillMaxWidth(0.88f)
                         .clip(AbsoluteSmoothCornerShape(20.dp, 60))
                         .background(darkScheme.primaryContainer)
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                        .padding(10.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     SongMiniCard(song = song, albumScheme = darkScheme)
@@ -1109,6 +1109,8 @@ private fun SongMiniCard(
         parts.takeIf { it.isNotEmpty() }?.joinToString(" \u2022 ") ?: "48.0 kHz \u2022 164 kbps \u2022 OPUS"
     }
 
+    // Full player V2 color mappings
+    val playerOnBaseColor = albumScheme.onPrimaryContainer
     val chipColor = albumScheme.onPrimary.copy(alpha = 0.8f)
     val chipContentColor = albumScheme.primary
 
@@ -1117,9 +1119,9 @@ private fun SongMiniCard(
             .fillMaxWidth()
             .background(Color.Transparent),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // ── 1. Album Artwork (Rounded corners matching full player sheet) ─────
+        // ── 1. Album Artwork (Full player V2 style) ───────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1136,14 +1138,17 @@ private fun SongMiniCard(
             )
         }
 
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(6.dp))
 
-        // ── 2. Song Info + [Lyrics] [More] Pill Action Buttons ────────────────
+        // ── 2. Song Info + Action Pill Row (V2 SongMetadataDisplaySection) ─
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Song title + artist (weighted to fill)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(1.dp)
@@ -1152,9 +1157,9 @@ private fun SongMiniCard(
                     text = song.title,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    lineHeight = 18.sp,
-                    color = albumScheme.onPrimaryContainer,
+                    fontSize = 18.sp,
+                    lineHeight = 22.sp,
+                    color = playerOnBaseColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1162,79 +1167,78 @@ private fun SongMiniCard(
                     text = song.displayArtist,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.Medium,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    color = playerOnBaseColor.copy(alpha = 0.7f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            // [Lyrics] and [More Options] pill buttons matching full player sheet
+            // [Lyrics] [More] pill buttons — V2 portrait mode style
             Row(
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 FilledIconButton(
-                    modifier = Modifier.size(width = 32.dp, height = 34.dp),
+                    modifier = Modifier.size(width = 36.dp, height = 40.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = chipColor,
                         contentColor = chipContentColor
                     ),
                     shape = RoundedCornerShape(
-                        topStart = 50.dp, topEnd = 5.dp,
-                        bottomStart = 50.dp, bottomEnd = 5.dp
+                        topStart = 50.dp, topEnd = 6.dp,
+                        bottomStart = 50.dp, bottomEnd = 6.dp
                     ),
                     onClick = {}
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.rounded_lyrics_24),
                         contentDescription = null,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
                 FilledIconButton(
-                    modifier = Modifier.size(width = 32.dp, height = 34.dp),
+                    modifier = Modifier.size(width = 36.dp, height = 40.dp),
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = chipColor,
                         contentColor = chipContentColor
                     ),
                     shape = RoundedCornerShape(
-                        topStart = 5.dp, topEnd = 50.dp,
-                        bottomStart = 5.dp, bottomEnd = 50.dp
+                        topStart = 6.dp, topEnd = 50.dp,
+                        bottomStart = 6.dp, bottomEnd = 50.dp
                     ),
                     onClick = {}
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.rounded_more_vert_24),
                         contentDescription = null,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
         }
 
-        // ── 3. Wavy Progress Bar Slider ──────────────────────────────────────
+        // ── 3. Wavy Progress Slider (V2 EfficientSlider style) ───────────
         WavySliderExpressive(
             value = progressRatio,
             onValueChange = {},
-            activeTrackColor = albumScheme.onPrimaryContainer,
-            inactiveTrackColor = albumScheme.onPrimaryContainer.copy(alpha = 0.22f),
-            thumbColor = albumScheme.onPrimaryContainer,
+            activeTrackColor = playerOnBaseColor,
+            inactiveTrackColor = playerOnBaseColor.copy(alpha = 0.22f),
+            thumbColor = playerOnBaseColor,
             isPlaying = true,
-            strokeWidth = 2.5.dp,
+            strokeWidth = 3.dp,
             thumbRadius = 5.dp,
             trackEdgePadding = 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 1.dp)
+                .padding(vertical = 4.dp)
         )
 
-        // ── 4. Timestamps & Audio Meta Badge ─────────────────────────────────
+        // ── 4. Time Labels + Centered Audio Meta Badge (V2 EfficientTimeLabels) ─
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 0.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -1247,57 +1251,57 @@ private fun SongMiniCard(
                     text = formattedProgress,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 9.sp,
-                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    fontSize = 11.sp,
+                    color = playerOnBaseColor
                 )
                 Text(
                     text = formattedDuration,
                     fontFamily = GoogleSansRounded,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 9.sp,
-                    color = albumScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    fontSize = 11.sp,
+                    color = playerOnBaseColor
                 )
             }
 
             Surface(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(horizontal = 36.dp),
+                    .padding(horizontal = 40.dp),
                 shape = RoundedCornerShape(999.dp),
-                color = albumScheme.onPrimaryContainer.copy(alpha = 0.14f),
-                contentColor = albumScheme.onPrimaryContainer.copy(alpha = 0.96f)
+                color = playerOnBaseColor.copy(alpha = 0.14f),
+                contentColor = playerOnBaseColor.copy(alpha = 0.96f)
             ) {
                 Text(
                     text = audioMetaLabel,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = GoogleSansRounded,
                         fontWeight = FontWeight.Medium,
-                        fontSize = 7.5.sp
+                        fontSize = 8.sp
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
         }
 
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(6.dp))
 
-        // ── 5. Expressive Playback Transport Controls (Prev | Pause | Next) ──
+        // ── 5. Expressive Transport Controls (V2 AnimatedPlaybackControls) ──
         val playPauseBg = albumScheme.tertiaryFixedDim
         val playPauseTint = albumScheme.onTertiaryFixed
         val skipBg = albumScheme.secondaryFixedDim
         val skipTint = albumScheme.onSecondaryFixed
-        val heroCorner = 18.dp
+        val heroCorner = 20.dp
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp),
+                .height(56.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Previous Button
+            // Previous Button (CircleShape — V2 expressive skip)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1310,11 +1314,11 @@ private fun SongMiniCard(
                     imageVector = Icons.Rounded.SkipPrevious,
                     contentDescription = null,
                     tint = skipTint,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
 
-            // Hero Play/Pause Button
+            // Hero Play/Pause Button (AbsoluteSmoothCornerShape — V2 expressive)
             Box(
                 modifier = Modifier
                     .weight(1.15f)
@@ -1338,11 +1342,11 @@ private fun SongMiniCard(
                     imageVector = Icons.Rounded.Pause,
                     contentDescription = null,
                     tint = playPauseTint,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(32.dp)
                 )
             }
 
-            // Next Button
+            // Next Button (CircleShape — V2 expressive skip)
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1355,7 +1359,7 @@ private fun SongMiniCard(
                     imageVector = Icons.Rounded.SkipNext,
                     contentDescription = null,
                     tint = skipTint,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(28.dp)
                 )
             }
         }
