@@ -149,6 +149,8 @@ fun ShareBottomSheet(
     var selectedCardMode by remember { mutableStateOf(0) }
     // Lyrics card style: false = Glass, true = Solid Color
     var useSolidLyricsCard by remember { mutableStateOf(false) }
+    // Song card theme mode: true = Dark palette, false = Light palette
+    var isCardDark by remember { mutableStateOf(true) }
 
     // Lyric state
     val cleanedLyrics = remember(song.lyrics, lyricsLines) {
@@ -264,23 +266,134 @@ fun ShareBottomSheet(
                             .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
                     )
                 }
-                // ── Header ──────────────────────────────────────────────────
+                // ── Header (Title + Light/Dark Mode Switcher) ───────────────
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.share_sheet_title),
-                    fontFamily = GoogleSansRounded,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(horizontal = 20.dp)
-                )
-                Text(
-                    text = song.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.share_sheet_title),
+                            fontFamily = GoogleSansRounded,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Text(
+                            text = song.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // Light / Dark Theme Switcher Pill
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.padding(start = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Light Option
+                            val lightSelected = !isCardDark
+                            val lightBgColor by animateColorAsState(
+                                targetValue = if (lightSelected) primaryColor else Color.Transparent,
+                                animationSpec = tween(200),
+                                label = "lightOptionBg"
+                            )
+                            val lightContentColor by animateColorAsState(
+                                targetValue = if (lightSelected) onPrimaryColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                animationSpec = tween(200),
+                                label = "lightOptionContent"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(lightBgColor)
+                                    .clickable {
+                                        if (isCardDark) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            isCardDark = false
+                                        }
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.LightMode,
+                                        contentDescription = "Light Theme",
+                                        tint = lightContentColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = "Light",
+                                        fontFamily = GoogleSansRounded,
+                                        fontWeight = if (lightSelected) FontWeight.Bold else FontWeight.Medium,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = lightContentColor
+                                    )
+                                }
+                            }
+
+                            // Dark Option
+                            val darkSelected = isCardDark
+                            val darkBgColor by animateColorAsState(
+                                targetValue = if (darkSelected) primaryColor else Color.Transparent,
+                                animationSpec = tween(200),
+                                label = "darkOptionBg"
+                            )
+                            val darkContentColor by animateColorAsState(
+                                targetValue = if (darkSelected) onPrimaryColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                animationSpec = tween(200),
+                                label = "darkOptionContent"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(darkBgColor)
+                                    .clickable {
+                                        if (!isCardDark) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            isCardDark = true
+                                        }
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.DarkMode,
+                                        contentDescription = "Dark Theme",
+                                        tint = darkContentColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = "Dark",
+                                        fontFamily = GoogleSansRounded,
+                                        fontWeight = if (darkSelected) FontWeight.Bold else FontWeight.Medium,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = darkContentColor
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
 
                 // ── Card Mode Tabs (Song / Lyrics) ──────────────────────────
@@ -443,7 +556,8 @@ fun ShareBottomSheet(
                             colorScheme = colorScheme,
                             cardShape = cardShape,
                             albumColorScheme = albumColorSchemeState,
-                            useSolidLyricsCard = solidMode
+                            useSolidLyricsCard = solidMode,
+                            isCardDark = isCardDark
                         )
                     }
                 }
@@ -817,7 +931,8 @@ private fun ShareableCard(
     colorScheme: ColorScheme,
     cardShape: Shape,
     albumColorScheme: ColorSchemePair?,
-    useSolidLyricsCard: Boolean = false
+    useSolidLyricsCard: Boolean = false,
+    isCardDark: Boolean = true
 ) {
     val cardRatio = 9f / 16f
     val darkScheme = albumColorScheme?.dark ?: DarkColorScheme
@@ -830,6 +945,9 @@ private fun ShareableCard(
     val tertiaryColor = bgScheme.tertiary
     val surfaceContainerLow = bgScheme.surfaceContainerLow
     val surfaceContainerLowest = bgScheme.surfaceContainerLowest
+
+    // Inner song mini card theme (switchable between Light and Dark palette)
+    val activeCardScheme = if (isCardDark) darkScheme else lightScheme
 
     Box(
         modifier = modifier
@@ -977,11 +1095,11 @@ private fun ShareableCard(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .clip(AbsoluteSmoothCornerShape(20.dp, 60))
-                        .background(darkScheme.primaryContainer)
+                        .background(activeCardScheme.primaryContainer)
                         .padding(10.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    SongMiniCard(song = song, albumScheme = darkScheme)
+                    SongMiniCard(song = song, albumScheme = activeCardScheme)
                 }
             } else {
                 // ── LYRICS PANEL ─────────────────────────────────────────────
