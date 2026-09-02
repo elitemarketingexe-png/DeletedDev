@@ -1616,7 +1616,7 @@ class MusicService : MediaLibraryService() {
             // system media surfaces take over.
             requestWidgetFullUpdate(force = true)
             mediaSession?.let { refreshMediaSessionUi(it) }
-            schedulePlaybackSnapshotPersist()
+            schedulePlaybackSnapshotPersist(immediate = !isPlaying)
         }
 
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -1978,7 +1978,7 @@ class MusicService : MediaLibraryService() {
         // so album art and song info appear without the 300-800ms blank period.
         requestWidgetFullUpdate(force = true)
         mediaSession?.let { refreshMediaSessionUi(it) }
-        schedulePlaybackSnapshotPersist()
+        schedulePlaybackSnapshotPersist(immediate = true)
 
         // BUG 4 FIX: Ensure new telemetry session starts on track transition (vital for gapless auto-transitions)
         // BUG 4b FIX (YT Music sync): player.isPlaying is false while the new item is still
@@ -2720,8 +2720,14 @@ class MusicService : MediaLibraryService() {
         for (index in 0 until mediaItemCount) {
             val mediaItem = player.getMediaItemAt(index)
             val metadata = mediaItem.mediaMetadata
-            val uri = mediaItem.localConfiguration?.uri?.toString()
-                ?: metadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI)
+            val rawContentUri = metadata.extras?.getString(MediaItemBuilder.EXTERNAL_EXTRA_CONTENT_URI)
+            val localUri = mediaItem.localConfiguration?.uri?.toString()
+            val uri = when {
+                !rawContentUri.isNullOrBlank() -> rawContentUri
+                localUri?.startsWith("http") == true && mediaItem.mediaId.startsWith("youtube_") -> "youtube://${mediaItem.mediaId.removePrefix("youtube_")}"
+                localUri?.startsWith("http") == true && mediaItem.mediaId.length == 11 && !mediaItem.mediaId.contains("_") -> "youtube://${mediaItem.mediaId}"
+                else -> localUri ?: rawContentUri
+            }
 
             if (mediaItem.mediaId.isBlank() || uri.isNullOrBlank()) {
                 continue

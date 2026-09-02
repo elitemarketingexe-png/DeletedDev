@@ -52,10 +52,8 @@ class MainViewModel @Inject constructor(
                                 .onFailure { e ->
                                     LogUtils.e(this@MainViewModel, e, "Failed to fetch YouTube account info")
                                 }
-                            if (!hasTriggeredAccountLibrarySync) {
-                                hasTriggeredAccountLibrarySync = true
-                                youTubeLibrarySyncManager.syncNow()
-                            }
+                            // Profile info is synced here on login/cookie change;
+                            // Mass library sync is deferred to user pull-to-refresh to avoid startup mass requests.
                         } catch (e: Exception) {
                             LogUtils.e(this@MainViewModel, e, "Error fetching YouTube account info")
                         }
