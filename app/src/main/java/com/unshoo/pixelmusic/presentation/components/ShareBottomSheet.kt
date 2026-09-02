@@ -813,12 +813,14 @@ private fun ShareableCard(
     val cardRatio = 9f / 16f
     val darkScheme = albumColorScheme?.dark ?: DarkColorScheme
     val lightScheme = albumColorScheme?.light ?: LightColorScheme
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val activeScheme = if (isDark) darkScheme else lightScheme
 
-    val primaryColor = darkScheme.primary
-    val secondaryColor = darkScheme.secondary
-    val tertiaryColor = darkScheme.tertiary
-    val surfaceContainerLow = darkScheme.surfaceContainerLow
-    val surfaceContainerLowest = darkScheme.surfaceContainerLowest
+    val primaryColor = activeScheme.primary
+    val secondaryColor = activeScheme.secondary
+    val tertiaryColor = activeScheme.tertiary
+    val surfaceContainerLow = activeScheme.surfaceContainerLow
+    val surfaceContainerLowest = activeScheme.surfaceContainerLowest
 
     Box(
         modifier = modifier
@@ -829,8 +831,8 @@ private fun ShareableCard(
         // ── 1. Outer Background ─────────────────────────────────────────────
         // Lyrics card: full-bleed album art as background
         // Song card: themeStyle dynamic dark bg
-        val primaryContainer = darkScheme.primaryContainer
-        val secondaryContainer = darkScheme.secondaryContainer
+        val primaryContainer = activeScheme.primaryContainer
+        val secondaryContainer = activeScheme.secondaryContainer
 
         when (themeStyle) {
             ShareThemeStyle.DYNAMIC_PALETTE -> {
@@ -966,11 +968,11 @@ private fun ShareableCard(
                     modifier = Modifier
                         .fillMaxWidth(0.88f)
                         .clip(AbsoluteSmoothCornerShape(20.dp, 60))
-                        .background(darkScheme.primaryContainer)
+                        .background(activeScheme.primaryContainer)
                         .padding(10.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    SongMiniCard(song = song, albumScheme = darkScheme)
+                    SongMiniCard(song = song, albumScheme = activeScheme)
                 }
             } else {
                 // ── LYRICS PANEL ─────────────────────────────────────────────
