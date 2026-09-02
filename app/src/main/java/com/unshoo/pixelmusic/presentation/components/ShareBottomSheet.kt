@@ -189,20 +189,52 @@ fun ShareBottomSheet(
         cornerRadiusBL = 24.dp, smoothnessAsPercentTR = 60
     )
 
-    // Capture bitmap and run share operation (scaled to high quality 1080x1920 9:16)
+    // Capture bitmap and run share operation:
+    // In-app preview remains standard 9:16;
+    // Shared export automatically extends background to tall 9:19.5 (1080x2340) device screen story canvas
     fun captureAndShare(action: suspend (Bitmap) -> Unit) {
         isCapturing = true
         scope.launch {
             try {
                 val rawBitmap = captureController.captureAsync().await().asAndroidBitmap()
                 val targetWidth = 1080
-                val targetHeight = 1920
-                val scaledBitmap = if (rawBitmap.width != targetWidth || rawBitmap.height != targetHeight) {
-                    Bitmap.createScaledBitmap(rawBitmap, targetWidth, targetHeight, true)
+                val targetHeight = 2160 // Exact 10:20 (1:2) aspect ratio canvas (1080x2160)
+
+                // Render into tall 10:20 (1080x2160) canvas extending top/bottom gradient colors
+                val fullStoryBitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+                val canvas = android.graphics.Canvas(fullStoryBitmap)
+
+                // Sample edge colors safely from software bitmap copy
+                val softwareBitmap = if (rawBitmap.config == Bitmap.Config.HARDWARE) {
+                    rawBitmap.copy(Bitmap.Config.ARGB_8888, false)
                 } else {
                     rawBitmap
                 }
-                action(scaledBitmap)
+
+                val topPixel = softwareBitmap.getPixel(softwareBitmap.width / 2, 4.coerceAtMost(softwareBitmap.height - 1))
+                val bottomPixel = softwareBitmap.getPixel(softwareBitmap.width / 2, (softwareBitmap.height - 5).coerceAtLeast(0))
+
+                val bgPaint = android.graphics.Paint().apply {
+                    isDither = true
+                    shader = android.graphics.LinearGradient(
+                        0f, 0f, 0f, targetHeight.toFloat(),
+                        topPixel, bottomPixel,
+                        android.graphics.Shader.TileMode.CLAMP
+                    )
+                }
+                canvas.drawRect(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat(), bgPaint)
+
+                // Scale the 9:16 captured card cleanly (1080x1920) and center vertically on the tall canvas
+                val cardHeight = 1920
+                val scaledCard = Bitmap.createScaledBitmap(rawBitmap, targetWidth, cardHeight, true)
+                val topOffset = ((targetHeight - cardHeight) / 2f).coerceAtLeast(0f)
+                canvas.drawBitmap(scaledCard, 0f, topOffset, null)
+
+                if (softwareBitmap !== rawBitmap) {
+                    softwareBitmap.recycle()
+                }
+
+                action(fullStoryBitmap)
             } catch (e: Exception) {
                 android.util.Log.e("ShareBottomSheet", "Failed to capture card", e)
                 Toast.makeText(context, "Failed to capture card", Toast.LENGTH_SHORT).show()
@@ -934,9 +966,9 @@ private fun ShareableCard(
     cardShape: Shape,
     albumColorScheme: ColorSchemePair?,
     useSolidLyricsCard: Boolean = false,
-    isCardDark: Boolean = true
+    isCardDark: Boolean = true,
+    cardRatio: Float = 9f / 16f
 ) {
-    val cardRatio = 9f / 16f
     val darkScheme = albumColorScheme?.dark ?: DarkColorScheme
     val lightScheme = albumColorScheme?.light ?: LightColorScheme
 
