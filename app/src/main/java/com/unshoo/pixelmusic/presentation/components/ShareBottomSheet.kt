@@ -1190,6 +1190,7 @@ private fun SongMiniCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .offset(y = (-3).dp)
                 .padding(horizontal = 0.dp)
         ) {
             Row(
