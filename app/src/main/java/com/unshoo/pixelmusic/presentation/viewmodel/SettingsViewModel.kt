@@ -1048,7 +1048,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setBeta05CleanInstallDisclaimerDismissed(dismissed: Boolean) {
+fun setBeta05CleanInstallDisclaimerDismissed(dismissed: Boolean) {
         viewModelScope.launch {
             userPreferencesRepository.setBeta05CleanInstallDisclaimerDismissed(dismissed)
         }

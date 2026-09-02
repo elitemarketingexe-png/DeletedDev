@@ -1090,7 +1090,7 @@ private fun ShareableCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Spacer above the song minicard
-            Spacer(Modifier.height(7.dp))
+            Spacer(Modifier.height(19.dp))
 
             if (!isLyricsMode) {
                 // ── SONG CARD (Full Player Sheet Layout) ──────────────────────
