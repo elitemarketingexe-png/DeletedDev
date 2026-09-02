@@ -1089,14 +1089,14 @@ private fun ShareableCard(
             verticalArrangement = Arrangement.SpaceBetween,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Spacer to gracefully push the song minicard downward and eliminate excessive gap between card & pill
-            Spacer(Modifier.height(18.dp))
+            // Spacer above the song minicard
+            Spacer(Modifier.height(7.dp))
 
             if (!isLyricsMode) {
                 // ── SONG CARD (Full Player Sheet Layout) ──────────────────────
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.78f)
+                        .fillMaxWidth(0.82f)
                         .clip(AbsoluteSmoothCornerShape(18.dp, 60))
                         .background(activeCardScheme.primaryContainer)
                         .padding(horizontal = 9.dp, vertical = 9.dp),
