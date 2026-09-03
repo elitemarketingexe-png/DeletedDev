@@ -184,15 +184,45 @@ class LibraryStateHolder @Inject constructor(
         scope = null
     }
 
-    // --- No-op data loaders (paging flows auto-refresh from DB) ---
+    // --- No-op data loaders (paging flows auto-refresh from DB; nothing to do here) ---
     fun startObservingLibraryData() {}
-    fun loadSongsFromRepository() {}
     fun loadAlbumsFromRepository() {}
     fun loadArtistsFromRepository() {}
     fun loadFoldersFromRepository() {}
-    fun loadSongsIfNeeded() {}
     fun loadAlbumsIfNeeded() {}
     fun loadArtistsIfNeeded() {}
+
+    // --- allSongs / allSongsById hydration ---
+    // NOTE: this is NOT what backs the visible library list (that's songsPagingFlow, above,
+    // and must stay on PagingSource). This is a separate, bounded (~library-size) background
+    // cache that PlayerViewModel relies on for queue building (resolvePlaybackQueueFromSortedIds)
+    // and id->title lookups. It used to be populated eagerly pre-Paging; when the Songs tab
+    // moved to PagingData these loaders were stubbed to no-ops and nobody re-wired the cache,
+    // so every full-queue playback silently fell back to chunked DB fetches instead of an O(1)
+    // map lookup, and the id/title lookups silently missed. Restoring it here, off the paging
+    // path, on a background dispatcher, coalescing concurrent callers into one load.
+    private var songsHydrationJob: kotlinx.coroutines.Job? = null
+
+    fun loadSongsFromRepository() {
+        val activeScope = scope ?: return
+        if (songsHydrationJob?.isActive == true) return
+        songsHydrationJob = activeScope.launch(Dispatchers.IO) {
+            runCatching { musicRepository.getAllSongsOnce() }
+                .onSuccess { songs ->
+                    _allSongsById.value = songs.associateBy { it.id }
+                    _allSongs.value = songs.toImmutableList()
+                }
+                .onFailure { e ->
+                    Timber.e(e, "LibraryStateHolder: failed to hydrate allSongs/allSongsById cache")
+                }
+        }
+    }
+
+    fun loadSongsIfNeeded() {
+        if (_allSongs.value.isEmpty()) {
+            loadSongsFromRepository()
+        }
+    }
 
     // --- Sort options ---
     fun sortSongs(sortOption: SortOption, persist: Boolean = true) {
