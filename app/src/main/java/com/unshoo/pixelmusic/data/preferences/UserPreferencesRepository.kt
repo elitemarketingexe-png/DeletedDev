@@ -139,7 +139,10 @@ constructor(
 ) {
 
     private val backupExcludedKeyNames = setOf(
-        PreferencesKeys.INITIAL_SETUP_DONE.name
+        PreferencesKeys.INITIAL_SETUP_DONE.name,
+        PreferencesKeys.LAST_DAILY_MIX_UPDATE.name,
+        PreferencesKeys.DAILY_MIX_SONG_IDS.name,
+        PreferencesKeys.YOUR_MIX_SONG_IDS.name
     )
 
     private object PreferencesKeys {
@@ -964,6 +967,14 @@ constructor(
     suspend fun saveLastDailyMixUpdateTimestamp(timestamp: Long) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.LAST_DAILY_MIX_UPDATE] = timestamp
+        }
+    }
+
+    suspend fun clearDailyMixData() {
+        dataStore.edit { preferences ->
+            preferences.remove(PreferencesKeys.DAILY_MIX_SONG_IDS)
+            preferences.remove(PreferencesKeys.YOUR_MIX_SONG_IDS)
+            preferences[PreferencesKeys.LAST_DAILY_MIX_UPDATE] = 0L
         }
     }
 

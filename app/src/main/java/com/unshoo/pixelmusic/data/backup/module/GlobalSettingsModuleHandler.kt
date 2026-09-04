@@ -49,9 +49,14 @@ class GlobalSettingsModuleHandler @Inject constructor(
     override suspend fun rollback(snapshot: String) = restore(snapshot)
 
     companion object {
-        /** Keys managed by dedicated module handlers, excluded from global settings. */
+        /** Keys managed by dedicated module handlers or runtime ephemeral state, excluded from global settings. */
         val EXCLUDED_KEYS = PlaylistsModuleHandler.PLAYLIST_KEYS +
             QuickFillModuleHandler.QUICK_FILL_KEYS +
-            EqualizerModuleHandler.EQUALIZER_KEYS
+            EqualizerModuleHandler.EQUALIZER_KEYS +
+            setOf(
+                "last_daily_mix_update",
+                "daily_mix_song_ids",
+                "your_mix_song_ids"
+            )
     }
 }

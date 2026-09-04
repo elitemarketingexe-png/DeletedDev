@@ -130,17 +130,13 @@ class DailyMixStateHolder @Inject constructor(
 
     /**
      * Force update the daily mix regardless of day.
-     * BUGFIX: Inlines the generation directly instead of delegating to updateDailyMix()
-     * which launches a separate coroutine via scope?.launch — that created a race where
-     * updateJob might not be assigned by the time join() was called. Now the generation
-     * runs sequentially within this single coroutine, so completion is guaranteed before
-     * the timestamp is saved.
+     * Atomically clears in-memory and persisted mixes, then recalculates using active library songs.
      */
     fun forceUpdate(favoriteSongIdsFlow: kotlinx.coroutines.flow.Flow<Set<String>>) {
         updateJob?.cancel()
         updateJob = scope?.launch(Dispatchers.IO) {
-            // Reset timestamp first so any concurrent checkAndUpdateIfNeeded sees stale state
-            userPreferencesRepository.saveLastDailyMixUpdateTimestamp(0L)
+            // Immediately purge persisted DataStore IDs and reset timestamp
+            userPreferencesRepository.clearDailyMixData()
 
             val allSongs = musicRepository.getAllSongsOnce()
             if (allSongs.isNotEmpty()) {
