@@ -78,7 +78,7 @@ object Constants {
     object ExoPlayer {
         object Cache {
             const val NAME = "umihi-music-exoplayer"
-            const val SIZE: Long = 1000L * 1024L * 1024L // 1000 MB
+            const val SIZE: Long = 2L * 1024L * 1024L * 1024L // 2 GB (2048 MB)
         }
 
         object SongMetadata {

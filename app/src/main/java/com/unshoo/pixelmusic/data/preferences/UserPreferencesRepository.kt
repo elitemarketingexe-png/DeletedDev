@@ -276,6 +276,8 @@ constructor(
         // Developer Options
         val ALBUM_ART_QUALITY = stringPreferencesKey("album_art_quality")
         val ALBUM_ART_CACHE_LIMIT_MB = intPreferencesKey("album_art_cache_limit_mb")
+        val EXO_CACHE_SIZE_BYTES = longPreferencesKey("exo_cache_size_bytes")
+        val LAST_SUCCESSFUL_YOUTUBE_CLIENT_KEY = stringPreferencesKey("last_successful_youtube_client_key")
         val TAP_BACKGROUND_CLOSES_PLAYER = booleanPreferencesKey("tap_background_closes_player")
         val HAPTICS_ENABLED = booleanPreferencesKey("haptics_enabled")
         val IMMERSIVE_LYRICS_ENABLED = booleanPreferencesKey("immersive_lyrics_enabled")
@@ -2500,6 +2502,32 @@ constructor(
     suspend fun setYoutubePersonalizedQueue(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.YOUTUBE_PERSONALIZED_QUEUE] = enabled
+        }
+    }
+
+    val exoCacheSizeBytesFlow: Flow<Long> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.EXO_CACHE_SIZE_BYTES] ?: (2L * 1024L * 1024L * 1024L) // 2GB default
+        }.distinctUntilChanged()
+
+    suspend fun setExoCacheSizeBytes(sizeBytes: Long) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.EXO_CACHE_SIZE_BYTES] = sizeBytes.coerceAtLeast(100L * 1024L * 1024L)
+        }
+    }
+
+    val lastSuccessfulYoutubeClientKeyFlow: Flow<String?> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.LAST_SUCCESSFUL_YOUTUBE_CLIENT_KEY]
+        }.distinctUntilChanged()
+
+    suspend fun setLastSuccessfulYoutubeClientKey(key: String?) {
+        dataStore.edit { preferences ->
+            if (key != null) {
+                preferences[PreferencesKeys.LAST_SUCCESSFUL_YOUTUBE_CLIENT_KEY] = key
+            } else {
+                preferences.remove(PreferencesKeys.LAST_SUCCESSFUL_YOUTUBE_CLIENT_KEY)
+            }
         }
     }
 }

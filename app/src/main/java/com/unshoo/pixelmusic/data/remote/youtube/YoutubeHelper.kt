@@ -1368,10 +1368,16 @@ object YoutubeHelper {
             context.applicationContext,
             YoutubeHelperEntryPoint::class.java
         )
+        val userPrefs = entryPoint.userPreferencesRepository()
         val preferredClient = try {
-            entryPoint.userPreferencesRepository().playerStreamClientFlow.first()
+            userPrefs.playerStreamClientFlow.first()
         } catch (_: Exception) {
             PlayerStreamClient.WEB_REMIX
+        }
+        if (lastSuccessfulClientKey == null) {
+            try {
+                lastSuccessfulClientKey = userPrefs.lastSuccessfulYoutubeClientKeyFlow.first()
+            } catch (_: Exception) {}
         }
 
         var authState = YouTube.currentPlaybackAuthState()
@@ -1472,7 +1478,13 @@ object YoutubeHelper {
                 streamResponse.playbackTracking?.videostatsWatchtimeUrl?.baseUrl?.let {
                     watchtimeTrackingCache[videoId] = it
                 }
-                lastSuccessfulClientKey = StreamClientUtils.buildClientKey(client)
+                val clientKey = StreamClientUtils.buildClientKey(client)
+                lastSuccessfulClientKey = clientKey
+                backgroundScope.launch {
+                    try {
+                        entryPoint.userPreferencesRepository().setLastSuccessfulYoutubeClientKey(clientKey)
+                    } catch (_: Exception) {}
+                }
                 PixelMusicHelper.printd(
                     "$videoId : stream via ArchiveTune fallback client ${client.clientName} (bitrate=${resolved.third})"
                 )
