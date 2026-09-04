@@ -3750,22 +3750,19 @@ class PlayerViewModel @Inject constructor(
             setPreparingSong(song.id)
         }
 
-        // 1. Play the seed song immediately if not already playing so there is zero delay!
-        // BUGFIX: Assign this launch to directPlaybackJob so that if the user taps a different
-        // song while this is still running (saving to DB + resolving start song), the
-        // beginDirectPlaybackRequest() call in the new tap will cancel it immediately.
-        // Previously this was a fire-and-forget launch — uncancellable, causing the old song
-        // to start playing AFTER the new song had already started.
+        // 1. Play the seed song immediately if not already playing with 100% priority and ZERO blocking!
         if (!isAlreadyPlaying) {
             directPlaybackJob = viewModelScope.launch {
                 if (isDirectPlaybackRequestStale(requestToken)) return@launch
-                withContext(Dispatchers.IO) {
-                    saveYoutubeSongsToDb(listOf(song))
+                // Save seed song to DB asynchronously in the background so it never holds up playback start
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        saveYoutubeSongsToDb(listOf(song))
+                    } catch (e: Exception) {
+                        Timber.e(e, "ArchiveTune Queue Builder: Failed to save seed song to DB in background")
+                    }
                 }
                 if (isDirectPlaybackRequestStale(requestToken)) return@launch
-                // Pass the already-minted requestToken directly into internalPlaySongs
-                // so it does NOT call beginDirectPlaybackRequest() again (which would bump
-                // the token and break the staleness check in the recommendations coroutine below).
                 internalPlaySongs(listOf(song), song, queueName, playlistId, requestToken)
                 if (requestToken == directPlaybackToken) {
                     directPlaybackJob = null
@@ -3773,117 +3770,116 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
-        // 2. Fetch related recommendations in the background and update the player's queue.
-        // BUGFIX: Store in directPlaybackApplyJob so beginDirectPlaybackRequest() on the next
-        // tap cancels it — previously this was also fire-and-forget and could overwrite the
-        // new song's queue with old recommendations after the user had already moved on.
-        directPlaybackApplyJob = viewModelScope.launch {
-            val videoId = resolveQuickPicksVideoId(song)
-            if (videoId.isNullOrBlank()) {
-                Timber.w("ArchiveTune Queue Builder: Could not resolve videoId for seed song '${song.title}'")
-                return@launch
-            }
-            if (isDirectPlaybackRequestStale(requestToken)) return@launch
-
-            val endpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
-                videoId = videoId,
-                playlistId = "RDAMVM$videoId"
-            )
-
-            _playerUiState.update { it.copy(isLoadingInitialSongs = true) }
-            val result = withContext(Dispatchers.IO) {
-                unshoo.ianshulyadav.pixelmusic.innertube.YouTube.next(endpoint)
-            }
-            if (isDirectPlaybackRequestStale(requestToken)) {
-                _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
-                return@launch
-            }
-
-            result.onSuccess { nextResult ->
-                val relatedSongs = nextResult.items.map { it.toNativeSong() }
-                if (relatedSongs.isNotEmpty()) {
-                    val fullQueue = withContext(Dispatchers.IO) {
-                        com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.buildMixQueue(song, relatedSongs)
-                    }
-
-                    launch(Dispatchers.IO) {
-                        try {
-                            saveYoutubeSongsToDb(fullQueue)
-                        } catch (e: Exception) {
-                            Timber.e(e, "ArchiveTune Queue Builder: Failed to save queue songs to DB in background")
-                        }
-                    }
-
-                    if (isDirectPlaybackRequestStale(requestToken)) return@launch
-
-                    try {
-                        val newSongs = fullQueue.drop(1)
-                        val mediaItems = newSongs.map { MediaItemBuilder.build(it) }.toMutableList()
-                        if (mediaItems.isNotEmpty()) {
-                            runCatching {
-                                mediaItems[0] = dualPlayerEngine.preResolveForPlayback(mediaItems[0])
-                            }
-                        }
-                        withContext(Dispatchers.Main.immediate) {
-                            if (isDirectPlaybackRequestStale(requestToken)) return@withContext
-                            val player = dualPlayerEngine.masterPlayer
-                            val cItem = player.currentMediaItem
-                            val cMediaId = cItem?.mediaId
-                            val nowActiveSong = playbackStateHolder.stablePlayerState.value.currentSong
-                            val matchesCurrent = cMediaId != null && (
-                                cMediaId == song.id ||
-                                (song.youtubeId != null && cMediaId == song.youtubeId) ||
-                                cMediaId.removePrefix("youtube_") == song.id.removePrefix("youtube_") ||
-                                (nowActiveSong != null && nowActiveSong.title.equals(song.title, ignoreCase = true) && nowActiveSong.artist.equals(song.artist, ignoreCase = true))
-                            )
-                            if (matchesCurrent || player.mediaItemCount <= 1) {
-                                val activeIndex = player.currentMediaItemIndex
-                                val totalCount = player.mediaItemCount
-                                if (activeIndex >= 0 && activeIndex < totalCount) {
-                                    if (totalCount > activeIndex + 1) {
-                                        player.removeMediaItems(activeIndex + 1, totalCount)
-                                    }
-                                    if (activeIndex > 0) {
-                                        player.removeMediaItems(0, activeIndex)
-                                    }
-                                } else if (totalCount > 1) {
-                                    player.removeMediaItems(1, totalCount)
-                                }
-                                player.addMediaItems(mediaItems)
-                                _playerUiState.update {
-                                    it.copy(
-                                        currentPlaybackQueue = fullQueue.toPlaybackQueue(),
-                                        currentQueueSourceName = queueName
-                                    )
-                                }
-                            }
-                        }
-                        if (mediaItems.size > 1) {
-                            launch(Dispatchers.IO) {
-                                mediaItems.drop(1).take(3).forEach { item ->
-                                    runCatching { dualPlayerEngine.preResolveForPlayback(item) }
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Timber.e(e, "ArchiveTune Queue Builder: Error dynamically updating ExoPlayer queue")
-                    }
-
-                    val lastSong = fullQueue.last()
-                    val lastVideoId = lastSong.youtubeId
-                        ?: if (lastSong.id.startsWith("youtube_")) lastSong.id.substringAfter("youtube_") else videoId
-                    if (!lastVideoId.isNullOrBlank()) {
-                        com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.seed(
-                            endpoint = nextResult.endpoint ?: endpoint,
-                            continuation = nextResult.continuation,
-                            videoId = lastVideoId
-                        )
-                    }
+        // 2. If Auto Queue is enabled, fetch related recommendations in the background and update the player's queue.
+        if (autoQueueEnabled.value) {
+            directPlaybackApplyJob = viewModelScope.launch {
+                val videoId = resolveQuickPicksVideoId(song)
+                if (videoId.isNullOrBlank()) {
+                    Timber.w("ArchiveTune Queue Builder: Could not resolve videoId for seed song '${song.title}'")
+                    return@launch
                 }
-                _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
-            }.onFailure { e ->
-                Timber.e(e, "ArchiveTune Queue Builder: Failed to fetch related queue")
-                _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+                if (isDirectPlaybackRequestStale(requestToken)) return@launch
+
+                val endpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                    videoId = videoId,
+                    playlistId = "RDAMVM$videoId"
+                )
+
+                _playerUiState.update { it.copy(isLoadingInitialSongs = true) }
+                val result = withContext(Dispatchers.IO) {
+                    unshoo.ianshulyadav.pixelmusic.innertube.YouTube.next(endpoint)
+                }
+                if (isDirectPlaybackRequestStale(requestToken)) {
+                    _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+                    return@launch
+                }
+
+                result.onSuccess { nextResult ->
+                    val relatedSongs = nextResult.items.map { it.toNativeSong() }
+                    if (relatedSongs.isNotEmpty()) {
+                        val fullQueue = withContext(Dispatchers.IO) {
+                            com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.buildMixQueue(song, relatedSongs)
+                        }
+
+                        launch(Dispatchers.IO) {
+                            try {
+                                saveYoutubeSongsToDb(fullQueue)
+                            } catch (e: Exception) {
+                                Timber.e(e, "ArchiveTune Queue Builder: Failed to save queue songs to DB in background")
+                            }
+                        }
+
+                        if (isDirectPlaybackRequestStale(requestToken)) return@launch
+
+                        try {
+                            val newSongs = fullQueue.drop(1)
+                            val mediaItems = newSongs.map { MediaItemBuilder.build(it) }.toMutableList()
+                            if (mediaItems.isNotEmpty()) {
+                                runCatching {
+                                    mediaItems[0] = dualPlayerEngine.preResolveForPlayback(mediaItems[0])
+                                }
+                            }
+                            withContext(Dispatchers.Main.immediate) {
+                                if (isDirectPlaybackRequestStale(requestToken)) return@withContext
+                                val player = dualPlayerEngine.masterPlayer
+                                val cItem = player.currentMediaItem
+                                val cMediaId = cItem?.mediaId
+                                val nowActiveSong = playbackStateHolder.stablePlayerState.value.currentSong
+                                val matchesCurrent = cMediaId != null && (
+                                    cMediaId == song.id ||
+                                    (song.youtubeId != null && cMediaId == song.youtubeId) ||
+                                    cMediaId.removePrefix("youtube_") == song.id.removePrefix("youtube_") ||
+                                    (nowActiveSong != null && nowActiveSong.title.equals(song.title, ignoreCase = true) && nowActiveSong.artist.equals(song.artist, ignoreCase = true))
+                                )
+                                if (matchesCurrent || player.mediaItemCount <= 1) {
+                                    val activeIndex = player.currentMediaItemIndex
+                                    val totalCount = player.mediaItemCount
+                                    if (activeIndex >= 0 && activeIndex < totalCount) {
+                                        if (totalCount > activeIndex + 1) {
+                                            player.removeMediaItems(activeIndex + 1, totalCount)
+                                        }
+                                        if (activeIndex > 0) {
+                                            player.removeMediaItems(0, activeIndex)
+                                        }
+                                    } else if (totalCount > 1) {
+                                        player.removeMediaItems(1, totalCount)
+                                    }
+                                    player.addMediaItems(mediaItems)
+                                    _playerUiState.update {
+                                        it.copy(
+                                            currentPlaybackQueue = fullQueue.toPlaybackQueue(),
+                                            currentQueueSourceName = queueName
+                                        )
+                                    }
+                                }
+                            }
+                            if (mediaItems.size > 1) {
+                                launch(Dispatchers.IO) {
+                                    mediaItems.drop(1).take(3).forEach { item ->
+                                        runCatching { dualPlayerEngine.preResolveForPlayback(item) }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Timber.e(e, "ArchiveTune Queue Builder: Error dynamically updating ExoPlayer queue")
+                        }
+
+                        val lastSong = fullQueue.last()
+                        val lastVideoId = lastSong.youtubeId
+                            ?: if (lastSong.id.startsWith("youtube_")) lastSong.id.substringAfter("youtube_") else videoId
+                        if (!lastVideoId.isNullOrBlank()) {
+                            com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.seed(
+                                endpoint = nextResult.endpoint ?: endpoint,
+                                continuation = nextResult.continuation,
+                                videoId = lastVideoId
+                            )
+                        }
+                    }
+                    _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+                }.onFailure { e ->
+                    Timber.e(e, "ArchiveTune Queue Builder: Failed to fetch related queue")
+                    _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+                }
             }
         }
     }
