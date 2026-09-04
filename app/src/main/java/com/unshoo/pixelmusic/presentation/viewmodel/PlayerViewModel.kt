@@ -3770,9 +3770,14 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
-        // 2. If Auto Queue is enabled, fetch related recommendations in the background and update the player's queue.
+        // 2. If Auto Queue is enabled, wait until playback begins before fetching related recommendations in the background.
         if (autoQueueEnabled.value) {
             directPlaybackApplyJob = viewModelScope.launch {
+                // Wait for audio playback to actually start (or a maximum 1.5s debounce) so 100% network/CPU is dedicated to playing the song first
+                kotlinx.coroutines.withTimeoutOrNull(2500L) {
+                    playbackStateHolder.stablePlayerState.first { it.isPlaying && !it.isBuffering }
+                } ?: kotlinx.coroutines.delay(1200L)
+
                 val videoId = resolveQuickPicksVideoId(song)
                 if (videoId.isNullOrBlank()) {
                     Timber.w("ArchiveTune Queue Builder: Could not resolve videoId for seed song '${song.title}'")
