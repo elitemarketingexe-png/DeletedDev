@@ -175,12 +175,18 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
         // coroutine launches simultaneously on startup forces the CPU governor to
         // scale all cores to max frequency, causing thermal dissipation (device heat).
         warmUpScope.launch {
-            // Stage 1 (T+500ms): Pre-warm ExoCache lazy SimpleCache index off the main thread
+            // Stage 1 (T+500ms): Pre-warm ExoCache lazy SimpleCache index and DNS resolution off the main thread
             kotlinx.coroutines.delay(500L)
             try {
                 exoCache.get().cache
             } catch (e: Exception) {
                 Timber.w(e, "ExoCache pre-warm failed (non-fatal)")
+            }
+            try {
+                java.net.InetAddress.getAllByName("music.youtube.com")
+                java.net.InetAddress.getAllByName("googlevideo.com")
+            } catch (e: Exception) {
+                Timber.w(e, "DNS pre-warming failed (non-fatal)")
             }
 
             // Stage 2 (T+1500ms): Initialize NewPipe YouTube Extractor and CardColorExtractor
@@ -219,14 +225,8 @@ class PixelMusicApplication : Application(), ImageLoaderFactory, Configuration.P
                 com.unshoo.pixelmusic.data.lastfm.LastFM.sessionKey = sessionKey
             }
 
-            // Stage 4 (T+5000ms): DNS pre-warming, legacy cache migration, and BotGuard warmup
+            // Stage 4 (T+5000ms): Legacy cache migration and BotGuard warmup
             kotlinx.coroutines.delay(2000L)
-            try {
-                java.net.InetAddress.getAllByName("music.youtube.com")
-                java.net.InetAddress.getAllByName("googlevideo.com")
-            } catch (e: Exception) {
-                Timber.w(e, "DNS pre-warming failed")
-            }
 
             awaitMainThreadIdle()
             try {

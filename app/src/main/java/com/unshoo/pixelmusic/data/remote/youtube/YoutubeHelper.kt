@@ -19,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -109,24 +110,16 @@ object YoutubeHelper {
     @Volatile private var lastSuccessfulClientKey: String? = null
 
     /**
-     * ArchiveTune STREAM_FALLBACK_CLIENTS order: ANDROID_VR variants first (plain URLs = zero
-     * decipher work), then the Web/TV family, then native mobile clients.
+     * ArchiveTune STREAM_FALLBACK_CLIENTS order (Option A): 5 reliable clients.
+     * ANDROID_VR variants first (plain URLs = zero decipher work), then TVHTML5,
+     * WEB_REMIX, and IOS.
      */
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
         ANDROID_VR_NO_AUTH,
         ANDROID_VR_1_61_48,
-        ANDROID_VR_1_43_32,
         TVHTML5,
-        WEB_CREATOR,
         WEB_REMIX,
-        WEB,
         IOS,
-        MOBILE,
-        ANDROID_MUSIC,
-        ANDROID_CREATOR,
-        IPADOS,
-        VISIONOS,
-        TVHTML5_SIMPLY_EMBEDDED_PLAYER,
     )
 
     suspend fun extractGenre(videoId: String): String? = withContext(Dispatchers.IO) {
@@ -690,22 +683,6 @@ object YoutubeHelper {
             return cachedLocalPath
         }
 
-        val localSongRepository = AppDatabase.getInstance(context).songRepository()
-        var savedSong: Song? = null
-        try {
-            savedSong = localSongRepository.getSong(videoId)
-        } catch (ex: Exception) {
-            PixelMusicHelper.printe(ex.toString())
-        }
-
-        if (savedSong != null) {
-            if (savedSong.audioFilePath != null && File(savedSong.audioFilePath).exists()) {
-                PixelMusicHelper.printd("$videoId : Was downloaded, playing from local file")
-                localFilePathCache.put(videoId, savedSong.audioFilePath)
-                return savedSong.audioFilePath
-            }
-        }
-
         val plan = resolveStreamQualityPlan(context)
         val maxBitrate = plan.maxBitrateKbps
         val preferLowFirst = plan.preferLowFirst
@@ -758,6 +735,23 @@ object YoutubeHelper {
                     PixelMusicHelper.printd("$videoId : INSTANT start from cached LOW stream")
                     return it
                 }
+            }
+        }
+
+        // ── On LRU cache miss, check if song was saved/downloaded locally in DB ──
+        val localSongRepository = AppDatabase.getInstance(context).songRepository()
+        var savedSong: Song? = null
+        try {
+            savedSong = localSongRepository.getSong(videoId)
+        } catch (ex: Exception) {
+            PixelMusicHelper.printe(ex.toString())
+        }
+
+        if (savedSong != null) {
+            if (savedSong.audioFilePath != null && File(savedSong.audioFilePath).exists()) {
+                PixelMusicHelper.printd("$videoId : Was downloaded, playing from local file")
+                localFilePathCache.put(videoId, savedSong.audioFilePath)
+                return savedSong.audioFilePath
             }
         }
 
@@ -1398,12 +1392,14 @@ object YoutubeHelper {
             }
 
             val response = try {
-                YouTube.player(
-                    videoId = videoId,
-                    client = client,
-                    signatureTimestamp = signatureTimestamp,
-                    authState = authState,
-                ).getOrNull()
+                withTimeoutOrNull(3000L) {
+                    YouTube.player(
+                        videoId = videoId,
+                        client = client,
+                        signatureTimestamp = signatureTimestamp,
+                        authState = authState,
+                    ).getOrNull()
+                }
             } catch (e: Exception) {
                 PixelMusicHelper.printe("$videoId : ${client.clientName} player request failed: ${e.message}")
                 null
@@ -1424,12 +1420,14 @@ object YoutubeHelper {
                         authState = repaired
                     }
                     val retried = try {
-                        YouTube.player(
-                            videoId = videoId,
-                            client = client,
-                            signatureTimestamp = signatureTimestamp,
-                            authState = authState,
-                        ).getOrNull()
+                        withTimeoutOrNull(3000L) {
+                            YouTube.player(
+                                videoId = videoId,
+                                client = client,
+                                signatureTimestamp = signatureTimestamp,
+                                authState = authState,
+                            ).getOrNull()
+                        }
                     } catch (_: Exception) {
                         null
                     } ?: continue
