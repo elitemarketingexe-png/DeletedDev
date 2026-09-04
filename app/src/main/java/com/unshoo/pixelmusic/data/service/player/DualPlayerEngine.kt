@@ -496,6 +496,25 @@ class DualPlayerEngine @Inject constructor(
         return result
     }
 
+    private val preCacheHttpFactory by lazy {
+        DefaultHttpDataSource.Factory()
+            .setUserAgent(
+                "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            )
+            .setConnectTimeoutMs(HTTP_CONNECT_TIMEOUT_MS)
+            .setReadTimeoutMs(HTTP_READ_TIMEOUT_MS)
+            .setAllowCrossProtocolRedirects(true)
+    }
+
+    private val preCacheDataSourceFactory by lazy {
+        val upstream = DefaultDataSource.Factory(context, preCacheHttpFactory)
+        CacheDataSource.Factory()
+            .setCache(exoCache.cache)
+            .setUpstreamDataSourceFactory(upstream)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    }
+
     /**
      * Pre-cache the first chunk of a stream into SimpleCache for instant playback start.
      * Ported from SpatialFlow AudioPlaybackService.preCacheFirstChunk.
@@ -504,20 +523,7 @@ class DualPlayerEngine @Inject constructor(
         if (!streamUrl.startsWith("http")) return
         scope.launch(Dispatchers.IO) {
             try {
-                val httpFactory = DefaultHttpDataSource.Factory()
-                    .setUserAgent(
-                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
-                            "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
-                    )
-                    .setConnectTimeoutMs(HTTP_CONNECT_TIMEOUT_MS)
-                    .setReadTimeoutMs(HTTP_READ_TIMEOUT_MS)
-                    .setAllowCrossProtocolRedirects(true)
-                val upstream = DefaultDataSource.Factory(context, httpFactory)
-                val cacheDsFactory = CacheDataSource.Factory()
-                    .setCache(exoCache.cache)
-                    .setUpstreamDataSourceFactory(upstream)
-                    .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-                val dataSource = cacheDsFactory.createDataSource()
+                val dataSource = preCacheDataSourceFactory.createDataSource()
                 val dataSpec = DataSpec.Builder()
                     .setUri(Uri.parse(streamUrl))
                     .setPosition(0)
