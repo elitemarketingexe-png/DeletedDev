@@ -1502,13 +1502,13 @@ class DualPlayerEngine @Inject constructor(
         val duration = settings.durationMs.toLong().coerceAtLeast(500L)
         val stepMs = 32L
         val startedAtMs = SystemClock.elapsedRealtime()
+        val incomingTarget = incomingTrackReplayGainVolume ?: 1f
 
         while (true) {
             val elapsed = (SystemClock.elapsedRealtime() - startedAtMs).coerceAtMost(duration)
             val progress = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
             val volIn = envelope(progress, settings.curveIn)
             val volOut = 1f - envelope(progress, settings.curveOut)
-            val incomingTarget = incomingTrackReplayGainVolume ?: 1f
             incomingPlayer.volume = (volIn * incomingTarget).coerceIn(0f, 1f)
             outgoingPlayer.volume = (volOut * outgoingStartVolume).coerceIn(0f, 1f)
 
@@ -1517,7 +1517,7 @@ class DualPlayerEngine @Inject constructor(
         }
 
         outgoingPlayer.volume = 0f
-        incomingPlayer.volume = incomingTrackReplayGainVolume ?: 1f
+        incomingPlayer.volume = incomingTarget
         incomingTrackReplayGainVolume = null
 
         outgoingPlayer.removeListener(masterPlayerListener)

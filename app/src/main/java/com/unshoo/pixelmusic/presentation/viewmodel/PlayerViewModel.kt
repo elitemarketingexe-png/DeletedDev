@@ -900,6 +900,7 @@ class PlayerViewModel @Inject constructor(
     // (e.g. on the next tap) did NOT cancel it, so a slow tap A could resolve after a faster tap B
     // and overwrite B's queue/player state with A's.
     private var directPlaybackApplyJob: Job? = null
+    private var autoQueueFetchJob: Job? = null
 
     fun requestLocateCurrentSong() {
         val currentSong = stablePlayerState.value.currentSong ?: return
@@ -1048,6 +1049,8 @@ class PlayerViewModel @Inject constructor(
         // independently (see internalPlaySongs()).
         directPlaybackApplyJob?.cancel()
         directPlaybackApplyJob = null
+        autoQueueFetchJob?.cancel()
+        autoQueueFetchJob = null
         pendingQueueSegmentsJob?.cancel()
         pendingQueueSegmentsJob = null
         return directPlaybackToken
@@ -1065,6 +1068,8 @@ class PlayerViewModel @Inject constructor(
         directPlaybackJob = null
         directPlaybackApplyJob?.cancel()
         directPlaybackApplyJob = null
+        autoQueueFetchJob?.cancel()
+        autoQueueFetchJob = null
     }
 
     private fun throwIfDirectPlaybackRequestIsStale(requestToken: Long) {
@@ -3772,7 +3777,7 @@ class PlayerViewModel @Inject constructor(
 
         // 2. If Auto Queue is enabled, wait until playback begins before fetching related recommendations in the background.
         if (autoQueueEnabled.value) {
-            directPlaybackApplyJob = viewModelScope.launch {
+            autoQueueFetchJob = viewModelScope.launch {
                 // Wait for audio playback to actually start (or a maximum 1.5s debounce) so 100% network/CPU is dedicated to playing the song first
                 kotlinx.coroutines.withTimeoutOrNull(2500L) {
                     playbackStateHolder.stablePlayerState.first { it.isPlaying && !it.isBuffering }
@@ -5496,14 +5501,11 @@ class PlayerViewModel @Inject constructor(
             return
         }
         val effectiveStartSong = songsToPlay.firstOrNull { it.id == startSong.id } ?: songsToPlay.first()
-        saveYoutubeSongsToDb(listOf(effectiveStartSong))
-        if (songsToPlay.size > 1) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    saveYoutubeSongsToDb(songsToPlay)
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to save YouTube songs to DB in background")
-                }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                saveYoutubeSongsToDb(songsToPlay)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to save YouTube songs to DB in background")
             }
         }
         com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.reset()

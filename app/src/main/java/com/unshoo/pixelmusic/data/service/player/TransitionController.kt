@@ -120,6 +120,9 @@ class TransitionController @Inject constructor(
         currentObservedPlayer = engine.masterPlayer
         currentObservedPlayer?.addListener(transitionListener!!)
         engine.addPlayerSwapListener(swapListener)
+        engine.addTransitionFinishedListener {
+            engine.masterPlayer.currentMediaItem?.let { scheduleTransitionFor(it) }
+        }
     }
 
     private fun scheduleTransitionFor(currentMediaItem: MediaItem) {
@@ -129,11 +132,11 @@ class TransitionController @Inject constructor(
         engine.setPauseAtEndOfMediaItems(shouldPause = false)
 
         transitionSchedulerJob = scope.launch {
-            // If a transition is currently running, cancel it immediately.
-            // We are on a new track (or starting fresh), so the old crossfade is stale.
+            // If a transition is currently running, do not cancel it here.
+            // The ongoing crossfade will swap players cleanly and onTransitionFinished will reschedule next.
             if (engine.isTransitionRunning()) {
-                Timber.tag("TransitionDebug").d("Cancelling active transition to schedule next...")
-                engine.cancelNext()
+                Timber.tag("TransitionDebug").d("Transition currently running. Skipping schedule until finished.")
+                return@launch
             }
 
             val player = engine.masterPlayer
