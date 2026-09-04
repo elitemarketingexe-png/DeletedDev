@@ -76,10 +76,11 @@ class TransitionController @Inject constructor(
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 val job = transitionSchedulerJob
-                if (isPlaying && (job == null || job.isCompleted)) {
-                    // If playback resumes and no transition is scheduled, schedule one.
-                    Timber.tag("TransitionDebug").d("Playback resumed. Checking if transition needs scheduling.")
-                    engine.masterPlayer.currentMediaItem?.let { scheduleTransitionFor(it) }
+                if (isPlaying) {
+                    if (job == null || job.isCompleted) {
+                        Timber.tag("TransitionDebug").d("Playback resumed. Checking if transition needs scheduling.")
+                        engine.masterPlayer.currentMediaItem?.let { scheduleTransitionFor(it) }
+                    }
                 }
             }
 

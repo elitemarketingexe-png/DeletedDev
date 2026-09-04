@@ -1424,6 +1424,37 @@ class DualPlayerEngine @Inject constructor(
             return
         }
 
+        // Ensure playerB's stream URI is still fresh before crossfading (e.g. if paused/idle for >15 min)
+        playerB.currentMediaItem?.let { bItem ->
+            val bUri = bItem.localConfiguration?.uri
+            if (bUri != null && (bUri.scheme == "http" || bUri.scheme == "https")) {
+                val origUriStr = bItem.mediaMetadata.extras?.getString("com.unshoo.pixelmusic.external.CONTENT_URI") ?: bUri.toString()
+                if (!isResolvedUriFresh(origUriStr, bUri)) {
+                    Timber.tag("TransitionDebug").i("playerB stream URL stale before crossfade for %s, re-resolving...", origUriStr)
+                    invalidateResolvedUri(origUriStr)
+                    val sourceUri = Uri.parse(origUriStr)
+                    if (sourceUri.scheme in REMOTE_MEDIA_SCHEMES) {
+                        try {
+                            val freshItem = withContext(Dispatchers.IO) {
+                                val resolved = resolveMediaItem(bItem.buildUpon().setUri(sourceUri).build())
+                                resolved.localConfiguration?.uri?.toString()?.let { u ->
+                                    if (u.startsWith("http")) preCacheFirstChunk(u)
+                                }
+                                resolved
+                            }
+                            val bIdx = playerB.currentMediaItemIndex
+                            val bPos = playerB.currentPosition
+                            playerB.replaceMediaItem(bIdx, freshItem)
+                            playerB.seekTo(bIdx, bPos)
+                            playerB.prepare()
+                        } catch (e: Exception) {
+                            Timber.tag("TransitionDebug").w(e, "Failed to refresh playerB stale stream before crossfade")
+                        }
+                    }
+                }
+            }
+        }
+
         if (playerB.playbackState == Player.STATE_IDLE) playerB.prepare()
         if (playerB.playbackState != Player.STATE_READY) {
             val isReady = if (playerB.playbackState == Player.STATE_BUFFERING) {
