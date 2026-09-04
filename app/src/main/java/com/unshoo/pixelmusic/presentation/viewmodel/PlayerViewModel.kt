@@ -4362,15 +4362,36 @@ class PlayerViewModel @Inject constructor(
             var orderHash = 1125899906842597L
             var firstMediaId: String? = null
             var lastMediaId: String? = null
+            val isShuffleActive = currentMediaController.shuffleModeEnabled
             
-            for (i in 0 until count) {
-                val mediaItem = timeline.getWindow(i, window).mediaItem
-                mediaItems.add(mediaItem)
-                val mediaId = mediaItem.mediaId
-                if (i == 0) firstMediaId = mediaId
-                if (i == count - 1) lastMediaId = mediaId
-                orderHash = (orderHash * 31) + mediaId.hashCode()
-                if (i % 500 == 0) kotlinx.coroutines.yield()
+            if (isShuffleActive) {
+                var windowIndex = timeline.getFirstWindowIndex(true)
+                var processed = 0
+                while (windowIndex != androidx.media3.common.C.INDEX_UNSET && processed < count) {
+                    val mediaItem = timeline.getWindow(windowIndex, window).mediaItem
+                    mediaItems.add(mediaItem)
+                    val mediaId = mediaItem.mediaId
+                    if (processed == 0) firstMediaId = mediaId
+                    if (processed == count - 1) lastMediaId = mediaId
+                    orderHash = (orderHash * 31) + mediaId.hashCode()
+                    processed++
+                    if (processed % 500 == 0) kotlinx.coroutines.yield()
+                    windowIndex = timeline.getNextWindowIndex(
+                        windowIndex,
+                        Player.REPEAT_MODE_OFF,
+                        true
+                    )
+                }
+            } else {
+                for (i in 0 until count) {
+                    val mediaItem = timeline.getWindow(i, window).mediaItem
+                    mediaItems.add(mediaItem)
+                    val mediaId = mediaItem.mediaId
+                    if (i == 0) firstMediaId = mediaId
+                    if (i == count - 1) lastMediaId = mediaId
+                    orderHash = (orderHash * 31) + mediaId.hashCode()
+                    if (i % 500 == 0) kotlinx.coroutines.yield()
+                }
             }
 
             val signature = QueueTimelineSignature(
@@ -5079,6 +5100,7 @@ class PlayerViewModel @Inject constructor(
                 if (playbackStateHolder.stablePlayerState.value.isShuffleEnabled != shuffleModeEnabled) {
                     toggleShuffle()
                 }
+                updateCurrentPlaybackQueueFromPlayer(playerCtrl)
             }
             override fun onRepeatModeChanged(repeatMode: Int) {
                 playbackStateHolder.updateStablePlayerState { it.copy(repeatMode = repeatMode) }
