@@ -2110,7 +2110,12 @@ class MusicService : MediaLibraryService() {
     }
 
     private fun setPlayerVolume(player: Player, volume: Float) {
-        val clampedVolume = volume.coerceIn(0f, 1f)
+        val safeVolume = if (volume <= 0.001f && userSelectedVolume > 0.05f) {
+            userSelectedVolume
+        } else {
+            volume.coerceIn(0f, 1f)
+        }
+        val clampedVolume = safeVolume.coerceIn(0f, 1f)
         expectedReplayGainVolume = clampedVolume
         player.volume = clampedVolume
     }

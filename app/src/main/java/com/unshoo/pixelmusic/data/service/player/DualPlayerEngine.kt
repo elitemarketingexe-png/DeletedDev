@@ -1463,7 +1463,10 @@ class DualPlayerEngine @Inject constructor(
         incomingPlayer.shuffleModeEnabled = outgoingPlayer.shuffleModeEnabled
         outgoingPlayer.pauseAtEndOfMediaItems = true
         incomingPlayer.pauseAtEndOfMediaItems = false
-        onTransitionDisplayPlayerListeners.forEach { it(incomingPlayer) }
+        // DO NOT publish incomingPlayer (at volume 0f) to MediaSession here.
+        // Publishing playerB to MediaSession while its volume is 0f causes PlayerViewModel's
+        // onVolumeChanged to set _trackVolume = 0f, clobbering ReplayGain and audio output.
+        // The display player swap occurs cleanly at onPlayerSwappedListeners once crossfade completes.
 
         val duration = settings.durationMs.toLong().coerceAtLeast(500L)
         val stepMs = 32L
