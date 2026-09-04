@@ -2808,13 +2808,30 @@ class MusicService : MediaLibraryService() {
             return
         }
 
-        val resolvedIndex = when {
-            snapshot.currentIndex in restoredItems.indices -> snapshot.currentIndex
+        val matchedIndex = when {
             !snapshot.currentMediaId.isNullOrBlank() -> {
-                restoredItems.indexOfFirst { it.mediaId == snapshot.currentMediaId }
-                    .takeIf { it >= 0 } ?: 0
+                restoredItems.indexOfFirst { it.mediaId == snapshot.currentMediaId }.takeIf { it >= 0 }
             }
-            else -> 0
+            snapshot.currentIndex in restoredItems.indices -> snapshot.currentIndex
+            else -> null
+        }
+
+        val resolvedIndex = if (matchedIndex != null && matchedIndex > 0) {
+            matchedIndex
+        } else {
+            // If matchedIndex is null or 0 (which could be an old queue head), check the most
+            // recently engaged song in the Room database to ensure the miniplayer recovers
+            // the genuinely last-played track instead of stale index 0.
+            val recentSongId = try {
+                engagementDao.getRecentlyPlayedSongs(1).firstOrNull()?.songId
+            } catch (_: Exception) {
+                null
+            }
+            val recentIndex = recentSongId?.let { targetId ->
+                restoredItems.indexOfFirst { it.mediaId == targetId || it.mediaId == "youtube_$targetId" }
+                    .takeIf { it >= 0 }
+            }
+            recentIndex ?: matchedIndex ?: 0
         }
 
         val preparedItems = restoredItems.toMutableList()
