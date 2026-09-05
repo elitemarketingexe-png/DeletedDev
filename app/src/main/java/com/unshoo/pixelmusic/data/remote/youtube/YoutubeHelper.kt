@@ -108,6 +108,7 @@ object YoutubeHelper {
     private const val CANDIDATE_URL_EXPIRY_SAFETY_MS = 60_000L
     private const val DEFAULT_STREAM_EXPIRE_SECONDS = 300
     @Volatile private var lastSuccessfulClientKey: String? = null
+    @Volatile private var lastSuccessfulClientKeyLoaded: Boolean = false
 
     /**
      * ArchiveTune STREAM_FALLBACK_CLIENTS order (Option A): 5 reliable clients.
@@ -683,6 +684,23 @@ object YoutubeHelper {
             return cachedLocalPath
         }
 
+        // ── Fast path: check if song was saved/downloaded locally in DB ──
+        val localSongRepository = AppDatabase.getInstance(context).songRepository()
+        var savedSong: Song? = null
+        try {
+            savedSong = localSongRepository.getSong(videoId)
+        } catch (ex: Exception) {
+            PixelMusicHelper.printe(ex.toString())
+        }
+
+        if (savedSong != null) {
+            if (savedSong.audioFilePath != null && File(savedSong.audioFilePath).exists()) {
+                PixelMusicHelper.printd("$videoId : Was downloaded, playing from local file")
+                localFilePathCache.put(videoId, savedSong.audioFilePath)
+                return savedSong.audioFilePath
+            }
+        }
+
         val plan = resolveStreamQualityPlan(context)
         val maxBitrate = plan.maxBitrateKbps
         val preferLowFirst = plan.preferLowFirst
@@ -735,23 +753,6 @@ object YoutubeHelper {
                     PixelMusicHelper.printd("$videoId : INSTANT start from cached LOW stream")
                     return it
                 }
-            }
-        }
-
-        // ── On LRU cache miss, check if song was saved/downloaded locally in DB ──
-        val localSongRepository = AppDatabase.getInstance(context).songRepository()
-        var savedSong: Song? = null
-        try {
-            savedSong = localSongRepository.getSong(videoId)
-        } catch (ex: Exception) {
-            PixelMusicHelper.printe(ex.toString())
-        }
-
-        if (savedSong != null) {
-            if (savedSong.audioFilePath != null && File(savedSong.audioFilePath).exists()) {
-                PixelMusicHelper.printd("$videoId : Was downloaded, playing from local file")
-                localFilePathCache.put(videoId, savedSong.audioFilePath)
-                return savedSong.audioFilePath
             }
         }
 
@@ -1374,7 +1375,8 @@ object YoutubeHelper {
         } catch (_: Exception) {
             PlayerStreamClient.WEB_REMIX
         }
-        if (lastSuccessfulClientKey == null) {
+        if (!lastSuccessfulClientKeyLoaded && lastSuccessfulClientKey == null) {
+            lastSuccessfulClientKeyLoaded = true
             try {
                 lastSuccessfulClientKey = userPrefs.lastSuccessfulYoutubeClientKeyFlow.first()
             } catch (_: Exception) {}
@@ -1391,105 +1393,113 @@ object YoutubeHelper {
         val clients = buildStreamClientOrder(preferredClient, authState)
         var didRepairAuthAfterBotDetection = false
 
-        for (client in clients) {
-            // ArchiveTune rule: never burn a request on a login-required client when anonymous.
-            if (client.loginRequired && !(authState.hasPlaybackLoginContext && client.loginSupported)) {
-                continue
-            }
-
-            val response = try {
-                withTimeoutOrNull(3000L) {
-                    YouTube.player(
-                        videoId = videoId,
-                        client = client,
-                        signatureTimestamp = signatureTimestamp,
-                        authState = authState,
-                    ).getOrNull()
+        val streamResult = withTimeoutOrNull(8_000L) {
+            for (client in clients) {
+                // ArchiveTune rule: never burn a request on a login-required client when anonymous.
+                if (client.loginRequired && !(authState.hasPlaybackLoginContext && client.loginSupported)) {
+                    continue
                 }
-            } catch (e: Exception) {
-                PixelMusicHelper.printe("$videoId : ${client.clientName} player request failed: ${e.message}")
-                null
-            } ?: continue
 
-            var status = response.playabilityStatus.status
-            var streamResponse = response
-
-            if (status != "OK") {
-                val reason = response.playabilityStatus.reason.orEmpty()
-                PixelMusicHelper.printe("$videoId : ${client.clientName} playability status=$status reason=$reason")
-
-                // ArchiveTune bot-detection repair: invalidate BotGuard session + rotate
-                // visitorData once per resolve, then retry the SAME client a single time.
-                if (isBotDetectionReason(reason) && !didRepairAuthAfterBotDetection) {
-                    didRepairAuthAfterBotDetection = true
-                    repairPlaybackAuthAfterBotDetection()?.let { repaired ->
-                        authState = repaired
+                val response = try {
+                    withTimeoutOrNull(3000L) {
+                        YouTube.player(
+                            videoId = videoId,
+                            client = client,
+                            signatureTimestamp = signatureTimestamp,
+                            authState = authState,
+                        ).getOrNull()
                     }
-                    val retried = try {
-                        withTimeoutOrNull(3000L) {
-                            YouTube.player(
-                                videoId = videoId,
-                                client = client,
-                                signatureTimestamp = signatureTimestamp,
-                                authState = authState,
-                            ).getOrNull()
+                } catch (e: Exception) {
+                    PixelMusicHelper.printe("$videoId : ${client.clientName} player request failed: ${e.message}")
+                    null
+                } ?: continue
+
+                var status = response.playabilityStatus.status
+                var streamResponse = response
+
+                if (status != "OK") {
+                    val reason = response.playabilityStatus.reason.orEmpty()
+                    PixelMusicHelper.printe("$videoId : ${client.clientName} playability status=$status reason=$reason")
+
+                    // ArchiveTune bot-detection repair: invalidate BotGuard session + rotate
+                    // visitorData once per resolve, then retry the SAME client a single time.
+                    if (isBotDetectionReason(reason) && !didRepairAuthAfterBotDetection) {
+                        didRepairAuthAfterBotDetection = true
+                        repairPlaybackAuthAfterBotDetection()?.let { repaired ->
+                            authState = repaired
                         }
-                    } catch (_: Exception) {
-                        null
-                    } ?: continue
-                    status = retried.playabilityStatus.status
-                    streamResponse = retried
+                        val retried = try {
+                            withTimeoutOrNull(3000L) {
+                                YouTube.player(
+                                    videoId = videoId,
+                                    client = client,
+                                    signatureTimestamp = signatureTimestamp,
+                                    authState = authState,
+                                ).getOrNull()
+                            }
+                        } catch (_: Exception) {
+                            null
+                        } ?: continue
+                        status = retried.playabilityStatus.status
+                        streamResponse = retried
+                    }
+                    if (status != "OK") continue
                 }
-                if (status != "OK") continue
+
+                val candidates = selectArchiveTuneCandidates(streamResponse, lowQuality, maxBitrateKbps)
+                if (candidates.isEmpty()) continue
+
+                var resolved: Triple<String, String?, Int?>? = null
+                for (candidate in candidates) {
+                    if (shouldSkipCipheredWebCandidate(client, candidate, authState)) continue
+
+                    val cacheKey = "$videoId|${candidate.itag}|${client.clientName}|${authState.fingerprint.hashCode()}"
+                    val cached = resolvedCandidateUrlCache[cacheKey]
+                    val url: String? = if (
+                        cached != null && cached.second > System.currentTimeMillis() + CANDIDATE_URL_EXPIRY_SAFETY_MS
+                    ) {
+                        cached.first
+                    } else {
+                        // ArchiveTune findUrl: direct URL → client-version patch; ciphered → NewPipe
+                        // deobfuscation; n-parameter only when the URL actually carries one.
+                        NewPipeUtils.getStreamUrl(candidate, videoId, client, authState).getOrNull()
+                            ?.let { StreamClientUtils.patchClientVersion(it, client.clientVersion) }
+                            ?.also { resolvedCandidateUrlCache[cacheKey] = it to expiryFromStreamUrl(it) }
+                    }
+
+                    // ArchiveTune purity: NO byte-range validation probe before accepting.
+                    if (url != null) {
+                        resolved = Triple(url, normalizeMimeType(candidate.mimeType), candidate.bitrate)
+                        break
+                    }
+                }
+
+                if (resolved != null) {
+                    streamResponse.playbackTracking?.videostatsPlaybackUrl?.baseUrl?.let {
+                        playbackTrackingCache[videoId] = it
+                    }
+                    streamResponse.playbackTracking?.videostatsWatchtimeUrl?.baseUrl?.let {
+                        watchtimeTrackingCache[videoId] = it
+                    }
+                    val clientKey = StreamClientUtils.buildClientKey(client)
+                    lastSuccessfulClientKey = clientKey
+                    lastSuccessfulClientKeyLoaded = true
+                    backgroundScope.launch {
+                        try {
+                            entryPoint.userPreferencesRepository().setLastSuccessfulYoutubeClientKey(clientKey)
+                        } catch (_: Exception) {}
+                    }
+                    PixelMusicHelper.printd(
+                        "$videoId : stream via ArchiveTune fallback client ${client.clientName} (bitrate=${resolved.third})"
+                    )
+                    return@withTimeoutOrNull resolved
+                }
             }
+            null
+        }
 
-            val candidates = selectArchiveTuneCandidates(streamResponse, lowQuality, maxBitrateKbps)
-            if (candidates.isEmpty()) continue
-
-            var resolved: Triple<String, String?, Int?>? = null
-            for (candidate in candidates) {
-                if (shouldSkipCipheredWebCandidate(client, candidate, authState)) continue
-
-                val cacheKey = "$videoId|${candidate.itag}|${client.clientName}|${authState.fingerprint.hashCode()}"
-                val cached = resolvedCandidateUrlCache[cacheKey]
-                val url: String? = if (
-                    cached != null && cached.second > System.currentTimeMillis() + CANDIDATE_URL_EXPIRY_SAFETY_MS
-                ) {
-                    cached.first
-                } else {
-                    // ArchiveTune findUrl: direct URL → client-version patch; ciphered → NewPipe
-                    // deobfuscation; n-parameter only when the URL actually carries one.
-                    NewPipeUtils.getStreamUrl(candidate, videoId, client, authState).getOrNull()
-                        ?.let { StreamClientUtils.patchClientVersion(it, client.clientVersion) }
-                        ?.also { resolvedCandidateUrlCache[cacheKey] = it to expiryFromStreamUrl(it) }
-                }
-
-                // ArchiveTune purity: NO byte-range validation probe before accepting.
-                if (url != null) {
-                    resolved = Triple(url, normalizeMimeType(candidate.mimeType), candidate.bitrate)
-                    break
-                }
-            }
-
-            if (resolved != null) {
-                streamResponse.playbackTracking?.videostatsPlaybackUrl?.baseUrl?.let {
-                    playbackTrackingCache[videoId] = it
-                }
-                streamResponse.playbackTracking?.videostatsWatchtimeUrl?.baseUrl?.let {
-                    watchtimeTrackingCache[videoId] = it
-                }
-                val clientKey = StreamClientUtils.buildClientKey(client)
-                lastSuccessfulClientKey = clientKey
-                backgroundScope.launch {
-                    try {
-                        entryPoint.userPreferencesRepository().setLastSuccessfulYoutubeClientKey(clientKey)
-                    } catch (_: Exception) {}
-                }
-                PixelMusicHelper.printd(
-                    "$videoId : stream via ArchiveTune fallback client ${client.clientName} (bitrate=${resolved.third})"
-                )
-                return@withContext resolved
-            }
+        if (streamResult != null) {
+            return@withContext streamResult
         }
 
         PixelMusicHelper.printe("$videoId : ArchiveTune fallback could not resolve a playable stream")

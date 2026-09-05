@@ -91,8 +91,7 @@ class DualPlayerEngine @Inject constructor(
         private const val AUDIO_OFFLOAD_BUFFERING_FALLBACK_MS = 4_000L
         private const val MAX_AUXILIARY_TIMELINE_ITEMS = 200
         private const val STREAM_RESOLVE_TIMEOUT_MS = 8_000L
-        // BUGFIX: was 5_000L (shorter than normal!). Weak networks need MORE time, not less.
-        private const val STREAM_RESOLVE_TIMEOUT_LOW_CONNECTIVITY_MS = 12_000L
+        private const val STREAM_RESOLVE_TIMEOUT_LOW_CONNECTIVITY_MS = 5_000L
         /**
          * How long the ExoPlayer load thread may cooperatively wait for a stream resolve to
          * finish before giving up. Must exceed [STREAM_RESOLVE_TIMEOUT_MS] so the load thread
@@ -1065,8 +1064,25 @@ class DualPlayerEngine @Inject constructor(
     }
 
     /**
+     * Non-blocking check: is the master player's current stream URL still valid?
+     * Returns true if: non-YouTube, no current item, or YouTube URL has >15min remaining.
+     * Returns false only when the URL is genuinely near-expiry and needs re-resolution.
+     */
+    fun isCurrentStreamFresh(): Boolean {
+        val currentItem = if (::playerA.isInitialized) playerA.currentMediaItem else return true
+        val currentUri = currentItem?.localConfiguration?.uri ?: return true
+        if (currentUri.scheme != "http" && currentUri.scheme != "https") return true
+        val originalUriStr = currentItem.mediaMetadata.extras
+            ?.getString("com.unshoo.pixelmusic.external.CONTENT_URI")
+            ?: currentUri.toString()
+        return isResolvedUriFresh(originalUriStr, currentUri)
+    }
+
+    /**
      * Checks if the currently loaded item in the master player has an expired or stale stream URL
      * (e.g. after a long pause or app reopening) and proactively re-resolves it in-place.
+     * Guaranteed race-safe: verifies target item/mediaId/URI before replacing so background
+     * resolution never overwrites skips, track transitions, or freshly resolved items.
      */
     suspend fun ensureFreshStreamForResume() {
         val currentItem = if (::playerA.isInitialized) playerA.currentMediaItem else null
@@ -1091,18 +1107,27 @@ class DualPlayerEngine @Inject constructor(
                     }
                     resolved
                 }
-                withContext(Dispatchers.Main.immediate) {
-                    if (::playerA.isInitialized && playerA.currentMediaItem?.mediaId == currentItem.mediaId) {
-                        val pos = playerA.currentPosition
-                        val idx = playerA.currentMediaItemIndex
-                        val playWhenReady = playerA.playWhenReady
-                        playerA.replaceMediaItem(idx, freshItem)
-                        playerA.seekTo(idx, pos)
-                        playerA.playWhenReady = playWhenReady
-                        // BUGFIX: a prior error leaves the player STATE_IDLE; setting
-                        // playWhenReady alone does nothing without prepare().
-                        if (playerA.playbackState == Player.STATE_IDLE || playerA.playbackState == Player.STATE_ENDED) {
-                            playerA.prepare()
+                val freshUri = freshItem.localConfiguration?.uri
+                if (freshUri != null && freshUri != sourceUri && (freshUri.scheme == "http" || freshUri.scheme == "https" || freshUri.scheme == "file")) {
+                    withContext(Dispatchers.Main.immediate) {
+                        if (::playerA.isInitialized) {
+                            val activeItem = playerA.currentMediaItem
+                            // Race-safety verification:
+                            // 1. Same mediaId is still current (user hasn't skipped)
+                            // 2. Active player item is still using the old stale stream URI
+                            if (activeItem?.mediaId == currentItem.mediaId &&
+                                activeItem.localConfiguration?.uri == currentUri
+                            ) {
+                                val pos = playerA.currentPosition
+                                val idx = playerA.currentMediaItemIndex
+                                val playWhenReady = playerA.playWhenReady
+                                playerA.replaceMediaItem(idx, freshItem)
+                                playerA.seekTo(idx, pos)
+                                playerA.playWhenReady = playWhenReady
+                                if (playerA.playbackState == Player.STATE_IDLE || playerA.playbackState == Player.STATE_ENDED) {
+                                    playerA.prepare()
+                                }
+                            }
                         }
                     }
                 }
@@ -1147,9 +1172,9 @@ class DualPlayerEngine @Inject constructor(
                     // can complete before the outer fires. Previously the outer and inner
                     // used the same value, making the inner's fallback unreachable.
                     val timeoutMs = if (connectivityStateHolder.isMeteredNetwork.value) {
-                        STREAM_RESOLVE_TIMEOUT_LOW_CONNECTIVITY_MS + 4_000L
+                        STREAM_RESOLVE_TIMEOUT_LOW_CONNECTIVITY_MS + 500L
                     } else {
-                        STREAM_RESOLVE_TIMEOUT_MS + 4_000L
+                        STREAM_RESOLVE_TIMEOUT_MS + 500L
                     }
                     val resolved: Uri? = withTimeoutOrNull(timeoutMs) {
                         when (uri.scheme) {

@@ -6942,10 +6942,6 @@ class PlayerViewModel @Inject constructor(
                             }
                         }
                     } else {
-                        val currentMediaId = controller.currentMediaItem?.mediaId
-                        if (!currentMediaId.isNullOrBlank()) {
-                            setPreparingSong(currentMediaId)
-                        }
                         playbackStateHolder.playPause()
                     }
                 }

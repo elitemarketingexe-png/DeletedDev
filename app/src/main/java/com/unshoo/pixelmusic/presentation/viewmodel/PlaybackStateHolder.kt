@@ -403,27 +403,23 @@ class PlaybackStateHolder @Inject constructor(
             if (controller.isPlaying) {
                 controller.pause()
             } else {
-                _stablePlayerState.update { it.copy(isBuffering = true) }
-                scope.launch {
-                    try {
-                        dualPlayerEngine.ensureFreshStreamForResume()
-                        withContext(Dispatchers.Main.immediate) {
-                            val activeCtrl = mediaController ?: controller
-                            val player = dualPlayerEngine.masterPlayer
-                            if (player.playbackState == androidx.media3.exoplayer.ExoPlayer.STATE_IDLE ||
-                                player.playbackState == androidx.media3.exoplayer.ExoPlayer.STATE_ENDED) {
-                                activeCtrl.prepare()
-                            }
-                            activeCtrl.play()
+                // INSTANT resume — zero latency, play first.
+                val player = dualPlayerEngine.masterPlayer
+                if (player.playbackState == androidx.media3.exoplayer.ExoPlayer.STATE_IDLE ||
+                    player.playbackState == androidx.media3.exoplayer.ExoPlayer.STATE_ENDED) {
+                    controller.prepare()
+                }
+                controller.play()
+
+                // Background-only refresh: only when the URL is genuinely near-expiry.
+                // Never blocks play, never sets buffering state.
+                if (!dualPlayerEngine.isCurrentStreamFresh()) {
+                    scope.launch {
+                        try {
+                            dualPlayerEngine.ensureFreshStreamForResume()
+                        } catch (e: Exception) {
+                            timber.log.Timber.w(e, "Background stream refresh on resume failed; playback continues")
                         }
-                    } catch (e: Exception) {
-                        timber.log.Timber.w(e, "ensureFreshStreamForResume failed; playing anyway")
-                        withContext(Dispatchers.Main.immediate) {
-                            val activeCtrl = mediaController ?: controller
-                            activeCtrl.play()
-                        }
-                    } finally {
-                        _stablePlayerState.update { it.copy(isBuffering = false) }
                     }
                 }
             }
