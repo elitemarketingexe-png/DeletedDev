@@ -1281,16 +1281,15 @@ class DualPlayerEngine @Inject constructor(
                 com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
                     .getSongPlayerUrl(context, youtubeSong, allowLocal = true)
             } ?: run {
-                // Timeout: still try quality-aware path once more without outer timeout;
-                // on failure fall back to lowest so something can play.
+                // If primary bounded resolution timed out, go straight to lowest-quality stream
+                // so playback starts without repeating a multi-second resolution cycle.
                 try {
                     com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
-                        .getSongPlayerUrl(context, youtubeSong, allowLocal = true)
-                } catch (_: Exception) {
-                    com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
                         .getLowestQualityStreamUrl(context, youtubeSong)
+                } catch (_: Exception) {
+                    null
                 }
-            }
+            } ?: return@withContext null
 
             if (!path.startsWith("http")) {
                 com.unshoo.pixelmusic.data.remote.youtube.YoutubeHelper
