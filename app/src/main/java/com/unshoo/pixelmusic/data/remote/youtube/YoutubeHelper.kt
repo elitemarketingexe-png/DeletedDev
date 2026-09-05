@@ -58,6 +58,8 @@ import com.unshoo.pixelmusic.data.preferences.PlayerStreamClient
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
 import unshoo.ianshulyadav.pixelmusic.innertube.models.response.PlayerResponse
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.channels.Channel
 
 
 object YoutubeHelper {
@@ -109,6 +111,8 @@ object YoutubeHelper {
     private val resolvedCandidateUrlCache = ConcurrentHashMap<String, Pair<String, Long>>()
     private const val CANDIDATE_URL_EXPIRY_SAFETY_MS = 60_000L
     private const val DEFAULT_STREAM_EXPIRE_SECONDS = 300
+    private const val CLIENT_FAILURE_COOLDOWN_MS = 60_000L
+    private val failedClientsUntil = ConcurrentHashMap<String, Long>()
     @Volatile private var lastSuccessfulClientKey: String? = null
     @Volatile private var lastSuccessfulClientKeyLoaded: Boolean = false
 
@@ -1394,11 +1398,16 @@ object YoutubeHelper {
             null
         }
 
-        val clients = buildStreamClientOrder(preferredClient, authState)
+        val now = System.currentTimeMillis()
+        val allClients = buildStreamClientOrder(preferredClient, authState)
             .filter { client ->
                 // ArchiveTune rule: never burn a request on a login-required client when anonymous.
                 !client.loginRequired || (authState.hasPlaybackLoginContext && client.loginSupported)
             }
+        // LastWave pattern: quarantine failing/blocked clients so consecutive songs never stall
+        val clients = allClients.filter { client ->
+            now >= (failedClientsUntil[client.clientName] ?: 0L)
+        }.ifEmpty { allClients }
 
         suspend fun attemptClient(
             client: YouTubeClient,
@@ -1415,8 +1424,12 @@ object YoutubeHelper {
                 }
             } catch (e: Exception) {
                 PixelMusicHelper.printe("$videoId : ${client.clientName} player request failed: ${e.message}")
+                failedClientsUntil[client.clientName] = System.currentTimeMillis() + CLIENT_FAILURE_COOLDOWN_MS
                 null
-            } ?: return null
+            } ?: run {
+                failedClientsUntil[client.clientName] = System.currentTimeMillis() + CLIENT_FAILURE_COOLDOWN_MS
+                return null
+            }
 
             var status = response.playabilityStatus.status
             var streamResponse = response
@@ -1439,15 +1452,23 @@ object YoutubeHelper {
                         }
                     } catch (_: Exception) {
                         null
-                    } ?: return null
-                    status = retried.playabilityStatus.status
-                    streamResponse = retried
+                    }
+                    if (retried != null) {
+                        status = retried.playabilityStatus.status
+                        streamResponse = retried
+                    }
                 }
-                if (status != "OK") return null
+                if (status != "OK") {
+                    failedClientsUntil[client.clientName] = System.currentTimeMillis() + CLIENT_FAILURE_COOLDOWN_MS
+                    return null
+                }
             }
 
             val candidates = selectArchiveTuneCandidates(streamResponse, lowQuality, maxBitrateKbps)
-            if (candidates.isEmpty()) return null
+            if (candidates.isEmpty()) {
+                failedClientsUntil[client.clientName] = System.currentTimeMillis() + CLIENT_FAILURE_COOLDOWN_MS
+                return null
+            }
 
             for (candidate in candidates) {
                 if (shouldSkipCipheredWebCandidate(client, candidate, currentAuthState)) continue
@@ -1474,6 +1495,7 @@ object YoutubeHelper {
                     val clientKey = StreamClientUtils.buildClientKey(client)
                     lastSuccessfulClientKey = clientKey
                     lastSuccessfulClientKeyLoaded = true
+                    failedClientsUntil.remove(client.clientName)
                     backgroundScope.launch {
                         try {
                             entryPoint.userPreferencesRepository().setLastSuccessfulYoutubeClientKey(clientKey)
@@ -1485,28 +1507,31 @@ object YoutubeHelper {
                     return Triple(url, normalizeMimeType(candidate.mimeType), candidate.bitrate)
                 }
             }
+            failedClientsUntil[client.clientName] = System.currentTimeMillis() + CLIENT_FAILURE_COOLDOWN_MS
             return null
         }
 
-        // Option 2: Parallel racing across candidate clients (first-to-respond wins).
-        // Race top candidates concurrently (bounded to 2.0s per client).
+        // LastWave Pattern: Non-blocking Channel Race across candidate clients.
+        // Each client runs concurrently; the moment the FIRST client succeeds,
+        // it claims the winner slot and immediately aborts all slower sibling jobs.
         val primaryBatch = clients.take(3)
         val remainingBatch = clients.drop(3)
 
-        val raceResult = withTimeoutOrNull(4_500L) {
+        val raceResult = withTimeoutOrNull(3_500L) {
             coroutineScope {
-                val deferreds = primaryBatch.map { client ->
-                    async { attemptClient(client, authState) }
-                }
-                // First non-null winner cancels siblings and returns immediately
-                for (deferred in deferreds) {
-                    val res = deferred.await()
-                    if (res != null) {
-                        deferreds.forEach { it.cancel() }
-                        return@coroutineScope res
+                val channel = Channel<Triple<String, String?, Int?>>(capacity = 1)
+                val winnerFound = AtomicBoolean(false)
+                val jobs = primaryBatch.map { client ->
+                    launch(Dispatchers.IO) {
+                        val res = attemptClient(client, authState)
+                        if (res != null && winnerFound.compareAndSet(false, true)) {
+                            channel.trySend(res)
+                        }
                     }
                 }
-                null
+                val winner = channel.receiveCatching().getOrNull()
+                jobs.forEach { it.cancel() }
+                winner
             }
         }
 
@@ -1514,11 +1539,27 @@ object YoutubeHelper {
             return@withContext raceResult
         }
 
-        // If primary parallel batch didn't succeed, quickly try remaining fallback clients
-        for (client in remainingBatch) {
-            val fallbackResult = attemptClient(client, authState)
-            if (fallbackResult != null) {
-                return@withContext fallbackResult
+        // If primary parallel batch didn't succeed, race the remaining fallback clients
+        if (remainingBatch.isNotEmpty()) {
+            val fallbackRaceResult = withTimeoutOrNull(3_000L) {
+                coroutineScope {
+                    val channel = Channel<Triple<String, String?, Int?>>(capacity = 1)
+                    val winnerFound = AtomicBoolean(false)
+                    val jobs = remainingBatch.map { client ->
+                        launch(Dispatchers.IO) {
+                            val res = attemptClient(client, authState)
+                            if (res != null && winnerFound.compareAndSet(false, true)) {
+                                channel.trySend(res)
+                            }
+                        }
+                    }
+                    val winner = channel.receiveCatching().getOrNull()
+                    jobs.forEach { it.cancel() }
+                    winner
+                }
+            }
+            if (fallbackRaceResult != null) {
+                return@withContext fallbackRaceResult
             }
         }
 
@@ -1611,12 +1652,16 @@ object YoutubeHelper {
         maxBitrateKbps: Int,
     ): List<PlayerResponse.StreamingData.Format> {
         val formats = response.streamingData?.adaptiveFormats.orEmpty()
-            .filter {
-                it.mimeType.contains("audio", ignoreCase = true) &&
-                    it.bitrate > 0 &&
-                    !it.mimeType.contains("mp3", ignoreCase = true) &&
-                    !it.mimeType.contains("mpeg", ignoreCase = true) &&
-                    !it.mimeType.contains("mpga", ignoreCase = true)
+            .filter { format ->
+                val mime = format.mimeType.lowercase()
+                val isAudio = mime.contains("audio") &&
+                    !mime.contains("mp3") &&
+                    !mime.contains("mpeg") &&
+                    !mime.contains("mpga")
+                val isNotSabr = format.url?.startsWith("sabr:", ignoreCase = true) != true &&
+                    format.signatureCipher?.contains("sabr:") != true &&
+                    format.cipher?.contains("sabr:") != true
+                isAudio && isNotSabr && format.bitrate > 0
             }
         if (formats.isEmpty()) return emptyList()
 
