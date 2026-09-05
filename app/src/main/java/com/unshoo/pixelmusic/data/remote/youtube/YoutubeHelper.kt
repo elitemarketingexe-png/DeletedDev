@@ -19,7 +19,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -108,18 +107,27 @@ object YoutubeHelper {
     private const val CANDIDATE_URL_EXPIRY_SAFETY_MS = 60_000L
     private const val DEFAULT_STREAM_EXPIRE_SECONDS = 300
     @Volatile private var lastSuccessfulClientKey: String? = null
+    @Volatile private var lastSuccessfulClientKeyLoaded: Boolean = false
 
     /**
-     * ArchiveTune STREAM_FALLBACK_CLIENTS order (Option A): 5 reliable clients.
-     * ANDROID_VR variants first (plain URLs = zero decipher work), then TVHTML5,
-     * WEB_REMIX, and IOS.
+     * ArchiveTune STREAM_FALLBACK_CLIENTS order: ANDROID_VR variants first (plain URLs = zero
+     * decipher work), then the Web/TV family, then native mobile clients.
      */
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
         ANDROID_VR_NO_AUTH,
         ANDROID_VR_1_61_48,
+        ANDROID_VR_1_43_32,
         TVHTML5,
+        WEB_CREATOR,
         WEB_REMIX,
+        WEB,
         IOS,
+        MOBILE,
+        ANDROID_MUSIC,
+        ANDROID_CREATOR,
+        IPADOS,
+        VISIONOS,
+        TVHTML5_SIMPLY_EMBEDDED_PLAYER,
     )
 
     suspend fun extractGenre(videoId: String): String? = withContext(Dispatchers.IO) {
@@ -1388,6 +1396,10 @@ object YoutubeHelper {
             null
         }
 
+        // Restored c1f0a41 serial resolution (instant tap-to-play): one client at a time,
+        // ANDROID_VR plain-URL clients first, early exit on first success. Parallel racing
+        // + 2s bounds + 60s global quarantine (d145ebe/3500878) regressed this path — do not
+        // reintroduce without measuring tap-to-audio on weak networks.
         val clients = buildStreamClientOrder(preferredClient, authState)
         var didRepairAuthAfterBotDetection = false
 
@@ -1398,14 +1410,12 @@ object YoutubeHelper {
             }
 
             val response = try {
-                withTimeoutOrNull(3000L) {
-                    YouTube.player(
-                        videoId = videoId,
-                        client = client,
-                        signatureTimestamp = signatureTimestamp,
-                        authState = authState,
-                    ).getOrNull()
-                }
+                YouTube.player(
+                    videoId = videoId,
+                    client = client,
+                    signatureTimestamp = signatureTimestamp,
+                    authState = authState,
+                ).getOrNull()
             } catch (e: Exception) {
                 PixelMusicHelper.printe("$videoId : ${client.clientName} player request failed: ${e.message}")
                 null
@@ -1426,14 +1436,12 @@ object YoutubeHelper {
                         authState = repaired
                     }
                     val retried = try {
-                        withTimeoutOrNull(3000L) {
-                            YouTube.player(
-                                videoId = videoId,
-                                client = client,
-                                signatureTimestamp = signatureTimestamp,
-                                authState = authState,
-                            ).getOrNull()
-                        }
+                        YouTube.player(
+                            videoId = videoId,
+                            client = client,
+                            signatureTimestamp = signatureTimestamp,
+                            authState = authState,
+                        ).getOrNull()
                     } catch (_: Exception) {
                         null
                     } ?: continue
@@ -1480,6 +1488,7 @@ object YoutubeHelper {
                 }
                 val clientKey = StreamClientUtils.buildClientKey(client)
                 lastSuccessfulClientKey = clientKey
+                lastSuccessfulClientKeyLoaded = true
                 backgroundScope.launch {
                     try {
                         entryPoint.userPreferencesRepository().setLastSuccessfulYoutubeClientKey(clientKey)
