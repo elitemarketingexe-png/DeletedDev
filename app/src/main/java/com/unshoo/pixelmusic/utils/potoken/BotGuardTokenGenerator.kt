@@ -461,7 +461,16 @@ object BotGuardTokenGenerator {
                         val wv = WebView(context).apply {
                             settings.javaScriptEnabled = true
                             settings.userAgentString = WV_USER_AGENT
-                            settings.blockNetworkLoads = true
+                            // BUGFIX (12-15s stall on every song): BotGuard's attestation VM
+                            // performs its own environment/network probing as part of device
+                            // fingerprinting. Blocking WebView-level network loads doesn't stop
+                            // this cleanly - it leaves those probes unresolved, so the VM's
+                            // internal ~10s polling loop (see po_token.html's loadBotGuard())
+                            // silently runs to completion instead of failing fast. That combined
+                            // with the outer 15s cold-start timeout is exactly the 12-15s stall
+                            // reported per song. The engine never reaches "ready" either, so
+                            // every single subsequent song re-attempts the same doomed cold
+                            // start from scratch instead of ever using a warm, fast path.
                             webChromeClient = object : WebChromeClient() {
                                 override fun onConsoleMessage(m: ConsoleMessage): Boolean {
                                     if (m.message().contains("Uncaught")) {
