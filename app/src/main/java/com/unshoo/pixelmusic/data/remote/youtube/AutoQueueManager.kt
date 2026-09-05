@@ -407,7 +407,9 @@ object AutoQueueManager {
             val caps = cm?.getNetworkCapabilities(activeNet)
             val hasInternet = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
 
-            if (isLocalOrFile || !hasInternet) return@launch
+            if (isLocalOrFile && !hasInternet) {
+                // When offline with local file, we can still generate queue from local DB matches
+            }
 
             if (forceRefresh) {
                 fetchJob?.cancel()

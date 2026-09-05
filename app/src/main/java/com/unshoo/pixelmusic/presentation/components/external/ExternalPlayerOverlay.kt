@@ -304,6 +304,7 @@ fun ExternalPlayerOverlay(
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp),
                             isPlayingProvider = { stablePlayerState.isPlaying },
+                            isBufferingProvider = { stablePlayerState.isBuffering },
                             onPrevious = playerViewModel::previousSong,
                             onPlayPause = playerViewModel::playPause,
                             onNext = playerViewModel::nextSong,

@@ -461,7 +461,6 @@ object BotGuardTokenGenerator {
                         val wv = WebView(context).apply {
                             settings.javaScriptEnabled = true
                             settings.userAgentString = WV_USER_AGENT
-                            settings.blockNetworkLoads = true
                             webChromeClient = object : WebChromeClient() {
                                 override fun onConsoleMessage(m: ConsoleMessage): Boolean {
                                     if (m.message().contains("Uncaught")) {

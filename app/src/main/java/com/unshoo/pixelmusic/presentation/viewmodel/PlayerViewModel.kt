@@ -2828,7 +2828,6 @@ class PlayerViewModel @Inject constructor(
                 controller != null &&
                 controller.isConnected &&
                 !dualPlayerEngine.isTransitionRunning() &&
-                queueName != "Quick Picks" &&
                 songIndexInQueue != -1 &&
                 queueMatchesContext
             ) {

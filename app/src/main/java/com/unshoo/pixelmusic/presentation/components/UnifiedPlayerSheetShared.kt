@@ -190,7 +190,7 @@ internal fun MiniPlayerContentInternal(
                 },
             contentAlignment = Alignment.Center
         ) {
-            if (isPreparingPlayback || isBuffering) {
+            if ((isPreparingPlayback || isBuffering) && !isPlaying) {
                 CircularWavyProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     color = LocalMaterialTheme.current.onPrimary

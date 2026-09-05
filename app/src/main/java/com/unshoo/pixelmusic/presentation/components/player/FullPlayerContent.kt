@@ -600,6 +600,7 @@ fun FullPlayerContent(
             placeholderColor = placeholderColor,
             placeholderOnColor = placeholderOnColor,
             isPlayingProvider = isPlayingProvider,
+            isBufferingProvider = { playerState.isBuffering },
             onPrevious = onPreviousWithOptimisticCarousel,
             onPlayPause = onPlayPause,
             onNext = onNextWithOptimisticCarousel,
@@ -1699,6 +1700,7 @@ private fun FullPlayerControlsSection(
     placeholderColor: Color,
     placeholderOnColor: Color,
     isPlayingProvider: () -> Boolean,
+    isBufferingProvider: () -> Boolean = { false },
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -1744,6 +1746,7 @@ private fun FullPlayerControlsSection(
                 modifier = Modifier
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 isPlayingProvider = isPlayingProvider,
+                isBufferingProvider = isBufferingProvider,
                 onPrevious = onPrevious,
                 onPlayPause = onPlayPause,
                 onNext = onNext,

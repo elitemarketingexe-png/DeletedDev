@@ -25,6 +25,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +56,7 @@ private enum class PlaybackButtonType { NONE, PREVIOUS, PLAY_PAUSE, NEXT }
 @Composable
 fun AnimatedPlaybackControls(
     isPlayingProvider: () -> Boolean,
+    isBufferingProvider: () -> Boolean = { false },
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
@@ -233,11 +235,18 @@ fun AnimatedPlaybackControls(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                MorphingPlayPauseIcon(
-                    isPlaying = playPauseVisualState,
-                    tint = tintPlayPauseIcon,
-                    size = playPauseIconSize
-                )
+                if (isBufferingProvider() && !isPlaying) {
+                    CircularWavyProgressIndicator(
+                        modifier = Modifier.size(playPauseIconSize),
+                        color = tintPlayPauseIcon
+                    )
+                } else {
+                    MorphingPlayPauseIcon(
+                        isPlaying = playPauseVisualState,
+                        tint = tintPlayPauseIcon,
+                        size = playPauseIconSize
+                    )
+                }
             }
 
             val nextWeight by animateFloatAsState(
