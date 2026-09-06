@@ -96,26 +96,50 @@ object AutoQueueManager {
                     }
                 }
             }
-            checkAndRefillQueue()
+            
+            // Check remaining queue depth on track transition.
+            // If remaining queue is low (< TARGET_QUEUE_SIZE / 2, i.e. < 12 items), schedule an adaptive refill.
+            val player = playerRef
+            if (player != null) {
+                val currentIndex = player.currentMediaItemIndex
+                val totalCount = player.mediaItemCount
+                val remaining = totalCount - currentIndex - 1
+                if (remaining < TARGET_QUEUE_SIZE / 2) {
+                    val adaptiveDelay = computeAdaptiveDebounceMs(player)
+                    scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
+                }
+            } else {
+                scheduleAdaptiveRefill()
+            }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (playbackState == Player.STATE_ENDED) {
-                checkAndRefillQueue()
+            when (playbackState) {
+                Player.STATE_ENDED -> {
+                    scheduleAdaptiveRefill(forceRefresh = false)
+                }
+                Player.STATE_READY -> {
+                    // Playback stream established. If queue is critically low (<= 1 item),
+                    // trigger an immediate adaptive top-up now that audio is playing smoothly.
+                    val player = playerRef
+                    if (player != null) {
+                        val currentIndex = player.currentMediaItemIndex
+                        val totalCount = player.mediaItemCount
+                        val remaining = totalCount - currentIndex - 1
+                        if (remaining <= 1) {
+                            val adaptiveDelay = computeAdaptiveDebounceMs(player)
+                            scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
+                        }
+                    }
+                }
             }
         }
 
         override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
-            // Only PLAYLIST_CHANGED (setMediaItems()/add/removeMediaItems()) needs a
-            // debounced top-up here. That reason fires synchronously the instant a user
-            // taps a song, exactly when the tapped track's stream URL is being resolved and
-            // its first chunk cached — refilling immediately there was the tap-to-play
-            // latency regression. Other reasons (e.g. SOURCE_UPDATE when a duration/metadata
-            // becomes known) don't need a refill at all and debouncing them too just adds
-            // needless delay to legitimate track-transition top-ups, which already have
-            // their own debounce via onMediaItemTransition/onPlaybackStateChanged above.
             if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
-            checkAndRefillQueue(delayMs = 2000L)
+            val player = playerRef
+            val adaptiveDelay = computeAdaptiveDebounceMs(player)
+            scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
         }
     }
 
@@ -253,9 +277,10 @@ object AutoQueueManager {
                 currentWatchEndpoint = endpoint
                 continuationToken = null
             }
-            // Trigger deferred refill (allows 1.5s for initial audio buffer to stream cleanly)
+            // Trigger deferred refill with dynamic adaptive debounce based on network and player state
             fetchJob = currentScope.launch(Dispatchers.IO) {
-                kotlinx.coroutines.delay(1500)
+                val delayMs = computeAdaptiveDebounceMs(withContext(Dispatchers.Main) { playerRef })
+                kotlinx.coroutines.delay(delayMs)
                 refillQueueLoop(currentId, forceRefresh = false)
             }
         }
@@ -361,13 +386,78 @@ object AutoQueueManager {
     }
 
 
-    fun scheduleRefill(delayMs: Long = 0L, forceRefresh: Boolean = false) {
+    /**
+     * Dynamically computes the debounce delay (500ms – 3000ms) based on:
+     * 1. Queue depth urgency (0 items = 500ms, 1 item = 750ms, 2 items = 1200ms, 3-4 items = 1800ms, 5+ = 2200ms)
+     * 2. Network connectivity (Wi-Fi/Ethernet = -250ms, Cellular/Metered = +400ms, Offline = 500ms)
+     * 3. Player buffering state (STATE_BUFFERING = +600ms to preserve audio chunk bandwidth, STATE_READY & isPlaying = -200ms)
+     * Final clamped strictly between 500L and 3000L.
+     */
+     fun computeAdaptiveDebounceMs(player: Player?): Long {
+         val remaining = if (player != null) {
+             val currentIndex = player.currentMediaItemIndex
+             val totalCount = player.mediaItemCount
+             (totalCount - currentIndex - 1).coerceAtLeast(0)
+         } else {
+             0
+         }
+
+         // Base delay by queue urgency
+         val baseDelay = when (remaining) {
+             0 -> 500L
+             1 -> 750L
+             2 -> 1200L
+             3, 4 -> 1800L
+             else -> 2200L
+         }
+
+         // Network modifier
+         val ctx = contextRef
+         var networkModifier = 0L
+         if (ctx != null) {
+             val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+             val activeNet = cm?.activeNetwork
+             val caps = cm?.getNetworkCapabilities(activeNet)
+             if (caps == null || !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                 return 500L // Local DB query is instantaneous; no network contention
+             } else if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+                 caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                 networkModifier = -250L
+             } else if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                 cm.isActiveNetworkMetered) {
+                 networkModifier = 400L
+             }
+         }
+
+         // Player buffering state modifier
+         var playerModifier = 0L
+         if (player != null) {
+             if (player.playbackState == Player.STATE_BUFFERING) {
+                 playerModifier = 600L // Give stream chunks top priority
+             } else if (player.playbackState == Player.STATE_READY && player.isPlaying) {
+                 playerModifier = -200L
+             }
+         }
+
+         return (baseDelay + networkModifier + playerModifier).coerceIn(500L, 3000L)
+     }
+
+    fun scheduleAdaptiveRefill(delayMs: Long? = null, forceRefresh: Boolean = false) {
         val currentScope = scope ?: return
         currentScope.launch(Dispatchers.IO) {
-            if (delayMs > 0L) {
-                kotlinx.coroutines.delay(delayMs)
+            val actualDelay = delayMs ?: computeAdaptiveDebounceMs(withContext(Dispatchers.Main) { playerRef })
+            if (actualDelay > 0L) {
+                kotlinx.coroutines.delay(actualDelay)
             }
             forceRefill(forceRefresh = forceRefresh)
+        }
+    }
+
+    fun scheduleRefill(delayMs: Long = 0L, forceRefresh: Boolean = false) {
+        if (delayMs <= 0L) {
+            scheduleAdaptiveRefill(delayMs = null, forceRefresh = forceRefresh)
+        } else {
+            scheduleAdaptiveRefill(delayMs = delayMs, forceRefresh = forceRefresh)
         }
     }
 
@@ -1015,22 +1105,16 @@ object AutoQueueManager {
         // continuationToken. We just update lastFetchedVideoId and set currentWatchEndpoint
         // only if it was not already set by resetAndReseedFromCurrentSong().
         val activeId = if (isLocal) currentId else resolvedVideoId
-        if (forceRefresh) {
+        if (forceRefresh || lastFetchedVideoId != activeId) {
             lastFetchedVideoId = activeId
-            // Only reset endpoint if not already seeded by resetAndReseedFromCurrentSong()
-            if (currentWatchEndpoint == null && !isLocal && resolvedVideoId.isNotBlank()) {
+            // If the playing track has changed or forced refresh, re-seed the endpoint if not already matching
+            if (!isLocal && resolvedVideoId.isNotBlank()) {
                 currentWatchEndpoint = WatchEndpoint(videoId = resolvedVideoId, playlistId = "RDAMVM$resolvedVideoId")
+                continuationToken = null
             }
             synchronized(addedVideoIds) {
-                // Add current song — forceRefill() already pruned the set
+                // Ensure the new active track is tracked
                 addedVideoIds.add(activeId)
-            }
-        } else {
-            if (lastFetchedVideoId == null) {
-                lastFetchedVideoId = activeId
-                synchronized(addedVideoIds) {
-                    addedVideoIds.add(activeId)
-                }
             }
         }
 
@@ -1464,10 +1548,7 @@ object AutoQueueManager {
                     return@onSuccess
                 }
 
-                // Add each to tracking set — must use loop, not forEach, because addToAddedVideoIds is suspend
-                for (item in filteredItems) {
-                    addToAddedVideoIds(item.id)
-                }
+                // Songs are tracked when accepted and added to the queue in refillQueueLoop
                 fetchedSongs = filteredItems.map { it.toNativeSong() }
             }.onFailure { e ->
                 printe("AutoQueueManager: Failed to fetch related online: ${e.message}")

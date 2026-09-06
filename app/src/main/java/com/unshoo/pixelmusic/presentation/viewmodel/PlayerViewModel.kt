@@ -2848,6 +2848,20 @@ class PlayerViewModel @Inject constructor(
             } else {
                 if (isVoluntaryPlay) incrementSongScore(song)
                 playSongs(playbackContext, song, queueName, playlistId)
+                if (queueName == "Quick Picks") {
+                    val vid = song.youtubeId ?: if (song.id.startsWith("youtube_")) song.id.substringAfter("youtube_") else null
+                    if (!vid.isNullOrBlank()) {
+                        val endpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                            videoId = vid,
+                            playlistId = "RDAMVM$vid"
+                        )
+                        com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.seed(
+                            endpoint = endpoint,
+                            continuation = null,
+                            videoId = vid
+                        )
+                    }
+                }
             }
         }
         resetPredictiveBackState()
@@ -5692,8 +5706,8 @@ class PlayerViewModel @Inject constructor(
                             // Instant YT Music history sync for the song just launched.
                             player.currentMediaItem?.let { registerYoutubePlaybackHistoryIfNeeded(it) }
                             _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
-                            // Auto Queue automatically refills related songs with a debounce delay so tap-to-play gets 100% priority
-                            com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.scheduleRefill(delayMs = 2000L, forceRefresh = true)
+                            // Auto Queue automatically refills related songs with an adaptive debounce delay so tap-to-play gets 100% priority
+                            com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.scheduleAdaptiveRefill(forceRefresh = true)
                         }
 
                         // Warm next/prev + first-chunk cache OFF the critical path.
@@ -5732,7 +5746,6 @@ class PlayerViewModel @Inject constructor(
             } else {
                 playSongsAction()
             }
-            com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.forceRefill(forceRefresh = true)
         }
     }
 
