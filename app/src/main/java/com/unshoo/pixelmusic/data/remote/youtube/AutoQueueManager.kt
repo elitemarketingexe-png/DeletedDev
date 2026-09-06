@@ -1336,7 +1336,12 @@ object AutoQueueManager {
                         val alreadyTracked = synchronized(addedVideoIds) {
                             addedVideoIds.any { isSameSong(it, songIdStr) }
                         }
-                        !isInQueue && !isAvoid && !alreadyTracked
+                        val cleanTitle = song.title.lowercase().trim()
+                        val cleanArtist = song.artist.lowercase().trim()
+                        val isDuplicateTitleArtist = cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty() &&
+                            (currentQueueKeys.contains("$cleanTitle|$cleanArtist") || avoidKeys.contains("$cleanTitle|$cleanArtist"))
+
+                        !isInQueue && !isAvoid && !alreadyTracked && !isDuplicateTitleArtist
                     }.take(needed)
                     discovered = filteredRelated
                     if (filteredRelated.isNotEmpty()) {
