@@ -279,7 +279,7 @@ object AutoQueueManager {
             }
             // Trigger deferred refill with dynamic adaptive debounce based on network and player state
             fetchJob = currentScope.launch(Dispatchers.IO) {
-                val delayMs = computeAdaptiveDebounceMs(withContext(Dispatchers.Main) { playerRef })
+                val delayMs = computeAdaptiveDebounceMsAsync(playerRef)
                 kotlinx.coroutines.delay(delayMs)
                 refillQueueLoop(currentId, forceRefresh = false)
             }
@@ -393,59 +393,73 @@ object AutoQueueManager {
      * 3. Player buffering state (STATE_BUFFERING = +600ms to preserve audio chunk bandwidth, STATE_READY & isPlaying = -200ms)
      * Final clamped strictly between 500L and 3000L.
      */
-     fun computeAdaptiveDebounceMs(player: Player?): Long {
-         val remaining = if (player != null) {
-             val currentIndex = player.currentMediaItemIndex
-             val totalCount = player.mediaItemCount
-             (totalCount - currentIndex - 1).coerceAtLeast(0)
-         } else {
-             0
-         }
+    fun computeAdaptiveDebounceMs(
+        remaining: Int,
+        playbackState: Int = Player.STATE_IDLE,
+        isPlaying: Boolean = false
+    ): Long {
+        // Base delay by queue urgency
+        val baseDelay = when (remaining.coerceAtLeast(0)) {
+            0 -> 500L
+            1 -> 750L
+            2 -> 1200L
+            3, 4 -> 1800L
+            else -> 2200L
+        }
 
-         // Base delay by queue urgency
-         val baseDelay = when (remaining) {
-             0 -> 500L
-             1 -> 750L
-             2 -> 1200L
-             3, 4 -> 1800L
-             else -> 2200L
-         }
+        // Network modifier
+        val ctx = contextRef
+        var networkModifier = 0L
+        if (ctx != null) {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            val activeNet = cm?.activeNetwork
+            val caps = cm?.getNetworkCapabilities(activeNet)
+            if (caps == null || !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                return 500L // Local DB query is instantaneous; no network contention
+            } else if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)) {
+                networkModifier = -250L
+            } else if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                cm.isActiveNetworkMetered) {
+                networkModifier = 400L
+            }
+        }
 
-         // Network modifier
-         val ctx = contextRef
-         var networkModifier = 0L
-         if (ctx != null) {
-             val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
-             val activeNet = cm?.activeNetwork
-             val caps = cm?.getNetworkCapabilities(activeNet)
-             if (caps == null || !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-                 return 500L // Local DB query is instantaneous; no network contention
-             } else if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
-                 caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)) {
-                 networkModifier = -250L
-             } else if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                 cm.isActiveNetworkMetered) {
-                 networkModifier = 400L
-             }
-         }
+        // Player buffering state modifier
+        var playerModifier = 0L
+        if (playbackState == Player.STATE_BUFFERING) {
+            playerModifier = 600L // Give stream chunks top priority
+        } else if (playbackState == Player.STATE_READY && isPlaying) {
+            playerModifier = -200L
+        }
 
-         // Player buffering state modifier
-         var playerModifier = 0L
-         if (player != null) {
-             if (player.playbackState == Player.STATE_BUFFERING) {
-                 playerModifier = 600L // Give stream chunks top priority
-             } else if (player.playbackState == Player.STATE_READY && player.isPlaying) {
-                 playerModifier = -200L
-             }
-         }
+        return (baseDelay + networkModifier + playerModifier).coerceIn(500L, 3000L)
+    }
 
-         return (baseDelay + networkModifier + playerModifier).coerceIn(500L, 3000L)
-     }
+    /**
+     * Overload for calling when already on Main thread with a Player instance.
+     */
+    fun computeAdaptiveDebounceMs(player: Player?): Long {
+        if (player == null) return computeAdaptiveDebounceMs(0)
+        val currentIndex = player.currentMediaItemIndex
+        val totalCount = player.mediaItemCount
+        val remaining = (totalCount - currentIndex - 1).coerceAtLeast(0)
+        return computeAdaptiveDebounceMs(remaining, player.playbackState, player.isPlaying)
+    }
+
+    /**
+     * Coroutine-safe version that guarantees Player properties are read strictly on Dispatchers.Main.
+     */
+    suspend fun computeAdaptiveDebounceMsAsync(player: Player?): Long {
+        return withContext(Dispatchers.Main) {
+            computeAdaptiveDebounceMs(player)
+        }
+    }
 
     fun scheduleAdaptiveRefill(delayMs: Long? = null, forceRefresh: Boolean = false) {
         val currentScope = scope ?: return
         currentScope.launch(Dispatchers.IO) {
-            val actualDelay = delayMs ?: computeAdaptiveDebounceMs(withContext(Dispatchers.Main) { playerRef })
+            val actualDelay = delayMs ?: computeAdaptiveDebounceMsAsync(playerRef)
             if (actualDelay > 0L) {
                 kotlinx.coroutines.delay(actualDelay)
             }
