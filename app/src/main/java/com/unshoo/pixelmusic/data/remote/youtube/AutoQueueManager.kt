@@ -5,6 +5,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import com.unshoo.pixelmusic.data.remote.youtube.PixelMusicHelper.printe
 import com.unshoo.pixelmusic.data.remote.youtube.PixelMusicHelper.printd
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -12,6 +13,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.math.absoluteValue
 
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
@@ -36,14 +39,31 @@ object AutoQueueManager {
 
     private var fetchJob: Job? = null
 
+    // Guards the "is a refill already running, and if not, start one" decision in
+    // forceRefill() so it's a single atomic operation instead of a racy
+    // check-then-act on fetchJob. Without this, several Player.Listener callbacks
+    // that all legitimately fire around the same track transition
+    // (onMediaItemTransition, onTimelineChanged, onPlaybackStateChanged) can each
+    // observe "no refill running" during the same window and all launch their own
+    // fetch loop — a network-request storm that also stomps on the shared
+    // continuationToken/currentWatchEndpoint below, since more than one loop ends
+    // up mutating them concurrently. This is much more likely to bite under slower
+    // or heavier network conditions (post-login personalized requests, concurrent
+    // library sync, etc.) because slower requests widen the race window — which is
+    // exactly the "works after fresh install, breaks after login/heavy network
+    // activity" pattern this class needs to be immune to. The lock is only held
+    // for the brief decide-and-launch step, never for the lifetime of the refill
+    // loop itself, so normal seeding throughput is unaffected.
+    private val refillGate = Mutex()
+
     // Set when a refill was requested while another refill was still running.
     // The finishing refill picks it up and schedules one follow-up pass, so a
     // track change arriving during a slow network fetch no longer silently
     // drops the refill request (previously forceRefill() just returned).
     @Volatile private var pendingRefillAfterCurrent = false
-    private var lastFetchedVideoId: String? = null
-    private var continuationToken: String? = null
-    private var currentWatchEndpoint: WatchEndpoint? = null
+    @Volatile private var lastFetchedVideoId: String? = null
+    @Volatile private var continuationToken: String? = null
+    @Volatile private var currentWatchEndpoint: WatchEndpoint? = null
     private val addedVideoIds = mutableSetOf<String>()
 
     // Memory cache mapping local/offline song IDs to matched YouTube video IDs
@@ -187,7 +207,15 @@ object AutoQueueManager {
     fun detach(player: Player?) {
         player?.removeListener(playerListener)
         playerRef = null
-        fetchJob?.cancel()
+        // Clear seeding/session state (continuationToken, currentWatchEndpoint,
+        // lastFetchedVideoId, addedVideoIds, sessionPlayHistory) along with cancelling
+        // fetchJob. Previously only fetchJob was cancelled here, so a later attach()
+        // (service restart, MediaController reconnect) resumed with a stale
+        // continuation token paired against a watch endpoint from a session that no
+        // longer exists — the very same "mismatched continuation/endpoint" failure
+        // mode the refillGate change above fixes for concurrent access, except this
+        // path was single-threaded and just leaking state across attach/detach cycles.
+        reset()
         scope = null
         contextRef = null
         datastoreRepository = null
@@ -499,6 +527,20 @@ object AutoQueueManager {
     }
 
     fun scheduleAdaptiveRefill(delayMs: Long? = null, forceRefresh: Boolean = false) {
+        // Cheap fast-path: refillQueueLoop's own player.addMediaItems() calls fire
+        // onTimelineChanged, which calls back into this function — so a single refill
+        // pass that pages through several batches can otherwise queue up many redundant
+        // delayed coroutines here, all racing to check fetchJob once their delay elapses.
+        // Folding them into the existing pendingRefillAfterCurrent flag immediately
+        // (instead of spawning a coroutine, waiting out an adaptive delay, and only
+        // then discovering a refill was already running) is what actually stops the
+        // pile-up; the authoritative, race-free check still happens under refillGate
+        // inside forceRefill(), so this is purely a lag/storm reduction, not a
+        // correctness requirement.
+        if (!forceRefresh && fetchJob?.isActive == true) {
+            pendingRefillAfterCurrent = true
+            return
+        }
         val currentScope = scope ?: return
         currentScope.launch(Dispatchers.IO) {
             val actualDelay = delayMs ?: computeAdaptiveDebounceMsAsync(playerRef)
@@ -565,28 +607,42 @@ object AutoQueueManager {
                 // When offline with local file, we can still generate queue from local DB matches
             }
 
-            if (forceRefresh) {
-                fetchJob?.cancel()
-                synchronized(addedVideoIds) {
-                    val currentClean = normalizeSongId(currentId)
-                    addedVideoIds.retainAll { isSameSong(it, currentClean) }
-                    addedVideoIds.add(currentClean)
+            // Atomically decide "is a refill already running?" and, if not, mark one as
+            // started — all inside the same lock. Doing the fetchJob?.isActive check and
+            // the fetchJob = launch(...) assignment as two separate steps (the old code)
+            // is a classic check-then-act race: several listener callbacks that fire
+            // around the same track transition can all observe "nothing running" in the
+            // same window and each launch their own fetch loop. Concurrent loops don't
+            // just duplicate network calls — they also stomp on the shared
+            // continuationToken/currentWatchEndpoint (a loop can end up pairing a
+            // continuation token from one loop with the watch endpoint another loop just
+            // swapped in), which is what actually breaks seeding rather than just
+            // wasting bandwidth. Holding the mutex only around this decision — never
+            // around the loop's execution — keeps this cheap.
+            refillGate.withLock {
+                if (forceRefresh) {
+                    fetchJob?.cancel()
+                    synchronized(addedVideoIds) {
+                        val currentClean = normalizeSongId(currentId)
+                        addedVideoIds.retainAll { isSameSong(it, currentClean) }
+                        addedVideoIds.add(currentClean)
+                    }
+                    continuationToken = null
+                    currentWatchEndpoint = null
+                } else {
+                    if (fetchJob?.isActive == true) {
+                        // A refill is already in flight. Remember the request instead of
+                        // dropping it — the running loop tops up based on the CURRENT player
+                        // state each iteration, but if the queue dipped again after it
+                        // finishes (or its radio got exhausted), this follow-up catches it.
+                        pendingRefillAfterCurrent = true
+                        return@withLock
+                    }
                 }
-                continuationToken = null
-                currentWatchEndpoint = null
-            } else {
-                if (fetchJob?.isActive == true) {
-                    // A refill is already in flight. Remember the request instead of
-                    // dropping it — the running loop tops up based on the CURRENT player
-                    // state each iteration, but if the queue dipped again after it
-                    // finishes (or its radio got exhausted), this follow-up catches it.
-                    pendingRefillAfterCurrent = true
-                    return@launch
-                }
-            }
 
-            fetchJob = launch(Dispatchers.IO) {
-                refillQueueLoopWithFollowUp(currentId, forceRefresh)
+                fetchJob = launch(Dispatchers.IO) {
+                    refillQueueLoopWithFollowUp(currentId, forceRefresh)
+                }
             }
         }
     }
@@ -1649,6 +1705,14 @@ object AutoQueueManager {
                 currentWatchEndpoint = null
             }
             return fetchedSongs
+        } catch (e: CancellationException) {
+            // Must propagate, not be treated as a fetch failure: this coroutine's job
+            // was actually cancelled (e.g. forceRefill(forceRefresh = true) cancelling
+            // the previous fetchJob on a seek/skip). Swallowing it here as a generic
+            // Exception would let a cancelled loop keep running, wasting a network
+            // round-trip and racing its own now-superseded continuationToken/
+            // currentWatchEndpoint writes against the fresh loop that replaced it.
+            throw e
         } catch (e: Exception) {
             printe("AutoQueueManager: Exception fetching online related songs: ${e.message}")
             continuationToken = null

@@ -1592,7 +1592,7 @@ object YouTube {
             continuation = playlistPanelRenderer.continuations?.getContinuation(),
             endpoint = endpoint
         )
-    }
+    }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
 
     suspend fun lyrics(endpoint: BrowseEndpoint): Result<String?> = runCatching {
         val response = innerTube.browse(WEB_REMIX, endpoint.browseId, endpoint.params).body<BrowseResponse>()

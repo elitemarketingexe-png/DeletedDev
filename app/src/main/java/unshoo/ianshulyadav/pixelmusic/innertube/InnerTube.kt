@@ -289,6 +289,21 @@ class InnerTube {
                 if (attempt >= maxAttempts) throw e
                 delay(currentDelay)
                 currentDelay = (currentDelay * factor).toLong()
+            } catch (e: ServerResponseException) {
+                // Retry 5xx server errors
+                lastException = e
+                attempt++
+                if (attempt >= maxAttempts) throw e
+                delay(currentDelay)
+                currentDelay = (currentDelay * factor).toLong()
+            } catch (e: ClientRequestException) {
+                // Only retry 429 Too Many Requests
+                if (e.response.status != HttpStatusCode.TooManyRequests) throw e
+                lastException = e
+                attempt++
+                if (attempt >= maxAttempts) throw e
+                delay(currentDelay)
+                currentDelay = (currentDelay * factor).toLong()
             }
         }
         throw lastException ?: IOException("withRetry exhausted all $maxAttempts attempts")
