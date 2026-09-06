@@ -1400,8 +1400,11 @@ class MusicService : MediaLibraryService() {
             isLikelyYoutubeVideoId(mediaId) -> mediaId
             else -> {
                 val uri = item.localConfiguration?.uri
+                val metaUri = item.mediaMetadata.extras?.getString("com.unshoo.pixelmusic.external.CONTENT_URI")
                 if (uri?.scheme == "youtube") {
                     uri.toString().substringAfter("youtube://").substringBefore('?')
+                } else if (metaUri?.startsWith("youtube://") == true) {
+                    metaUri.removePrefix("youtube://").substringBefore('?')
                 } else {
                     null
                 }

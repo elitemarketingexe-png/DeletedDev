@@ -437,13 +437,13 @@ object AutoQueueManager {
         playbackState: Int = Player.STATE_IDLE,
         isPlaying: Boolean = false
     ): Long {
-        // Base delay by queue urgency
+        // Base delay by queue urgency: immediate top-up when queue is empty/critical
         val baseDelay = when (remaining.coerceAtLeast(0)) {
-            0 -> 500L
-            1 -> 750L
-            2 -> 1200L
-            3, 4 -> 1800L
-            else -> 2200L
+            0 -> 200L
+            1 -> 400L
+            2 -> 400L
+            3, 4 -> 400L
+            else -> 1000L
         }
 
         // Network modifier
@@ -454,25 +454,25 @@ object AutoQueueManager {
             val activeNet = cm?.activeNetwork
             val caps = cm?.getNetworkCapabilities(activeNet)
             if (caps == null || !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-                return 500L // Local DB query is instantaneous; no network contention
+                return 300L // Local DB query is instantaneous; no network contention
             } else if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
                 caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)) {
-                networkModifier = -250L
+                networkModifier = -150L
             } else if (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ||
                 cm.isActiveNetworkMetered) {
-                networkModifier = 400L
+                networkModifier = 200L
             }
         }
 
-        // Player buffering state modifier
+        // Player buffering state modifier (protects active playback chunk downloads)
         var playerModifier = 0L
         if (playbackState == Player.STATE_BUFFERING) {
-            playerModifier = 600L // Give stream chunks top priority
+            playerModifier = 800L // Give stream chunks top network priority
         } else if (playbackState == Player.STATE_READY && isPlaying) {
-            playerModifier = -200L
+            playerModifier = -150L
         }
 
-        return (baseDelay + networkModifier + playerModifier).coerceIn(500L, 3000L)
+        return (baseDelay + networkModifier + playerModifier).coerceIn(200L, 2500L)
     }
 
     /**
@@ -1417,6 +1417,17 @@ object AutoQueueManager {
                     // next loop iteration page further via the continuation token instead of
                     // falling through to the (much thinner) local fallback pool.
                     emptyFetchCount++
+                    if (emptyFetchCount >= 3) {
+                        printd("AutoQueueManager: 3 consecutive duplicate pages — resetting continuation and pruning stale added IDs")
+                        continuationToken = null
+                        currentWatchEndpoint = WatchEndpoint(videoId = resolvedVideoId, playlistId = "RDAMVM$resolvedVideoId")
+                        val retainIds = synchronized(addedVideoIds) {
+                            (currentQueueIds + resolvedVideoId).toSet()
+                        }
+                        synchronized(addedVideoIds) {
+                            addedVideoIds.retainAll(retainIds)
+                        }
+                    }
                     continue
                 } else {
                     discovered = fetchLocalRelated(currentId, currentQueueIds)
@@ -1641,6 +1652,10 @@ object AutoQueueManager {
             if (finalSongsToAdd.isEmpty()) {
                 printd("AutoQueueManager: No songs to add this loop — emptyFetchCount=$emptyFetchCount")
                 emptyFetchCount++
+                if (emptyFetchCount >= 3) {
+                    continuationToken = null
+                    currentWatchEndpoint = null
+                }
                 continue // Count empty loops; break handled at loop top
             }
             emptyFetchCount = 0 // Reset on successful add

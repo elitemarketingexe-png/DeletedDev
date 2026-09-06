@@ -1069,10 +1069,13 @@ class DualPlayerEngine @Inject constructor(
      * (e.g. after a long pause or app reopening) and proactively re-resolves it in-place.
      */
     suspend fun ensureFreshStreamForResume() {
-        val currentItem = if (::playerA.isInitialized) playerA.currentMediaItem else null
-        if (currentItem == null) return
+        val (currentItem, currentUri) = withContext(Dispatchers.Main.immediate) {
+            val item = if (::playerA.isInitialized) playerA.currentMediaItem else null
+            val uri = item?.localConfiguration?.uri
+            Pair(item, uri)
+        }
+        if (currentItem == null || currentUri == null) return
 
-        val currentUri = currentItem.localConfiguration?.uri ?: return
         val currentUriStr = currentUri.toString()
         val originalUriStr = currentItem.mediaMetadata.extras?.getString("com.unshoo.pixelmusic.external.CONTENT_URI") ?: currentUriStr
 
@@ -1517,7 +1520,8 @@ class DualPlayerEngine @Inject constructor(
         }
 
         outgoingPlayer.volume = 0f
-        incomingPlayer.volume = incomingTrackReplayGainVolume ?: 1f
+        val postTransitionVolume = (incomingTrackReplayGainVolume ?: outgoingStartVolume.takeIf { it > 0.05f } ?: 1f).coerceIn(0.01f, 1f)
+        incomingPlayer.volume = postTransitionVolume
         incomingTrackReplayGainVolume = null
 
         outgoingPlayer.removeListener(masterPlayerListener)
@@ -1533,6 +1537,9 @@ class DualPlayerEngine @Inject constructor(
         playerB.pauseAtEndOfMediaItems = false
         playerA.addListener(masterPlayerListener)
         playerA.addAnalyticsListener(masterPlayerListener)
+        if (playerA.volume <= 0.01f) {
+            playerA.volume = postTransitionVolume
+        }
         if (playerA.playWhenReady) requestAudioFocus()
 
         onPlayerSwappedListeners.forEach { it(playerA) }

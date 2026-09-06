@@ -1064,8 +1064,12 @@ class LyricsRepositoryImpl @Inject constructor(
      * Load embedded lyrics from audio file metadata
      */
     private suspend fun loadEmbeddedLyricsFromMetadata(song: Song): Lyrics? = withContext(Dispatchers.IO) {
-        // Skip embedded lyrics for Telegram songs (not supported yet/streamed)
-        if (song.contentUriString.startsWith("telegram://") || song.contentUriString.isEmpty()) {
+        // Skip embedded lyrics for Telegram / YouTube / streaming songs (not local file/content)
+        if (song.contentUriString.startsWith("telegram://") ||
+            song.contentUriString.startsWith("youtube://") ||
+            song.contentUriString.startsWith("http://") ||
+            song.contentUriString.startsWith("https://") ||
+            song.contentUriString.isEmpty()) {
             return@withContext null
         }
 

@@ -36,3 +36,4 @@ markdown.xml
 .agents/
 .git-rewrite/
 *.log
+device_log_2min.txt
