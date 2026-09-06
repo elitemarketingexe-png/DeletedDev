@@ -552,16 +552,6 @@ object AutoQueueManager {
     }
 
     fun scheduleAdaptiveRefill(delayMs: Long? = null, forceRefresh: Boolean = false) {
-        // Cheap fast-path: refillQueueLoop's own player.addMediaItems() calls fire
-        // onTimelineChanged, which calls back into this function — so a single refill
-        // pass that pages through several batches can otherwise queue up many redundant
-        // delayed coroutines here, all racing to check fetchJob once their delay elapses.
-        // Folding them into the existing pendingRefillAfterCurrent flag immediately
-        // (instead of spawning a coroutine, waiting out an adaptive delay, and only
-        // then discovering a refill was already running) is what actually stops the
-        // pile-up; the authoritative, race-free check still happens under refillGate
-        // inside forceRefill(), so this is purely a lag/storm reduction, not a
-        // correctness requirement.
         val isStuck = fetchJob?.isActive == true && (System.currentTimeMillis() - fetchStartTimeMs > 25_000L)
         if (!forceRefresh && fetchJob?.isActive == true && !isStuck) {
             pendingRefillAfterCurrent = true
@@ -578,15 +568,7 @@ object AutoQueueManager {
     }
 
     fun scheduleRefill(delayMs: Long = 0L, forceRefresh: Boolean = false) {
-        if (delayMs <= 0L) {
-            scheduleAdaptiveRefill(delayMs = null, forceRefresh = forceRefresh)
-        } else {
-            scheduleAdaptiveRefill(delayMs = delayMs, forceRefresh = forceRefresh)
-        }
-    }
-
-    private fun checkAndRefillQueue(delayMs: Long = 0L) {
-        scheduleRefill(delayMs = delayMs, forceRefresh = false)
+        scheduleAdaptiveRefill(delayMs = if (delayMs > 0L) delayMs else null, forceRefresh = forceRefresh)
     }
 
     fun forceRefill(forceRefresh: Boolean) {
@@ -1437,6 +1419,8 @@ object AutoQueueManager {
                     // be added a second time. The local-fallback branch below already
                     // filters — do the same here.
                     val needed = (targetQueueSize - remaining).coerceAtLeast(1)
+                    val batchKeys = mutableSetOf<String>()
+                    val batchIds = mutableSetOf<String>()
                     val filteredRelated = related.filter { song ->
                         val songIdStr = song.id
                         val isInQueue = currentQueueIds.any { isSameSong(it, songIdStr) }
@@ -1446,10 +1430,17 @@ object AutoQueueManager {
                         }
                         val cleanTitle = song.title.lowercase().trim()
                         val cleanArtist = song.artist.lowercase().trim()
-                        val isDuplicateTitleArtist = cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty() &&
-                            (currentQueueKeys.contains("$cleanTitle|$cleanArtist") || avoidKeys.contains("$cleanTitle|$cleanArtist"))
+                        val key = if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) "$cleanTitle|$cleanArtist" else null
+                        val isDuplicateTitleArtist = key != null &&
+                            (currentQueueKeys.contains(key) || avoidKeys.contains(key) || batchKeys.contains(key))
+                        val isDuplicateInBatch = batchIds.any { isSameSong(it, songIdStr) }
 
-                        !isInQueue && !isAvoid && !alreadyTracked && !isDuplicateTitleArtist
+                        val canAdd = !isInQueue && !isAvoid && !alreadyTracked && !isDuplicateTitleArtist && !isDuplicateInBatch
+                        if (canAdd) {
+                            batchIds.add(songIdStr)
+                            if (key != null) batchKeys.add(key)
+                        }
+                        canAdd
                     }.take(needed)
                     discovered = filteredRelated
                     if (filteredRelated.isNotEmpty()) {
