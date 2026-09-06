@@ -35,6 +35,12 @@ object AutoQueueManager {
     private const val DECAY_LAMBDA = 1.15e-9
 
     private var fetchJob: Job? = null
+
+    // Set when a refill was requested while another refill was still running.
+    // The finishing refill picks it up and schedules one follow-up pass, so a
+    // track change arriving during a slow network fetch no longer silently
+    // drops the refill request (previously forceRefill() just returned).
+    @Volatile private var pendingRefillAfterCurrent = false
     private var lastFetchedVideoId: String? = null
     private var continuationToken: String? = null
     private var currentWatchEndpoint: WatchEndpoint? = null
@@ -98,13 +104,21 @@ object AutoQueueManager {
             }
             
             // Check remaining queue depth on track transition.
-            // If remaining queue is low (< TARGET_QUEUE_SIZE / 2, i.e. < 12 items), schedule an adaptive refill.
+            // Top the queue back up to TARGET_QUEUE_SIZE whenever the upcoming count
+            // has dropped below the target. This covers BOTH natural track changes and
+            // the user jumping into the middle of the queue (e.g. tapping song 25 of 50).
+            //
+            // REGRESSION FIX: this used to gate on `remaining < TARGET_QUEUE_SIZE / 2`
+            // (= 22), which meant a 50-song queue (Quick Picks / ArchiveTune builder)
+            // sat unrefilled for half of its length — tapping song #25 left 25 upcoming
+            // and nothing was ever appended until fewer than 22 remained.
+            //
+            // Safety: refillQueueLoop() still hard-caps at TARGET_QUEUE_SIZE and
+            // forceRefill() coalesces concurrent requests, so this cannot storm the network.
             val player = playerRef
             if (player != null) {
-                val currentIndex = player.currentMediaItemIndex
-                val totalCount = player.mediaItemCount
-                val remaining = totalCount - currentIndex - 1
-                if (remaining < TARGET_QUEUE_SIZE / 2) {
+                val remaining = computeRemainingUpcoming(player)
+                if (remaining < TARGET_QUEUE_SIZE) {
                     val adaptiveDelay = computeAdaptiveDebounceMs(player)
                     scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
                 }
@@ -123,9 +137,7 @@ object AutoQueueManager {
                     // trigger an immediate adaptive top-up now that audio is playing smoothly.
                     val player = playerRef
                     if (player != null) {
-                        val currentIndex = player.currentMediaItemIndex
-                        val totalCount = player.mediaItemCount
-                        val remaining = totalCount - currentIndex - 1
+                        val remaining = computeRemainingUpcoming(player)
                         if (remaining <= 1) {
                             val adaptiveDelay = computeAdaptiveDebounceMs(player)
                             scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
@@ -281,7 +293,7 @@ object AutoQueueManager {
             fetchJob = currentScope.launch(Dispatchers.IO) {
                 val delayMs = computeAdaptiveDebounceMsAsync(playerRef)
                 kotlinx.coroutines.delay(delayMs)
-                refillQueueLoop(currentId, forceRefresh = false)
+                refillQueueLoopWithFollowUp(currentId, forceRefresh = false)
             }
         }
     }
@@ -437,13 +449,44 @@ object AutoQueueManager {
     }
 
     /**
+     * Accurate count of upcoming items from the current playback position.
+     *
+     * The naive `mediaItemCount - currentMediaItemIndex - 1` is wrong when shuffle is
+     * enabled: currentMediaItemIndex is a TIMELINE position, not a position in the
+     * shuffle order, so tapping a song that sits early in the timeline (but is next-up
+     * in shuffle order) could compute a large "remaining" and skip the refill entirely.
+     * Walks the actual next-window chain (respecting the active shuffle order) instead.
+     * Must be called on the Main thread.
+     */
+    private fun computeRemainingUpcoming(player: Player): Int {
+        val timeline = player.currentTimeline
+        val timelineCount = timeline.windowCount
+        if (timelineCount == 0) return 0
+        val startIndex = player.currentMediaItemIndex
+        if (startIndex == androidx.media3.common.C.INDEX_UNSET) return 0
+        var remaining = 0
+        var windowIndex = timeline.getNextWindowIndex(
+            startIndex,
+            Player.REPEAT_MODE_OFF,
+            player.shuffleModeEnabled
+        )
+        while (windowIndex != androidx.media3.common.C.INDEX_UNSET && remaining < timelineCount) {
+            remaining++
+            windowIndex = timeline.getNextWindowIndex(
+                windowIndex,
+                Player.REPEAT_MODE_OFF,
+                player.shuffleModeEnabled
+            )
+        }
+        return remaining
+    }
+
+    /**
      * Overload for calling when already on Main thread with a Player instance.
      */
     fun computeAdaptiveDebounceMs(player: Player?): Long {
         if (player == null) return computeAdaptiveDebounceMs(0)
-        val currentIndex = player.currentMediaItemIndex
-        val totalCount = player.mediaItemCount
-        val remaining = (totalCount - currentIndex - 1).coerceAtLeast(0)
+        val remaining = computeRemainingUpcoming(player)
         return computeAdaptiveDebounceMs(remaining, player.playbackState, player.isPlaying)
     }
 
@@ -490,13 +533,11 @@ object AutoQueueManager {
             val playerState = withContext(Dispatchers.Main) {
                 if (playerRef == null) null
                 else {
-                    val currentIndex = player.currentMediaItemIndex
-                    val totalCount = player.mediaItemCount
-                    val remaining = totalCount - currentIndex - 1
+                    val remaining = computeRemainingUpcoming(player)
                     val currentId = player.currentMediaItem?.mediaId
                     val uriScheme = player.currentMediaItem?.localConfiguration?.uri?.scheme
                     val isLocalOrFile = uriScheme == "file" || uriScheme == "content"
-                    listOf(remaining, currentId, totalCount, isLocalOrFile)
+                    listOf(remaining, currentId, player.mediaItemCount, isLocalOrFile)
                 }
             } ?: return@launch
 
@@ -524,11 +565,18 @@ object AutoQueueManager {
                 }
                 continuationToken = null
             } else {
-                if (fetchJob?.isActive == true) return@launch
+                if (fetchJob?.isActive == true) {
+                    // A refill is already in flight. Remember the request instead of
+                    // dropping it — the running loop tops up based on the CURRENT player
+                    // state each iteration, but if the queue dipped again after it
+                    // finishes (or its radio got exhausted), this follow-up catches it.
+                    pendingRefillAfterCurrent = true
+                    return@launch
+                }
             }
 
             fetchJob = launch(Dispatchers.IO) {
-                refillQueueLoop(currentId, forceRefresh)
+                refillQueueLoopWithFollowUp(currentId, forceRefresh)
             }
         }
     }
@@ -1068,6 +1116,23 @@ object AutoQueueManager {
         return finalSongsToAdd
     }
 
+    /**
+     * Runs [refillQueueLoop] and, if another refill request arrived while this one was
+     * running (see [pendingRefillAfterCurrent]), schedules exactly one follow-up pass.
+     * Guarantees track-change refill requests are never silently dropped while a fetch
+     * is in flight.
+     */
+    private suspend fun refillQueueLoopWithFollowUp(currentId: String, forceRefresh: Boolean) {
+        try {
+            refillQueueLoop(currentId, forceRefresh)
+        } finally {
+            if (pendingRefillAfterCurrent) {
+                pendingRefillAfterCurrent = false
+                scheduleAdaptiveRefill(forceRefresh = false)
+            }
+        }
+    }
+
     private suspend fun refillQueueLoop(currentId: String, forceRefresh: Boolean) {
         val player = playerRef ?: return
         val dao = musicDaoRef ?: return
@@ -1138,10 +1203,8 @@ object AutoQueueManager {
             val playerState = withContext(Dispatchers.Main) {
                 if (playerRef == null) null
                 else {
-                    val currentIndex = player.currentMediaItemIndex
-                    val totalCount = player.mediaItemCount
-                    val remaining = totalCount - currentIndex - 1
-                    Pair(remaining, totalCount)
+                    val remaining = computeRemainingUpcoming(player)
+                    Pair(remaining, player.mediaItemCount)
                 }
             } ?: break
 

@@ -117,6 +117,9 @@ fun QuickPicksAllScreen(
                         onPlay = {
                             val first = songs.firstOrNull() ?: return@QuickPicksActions
                             playerViewModel.playSongs(songs, first, "Quick Picks")
+                            // Top the short Quick Picks list back up to the auto-queue
+                            // target once playback starts (1500ms deferred fill).
+                            playerViewModel.scheduleQuickPicksQueueFill(first)
                         },
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )

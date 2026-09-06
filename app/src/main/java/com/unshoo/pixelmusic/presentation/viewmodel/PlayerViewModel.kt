@@ -2862,18 +2862,10 @@ class PlayerViewModel @Inject constructor(
                 if (isVoluntaryPlay) incrementSongScore(song)
                 playSongs(playbackContext, song, queueName, playlistId)
                 if (queueName == "Quick Picks") {
-                    val vid = song.youtubeId ?: if (song.id.startsWith("youtube_")) song.id.substringAfter("youtube_") else null
-                    if (!vid.isNullOrBlank()) {
-                        val endpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
-                            videoId = vid,
-                            playlistId = "RDAMVM$vid"
-                        )
-                        com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.seed(
-                            endpoint = endpoint,
-                            continuation = null,
-                            videoId = vid
-                        )
-                    }
+                    // Quick Picks lists are short (< 20 songs) by design. Start playback
+                    // instantly on the tapped song, then top the queue back up to the
+                    // auto-queue target from its radio after a 1500ms defer.
+                    scheduleQuickPicksQueueFill(song)
                 }
             }
         }
@@ -3651,6 +3643,57 @@ class PlayerViewModel @Inject constructor(
             }
             return videoId
         }
+    /**
+     * Quick Picks lists are intentionally short (<= 20 songs). When the user taps one,
+     * playback must start instantly on the small list, and the queue is then topped
+     * back up to the auto-queue target (45) from the tapped song's radio.
+     *
+     * Sequence:
+     *  1. Wait (up to 5s) until the tapped song is actually the current one — the
+     *     pending playSongs() build may still be hydrating/saving to DB, and
+     *     internalPlaySongs() calls AutoQueueManager.reset() before playback starts,
+     *     which would wipe a seed planted too early.
+     *  2. Resolve a YouTube radio seed (search fallback covers local songs too).
+     *  3. Defer 1500ms so tap-to-play keeps full priority (same defer convention the
+     *     auto-queue uses elsewhere), then force a refill that appends radio songs
+     *     until the upcoming queue reaches the target.
+     */
+    fun scheduleQuickPicksQueueFill(seedSong: Song) {
+        viewModelScope.launch {
+            var retries = 0
+            while (stablePlayerState.value.currentSong?.id != seedSong.id && retries < 50) {
+                delay(100)
+                retries++
+            }
+            if (stablePlayerState.value.currentSong?.id != seedSong.id) {
+                // User moved on before the tapped song started — don't fight the new context.
+                return@launch
+            }
+
+            val videoId = resolveQuickPicksVideoId(seedSong)
+            if (!videoId.isNullOrBlank()) {
+                val endpoint = unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint(
+                    videoId = videoId,
+                    playlistId = "RDAMVM$videoId"
+                )
+                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.seed(
+                    endpoint = endpoint,
+                    continuation = null,
+                    videoId = videoId
+                )
+            } else {
+                // Local song with no resolvable video: skip seeding; the refill's
+                // local-related path still fills from the device library.
+                Timber.w("Quick Picks fill: no videoId resolved for '${seedSong.title}', using local fill")
+            }
+
+            com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.scheduleRefill(
+                delayMs = 1500L,
+                forceRefresh = true
+            )
+        }
+    }
+
     fun playQuickPicksRadio(quickPicks: List<Song>) {
         if (quickPicks.isEmpty()) return
         val first = quickPicks.first()
@@ -3740,11 +3783,20 @@ class PlayerViewModel @Inject constructor(
                             videoId = lastVideoId
                         )
                     }
+                } else {
+                    // Radio page returned no usable items — hand over to AutoQueueManager
+                    // so the queue still builds up from the seed song instead of staying
+                    // at a single track.
+                    Timber.w("Quick Picks Radio: empty radio page, falling back to AutoQueueManager")
+                    com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.scheduleAdaptiveRefill(forceRefresh = false)
                 }
                 _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
             }.onFailure { e ->
                 Timber.e(e, "Failed to build quick picks radio")
                 _playerUiState.update { it.copy(isLoadingInitialSongs = false) }
+                // Initial radio build failed (network / rate limit) — fall back to the
+                // AutoQueueManager so the queue is still built around the seed song.
+                com.unshoo.pixelmusic.data.remote.youtube.AutoQueueManager.scheduleAdaptiveRefill(forceRefresh = false)
             }
         }
     }
