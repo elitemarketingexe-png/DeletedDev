@@ -12,7 +12,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.absoluteValue
@@ -33,11 +33,16 @@ import com.unshoo.pixelmusic.utils.MediaItemBuilder
 import com.unshoo.pixelmusic.presentation.viewmodel.ConnectivityStateHolder
 
 object AutoQueueManager {
-    private const val TARGET_QUEUE_SIZE = 45
+    @Volatile private var targetQueueSize: Int = 45
     private const val MAX_HISTORY = 60
     private const val DECAY_LAMBDA = 1.15e-9
 
     private var fetchJob: Job? = null
+    @Volatile private var fetchStartTimeMs: Long = 0L
+
+    fun setTargetQueueSize(size: Int) {
+        targetQueueSize = size.coerceIn(5, 100)
+    }
 
     // Guards the "is a refill already running, and if not, start one" decision in
     // forceRefill() so it's a single atomic operation instead of a racy
@@ -124,7 +129,7 @@ object AutoQueueManager {
             }
             
             // Check remaining queue depth on track transition.
-            // Top the queue back up to TARGET_QUEUE_SIZE whenever the upcoming count
+            // Top the queue back up to targetQueueSize whenever the upcoming count
             // has dropped below the target.
             //
             // If the user deliberately jumped / seeked to a new song (MEDIA_ITEM_TRANSITION_REASON_SEEK),
@@ -136,7 +141,7 @@ object AutoQueueManager {
                 val player = playerRef
                 if (player != null) {
                     val remaining = computeRemainingUpcoming(player)
-                    if (remaining < TARGET_QUEUE_SIZE) {
+                    if (remaining < targetQueueSize) {
                         val adaptiveDelay = computeAdaptiveDebounceMs(player)
                         scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
                     }
@@ -235,6 +240,7 @@ object AutoQueueManager {
         }
         fetchJob?.cancel()
         fetchJob = null
+        fetchStartTimeMs = 0L
     }
 
     /**
@@ -296,7 +302,17 @@ object AutoQueueManager {
             } ?: return@launch
 
             // Resolve YouTube ID for local songs via DB
-            val resolvedVideoId = videoId ?: run {
+            fetchJob?.cancel()
+            fetchJob = null
+            fetchStartTimeMs = 0L
+            synchronized(addedVideoIds) { addedVideoIds.clear() }
+            synchronized(sessionPlayHistory) { sessionPlayHistory.clear() }
+            continuationToken = null
+            currentWatchEndpoint = null
+
+            val resolvedVideoId = if (currentId.startsWith("youtube_")) {
+                currentId.substringAfter("youtube_")
+            } else {
                 val longId = currentId.toLongOrNull()
                 if (longId != null) {
                     val dbSong = musicDaoRef?.getSongByIdOnce(longId)
@@ -317,10 +333,19 @@ object AutoQueueManager {
                 continuationToken = null
             }
             // Trigger deferred refill with dynamic adaptive debounce based on network and player state
-            fetchJob = currentScope.launch(Dispatchers.IO) {
-                val delayMs = computeAdaptiveDebounceMsAsync(playerRef)
-                kotlinx.coroutines.delay(delayMs)
-                refillQueueLoopWithFollowUp(currentId, forceRefresh = false)
+            refillGate.withLock {
+                fetchStartTimeMs = System.currentTimeMillis()
+                fetchJob = currentScope.launch(Dispatchers.IO) {
+                    try {
+                        val delayMs = computeAdaptiveDebounceMsAsync(playerRef)
+                        kotlinx.coroutines.delay(delayMs)
+                        withTimeoutOrNull(20_000L) {
+                            refillQueueLoopWithFollowUp(currentId, forceRefresh = false)
+                        }
+                    } finally {
+                        fetchStartTimeMs = 0L
+                    }
+                }
             }
         }
     }
@@ -537,7 +562,8 @@ object AutoQueueManager {
         // pile-up; the authoritative, race-free check still happens under refillGate
         // inside forceRefill(), so this is purely a lag/storm reduction, not a
         // correctness requirement.
-        if (!forceRefresh && fetchJob?.isActive == true) {
+        val isStuck = fetchJob?.isActive == true && (System.currentTimeMillis() - fetchStartTimeMs > 25_000L)
+        if (!forceRefresh && fetchJob?.isActive == true && !isStuck) {
             pendingRefillAfterCurrent = true
             return
         }
@@ -620,15 +646,19 @@ object AutoQueueManager {
             // wasting bandwidth. Holding the mutex only around this decision — never
             // around the loop's execution — keeps this cheap.
             refillGate.withLock {
-                if (forceRefresh) {
+                val isStuck = fetchJob?.isActive == true && (System.currentTimeMillis() - fetchStartTimeMs > 25_000L)
+                if (forceRefresh || isStuck) {
                     fetchJob?.cancel()
-                    synchronized(addedVideoIds) {
-                        val currentClean = normalizeSongId(currentId)
-                        addedVideoIds.retainAll { isSameSong(it, currentClean) }
-                        addedVideoIds.add(currentClean)
+                    fetchJob = null
+                    if (forceRefresh) {
+                        synchronized(addedVideoIds) {
+                            val currentClean = normalizeSongId(currentId)
+                            addedVideoIds.retainAll { isSameSong(it, currentClean) }
+                            addedVideoIds.add(currentClean)
+                        }
+                        continuationToken = null
+                        currentWatchEndpoint = null
                     }
-                    continuationToken = null
-                    currentWatchEndpoint = null
                 } else {
                     if (fetchJob?.isActive == true) {
                         // A refill is already in flight. Remember the request instead of
@@ -640,8 +670,15 @@ object AutoQueueManager {
                     }
                 }
 
+                fetchStartTimeMs = System.currentTimeMillis()
                 fetchJob = launch(Dispatchers.IO) {
-                    refillQueueLoopWithFollowUp(currentId, forceRefresh)
+                    try {
+                        withTimeoutOrNull(20_000L) {
+                            refillQueueLoopWithFollowUp(currentId, forceRefresh)
+                        }
+                    } finally {
+                        fetchStartTimeMs = 0L
+                    }
                 }
             }
         }
@@ -1290,8 +1327,8 @@ object AutoQueueManager {
             } ?: break
 
             val (remaining, totalCount) = playerState
-            if (remaining >= TARGET_QUEUE_SIZE) {
-                printd("AutoQueueManager: Queue is full. Current remaining: $remaining (>= $TARGET_QUEUE_SIZE)")
+            if (remaining >= targetQueueSize) {
+                printd("AutoQueueManager: Queue is full. Current remaining: $remaining (>= $targetQueueSize)")
                 break
             }
 
@@ -1302,7 +1339,7 @@ object AutoQueueManager {
             }
             loopCount++
 
-            printd("AutoQueueManager: Refilling queue. Remaining: $remaining, Target: $TARGET_QUEUE_SIZE, Loop: $loopCount")
+            printd("AutoQueueManager: Refilling queue. Remaining: $remaining, Target: $targetQueueSize, Loop: $loopCount")
 
             val currentQueueIds = withContext(Dispatchers.Main) {
                 if (playerRef == null) emptySet()
@@ -1399,7 +1436,7 @@ object AutoQueueManager {
                     // track already sitting in the queue (or on the avoid/skip list) could
                     // be added a second time. The local-fallback branch below already
                     // filters — do the same here.
-                    val needed = (TARGET_QUEUE_SIZE - remaining).coerceAtLeast(1)
+                    val needed = (targetQueueSize - remaining).coerceAtLeast(1)
                     val filteredRelated = related.filter { song ->
                         val songIdStr = song.id
                         val isInQueue = currentQueueIds.any { isSameSong(it, songIdStr) }
