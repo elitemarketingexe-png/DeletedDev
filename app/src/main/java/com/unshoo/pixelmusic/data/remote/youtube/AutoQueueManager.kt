@@ -1246,20 +1246,35 @@ object AutoQueueManager {
         val isLocal = rawVideoId == null
         val resolvedVideoId = rawVideoId ?: ""
 
-        // NOTE: On forceRefresh, forceRefill() already pruned addedVideoIds and cleared
-        // continuationToken. We just update lastFetchedVideoId and set currentWatchEndpoint
-        // only if it was not already set by resetAndReseedFromCurrentSong().
+        // Restore the reference commit's (0dc9b5bc) endpoint-preservation logic.
+        // The previous code here unconditionally reset continuationToken and overwrote
+        // currentWatchEndpoint whenever lastFetchedVideoId differed from activeId.
+        // This destroyed pagination state on every follow-up refill (e.g. from
+        // pendingRefillAfterCurrent or a natural track transition), causing the fetch
+        // to restart from page 1, get all-duplicate items, hit the 3-empty-pages
+        // limit, and permanently disable seeding.
         val activeId = if (isLocal) currentId else resolvedVideoId
-        if (forceRefresh || lastFetchedVideoId != activeId) {
+        if (forceRefresh) {
             lastFetchedVideoId = activeId
-            // If the playing track has changed or forced refresh, re-seed the endpoint if not already matching
-            if (!isLocal && resolvedVideoId.isNotBlank()) {
+            // forceRefill() already cleared continuationToken and currentWatchEndpoint.
+            // Create a fresh endpoint from the new song's video ID if needed.
+            if (currentWatchEndpoint == null && !isLocal && resolvedVideoId.isNotBlank()) {
                 currentWatchEndpoint = WatchEndpoint(videoId = resolvedVideoId, playlistId = "RDAMVM$resolvedVideoId")
-                continuationToken = null
             }
             synchronized(addedVideoIds) {
-                // Ensure the new active track is tracked
                 addedVideoIds.add(activeId)
+            }
+        } else {
+            // Non-forceRefresh: preserve existing pagination state.
+            // Only initialize lastFetchedVideoId if it hasn't been set yet.
+            // The endpoint and continuation from a previous successful fetch
+            // are deliberately kept alive so the radio continues paging
+            // rather than restarting from page 1 on every track transition.
+            if (lastFetchedVideoId == null) {
+                lastFetchedVideoId = activeId
+                synchronized(addedVideoIds) {
+                    addedVideoIds.add(activeId)
+                }
             }
         }
 
@@ -1418,15 +1433,14 @@ object AutoQueueManager {
                     // falling through to the (much thinner) local fallback pool.
                     emptyFetchCount++
                     if (emptyFetchCount >= 3) {
-                        printd("AutoQueueManager: 3 consecutive duplicate pages — resetting continuation and pruning stale added IDs")
+                        // Reset pagination so the next refill trigger starts fresh.
+                        // Do NOT aggressively prune addedVideoIds here — pruning causes
+                        // the next fetch to get page 1 again, which overlaps with the
+                        // existing queue and creates a stuck duplicate loop. The loop
+                        // guard at the top will break after 3 empty fetches.
+                        printd("AutoQueueManager: 3 consecutive duplicate pages — resetting pagination for next refill")
                         continuationToken = null
-                        currentWatchEndpoint = WatchEndpoint(videoId = resolvedVideoId, playlistId = "RDAMVM$resolvedVideoId")
-                        val retainIds = synchronized(addedVideoIds) {
-                            (currentQueueIds + resolvedVideoId).toSet()
-                        }
-                        synchronized(addedVideoIds) {
-                            addedVideoIds.retainAll(retainIds)
-                        }
+                        currentWatchEndpoint = null
                     }
                     continue
                 } else {
@@ -1715,9 +1729,13 @@ object AutoQueueManager {
                 fetchedSongs = filteredItems.map { it.toNativeSong() }
             }.onFailure { e ->
                 printe("AutoQueueManager: Failed to fetch related online: ${e.message}")
-                // On network failure, reset endpoint to allow retry next time
+                // Only reset pagination token so the next attempt retries from page 1.
+                // Keep currentWatchEndpoint alive — it's derived from the seed video and
+                // remains valid after a transient network failure. Nulling it was a root
+                // cause of "single failure kills seeding permanently": the next fetch
+                // recreated the endpoint from the video ID, got page 1 (already in
+                // addedVideoIds), filtered everything → 3 empty pages → dead.
                 continuationToken = null
-                currentWatchEndpoint = null
             }
             return fetchedSongs
         } catch (e: CancellationException) {
@@ -1730,8 +1748,9 @@ object AutoQueueManager {
             throw e
         } catch (e: Exception) {
             printe("AutoQueueManager: Exception fetching online related songs: ${e.message}")
+            // Same rationale as onFailure above: null pagination but preserve endpoint
+            // so the seed video isn't lost on transient errors.
             continuationToken = null
-            currentWatchEndpoint = null
             return emptyList()
         }
     }
