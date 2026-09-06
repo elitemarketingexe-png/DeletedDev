@@ -124,19 +124,10 @@ fun LibrarySongsTab(
         }
     }
 
-    // Auto-center current playing song when track changes
-    LaunchedEffect(currentSongId) {
-        if (currentSongId != null && songs.itemCount > 0) {
-            val targetIndex = (0 until songs.itemCount).firstOrNull { idx ->
-                songs.peek(idx)?.id == currentSongId
-            } ?: -1
-            if (targetIndex >= 0) {
-                val viewportHeight = listState.layoutInfo.viewportSize.height
-                val centerOffset = -(viewportHeight / 3)
-                listState.animateScrollToItem(targetIndex, scrollOffset = centerOffset)
-            }
-        }
-    }
+    // Do not auto-scan the whole PagingData snapshot when the track changes. With placeholders
+    // enabled that is an O(library size) main-thread loop (20k `peek` calls for a large
+    // library), even though most rows are not loaded. The explicit locate action above resolves
+    // the sorted position in the repository and emits `scrollToIndexEvent` instead.
 
     // New action just triggers the ViewModel request
     val locateCurrentSongAction: (() -> Unit)? = remember(currentSongId) {

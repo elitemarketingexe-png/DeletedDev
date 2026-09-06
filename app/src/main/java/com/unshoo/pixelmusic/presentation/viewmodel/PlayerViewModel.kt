@@ -917,14 +917,18 @@ class PlayerViewModel @Inject constructor(
                     baseFilter
                 }
 
-                val sortedIds = musicRepository.getSongIdsSorted(sortOption, storageFilter)
+                // A 20k-song library means both loading the ordered IDs and finding the target
+                // are linear work. Keep that work off the UI dispatcher so tapping Locate never
+                // competes with Compose layout or player callbacks.
+                val index = withContext(Dispatchers.Default) {
+                    val sortedIds = musicRepository.getSongIdsSorted(sortOption, storageFilter)
+                    val unifiedId = currentSong.id.toLongOrNull()
+                        ?: currentSong.contentUriString
+                            .takeIf { it.isNotBlank() }
+                            ?.let { musicRepository.getSongIdByContentUri(it) }
 
-                val unifiedId = currentSong.id.toLongOrNull()
-                    ?: currentSong.contentUriString
-                        .takeIf { it.isNotBlank() }
-                        ?.let { musicRepository.getSongIdByContentUri(it) }
-
-                val index = unifiedId?.let { sortedIds.indexOf(it) } ?: -1
+                    unifiedId?.let(sortedIds::indexOf) ?: -1
+                }
 
                 if (index != -1) {
                     _scrollToIndexEvent.emit(index)
@@ -991,10 +995,14 @@ class PlayerViewModel @Inject constructor(
 
         fullQueuePlaybackJob = viewModelScope.launch {
             try {
-                val sortedIds = sortedIdsProvider()
-                throwIfFullQueuePlaybackRequestIsStale(requestToken)
-
-                val fullQueue = resolvePlaybackQueueFromSortedIds(sortedIds)
+                // Keep ID mapping and queue materialisation off main. This path is exercised for
+                // every tap in the Songs tab, and processing 5k-20k IDs on main causes visible
+                // input and animation stalls before the player is even prepared.
+                val fullQueue = withContext(Dispatchers.Default) {
+                    val sortedIds = sortedIdsProvider()
+                    throwIfFullQueuePlaybackRequestIsStale(requestToken)
+                    resolvePlaybackQueueFromSortedIds(sortedIds)
+                }
                 throwIfFullQueuePlaybackRequestIsStale(requestToken)
 
                 showAndPlaySong(
@@ -1081,20 +1089,23 @@ class PlayerViewModel @Inject constructor(
     private suspend fun resolvePlaybackQueueFromSortedIds(sortedIds: List<Long>): List<Song> {
         if (sortedIds.isEmpty()) return emptyList()
 
-        val orderedIds = sortedIds.map(Long::toString)
         val cachedSongsById = libraryStateHolder.allSongsById.value
-        val missingIds = ArrayList<String>()
-        val cachedQueue = ArrayList<Song>(orderedIds.size)
+        val (orderedIds, missingIds, cachedQueue) = withContext(Dispatchers.Default) {
+            val orderedIds = ArrayList<String>(sortedIds.size)
+            val missingIds = ArrayList<String>()
+            val cachedQueue = ArrayList<Song>(sortedIds.size)
 
-        withContext(Dispatchers.Default) {
-            orderedIds.forEach { songId ->
-                val cachedSong = cachedSongsById[songId]
+            sortedIds.forEach { songId ->
+                val id = songId.toString()
+                orderedIds.add(id)
+                val cachedSong = cachedSongsById[id]
                 if (cachedSong != null) {
                     cachedQueue.add(cachedSong)
                 } else {
-                    missingIds.add(songId)
+                    missingIds.add(id)
                 }
             }
+            Triple(orderedIds, missingIds, cachedQueue)
         }
 
         if (missingIds.isEmpty()) {
@@ -1105,9 +1116,11 @@ class PlayerViewModel @Inject constructor(
         return withContext(Dispatchers.Default) {
             val finalQueue = ArrayList<Song>(orderedIds.size)
             orderedIds.forEach { songId ->
-                val resolvedSong = cachedSongsById[songId] ?: missingSongsById[songId]
-                if (resolvedSong != null) {
-                    finalQueue.add(resolvedSong)
+                val cachedSong = cachedSongsById[songId]
+                if (cachedSong != null) {
+                    finalQueue.add(cachedSong)
+                } else {
+                    missingSongsById[songId]?.let(finalQueue::add)
                 }
             }
             finalQueue
