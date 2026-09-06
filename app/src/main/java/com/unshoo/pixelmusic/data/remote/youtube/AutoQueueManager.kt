@@ -105,25 +105,24 @@ object AutoQueueManager {
             
             // Check remaining queue depth on track transition.
             // Top the queue back up to TARGET_QUEUE_SIZE whenever the upcoming count
-            // has dropped below the target. This covers BOTH natural track changes and
-            // the user jumping into the middle of the queue (e.g. tapping song 25 of 50).
+            // has dropped below the target.
             //
-            // REGRESSION FIX: this used to gate on `remaining < TARGET_QUEUE_SIZE / 2`
-            // (= 22), which meant a 50-song queue (Quick Picks / ArchiveTune builder)
-            // sat unrefilled for half of its length — tapping song #25 left 25 upcoming
-            // and nothing was ever appended until fewer than 22 remained.
-            //
-            // Safety: refillQueueLoop() still hard-caps at TARGET_QUEUE_SIZE and
-            // forceRefill() coalesces concurrent requests, so this cannot storm the network.
-            val player = playerRef
-            if (player != null) {
-                val remaining = computeRemainingUpcoming(player)
-                if (remaining < TARGET_QUEUE_SIZE) {
-                    val adaptiveDelay = computeAdaptiveDebounceMs(player)
-                    scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
-                }
+            // If the user deliberately jumped / seeked to a new song (MEDIA_ITEM_TRANSITION_REASON_SEEK),
+            // force-refresh the seed so radio recommendations adapt directly to the newly playing track,
+            // rather than continuing the old seed continuation.
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+                scheduleAdaptiveRefill(forceRefresh = true)
             } else {
-                scheduleAdaptiveRefill()
+                val player = playerRef
+                if (player != null) {
+                    val remaining = computeRemainingUpcoming(player)
+                    if (remaining < TARGET_QUEUE_SIZE) {
+                        val adaptiveDelay = computeAdaptiveDebounceMs(player)
+                        scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
+                    }
+                } else {
+                    scheduleAdaptiveRefill(forceRefresh = false)
+                }
             }
         }
 
@@ -550,7 +549,17 @@ object AutoQueueManager {
             val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
             val activeNet = cm?.activeNetwork
             val caps = cm?.getNetworkCapabilities(activeNet)
-            val hasInternet = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+            val rawHasInternet = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+
+            // Fallback connectivity check: Android NetworkCapabilities can briefly lag on cold start
+            val entryPointForConnectivity = try {
+                dagger.hilt.android.EntryPointAccessors.fromApplication(ctx, YoutubeHelperEntryPoint::class.java)
+            } catch (e: Exception) {
+                null
+            }
+            val connectivityStateHolderForCheck = entryPointForConnectivity?.connectivityStateHolder()
+            connectivityStateHolderForCheck?.initialize()
+            val hasInternet = rawHasInternet || (connectivityStateHolderForCheck?.isOnline?.value ?: false)
 
             if (isLocalOrFile && !hasInternet) {
                 // When offline with local file, we can still generate queue from local DB matches
@@ -564,6 +573,7 @@ object AutoQueueManager {
                     addedVideoIds.add(currentClean)
                 }
                 continuationToken = null
+                currentWatchEndpoint = null
             } else {
                 if (fetchJob?.isActive == true) {
                     // A refill is already in flight. Remember the request instead of
