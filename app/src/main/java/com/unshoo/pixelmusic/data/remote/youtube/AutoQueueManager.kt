@@ -12,11 +12,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.runBlocking
 import kotlin.math.absoluteValue
-import java.util.concurrent.ConcurrentHashMap
 
 import unshoo.ianshulyadav.pixelmusic.innertube.YouTube
 import unshoo.ianshulyadav.pixelmusic.innertube.models.WatchEndpoint
@@ -29,37 +26,26 @@ import com.unshoo.pixelmusic.data.database.AlbumEntity
 import com.unshoo.pixelmusic.data.database.ArtistEntity
 import com.unshoo.pixelmusic.data.database.SongArtistCrossRef
 import com.unshoo.pixelmusic.data.database.SourceType
-import com.unshoo.pixelmusic.data.database.SongEngagementEntity
 import com.unshoo.pixelmusic.data.model.ArtistRef
 import com.unshoo.pixelmusic.utils.MediaItemBuilder
 import com.unshoo.pixelmusic.presentation.viewmodel.ConnectivityStateHolder
 
 object AutoQueueManager {
-    @Volatile private var targetQueueSize: Int = 45
-    private const val MAX_HISTORY = 60
+    private const val TARGET_QUEUE_SIZE = 45
+    private const val MAX_HISTORY = 120
     private const val DECAY_LAMBDA = 1.15e-9
 
     private var fetchJob: Job? = null
-    private var debounceJob: Job? = null
-    @Volatile private var fetchStartTimeMs: Long = 0L
-
-    fun setTargetQueueSize(size: Int) {
-        targetQueueSize = size.coerceIn(5, 100)
-    }
-
-    // Guards the "is a refill already running, and if not, start one" decision in
-    // forceRefill() so it's a single atomic operation instead of a racy
-    // check-then-act on fetchJob.
-    private val refillGate = Mutex()
-
-    @Volatile private var pendingRefillAfterCurrent = false
-    @Volatile private var lastFetchedVideoId: String? = null
-    @Volatile private var continuationToken: String? = null
-    @Volatile private var currentWatchEndpoint: WatchEndpoint? = null
+    private var lastFetchedVideoId: String? = null
+    private var continuationToken: String? = null
+    private var currentWatchEndpoint: WatchEndpoint? = null
     private val addedVideoIds = mutableSetOf<String>()
 
-    // High-performance thread-safe cache mapping local/offline song IDs to matched YouTube video IDs
-    private val localToYoutubeIdMap = ConcurrentHashMap<String, String>()
+    // Memory cache mapping local/offline song IDs and query titles to matched YouTube video IDs
+    private val localToYoutubeIdMap = mutableMapOf<String, String>()
+
+    // Session-level skip learning: maps clean artist names to skip count in active session
+    private val sessionSkippedArtists = mutableMapOf<String, Int>()
 
     enum class Mood { CHILL, UPBEAT, DEFAULT }
     private val sessionPlayHistory = mutableListOf<String>()
@@ -72,7 +58,9 @@ object AutoQueueManager {
     private var playerRef: Player? = null
     private var musicDaoRef: MusicDao? = null
     private var engagementDaoRef: com.unshoo.pixelmusic.data.database.EngagementDao? = null
-    // Called after items are added to the player so DualPlayerEngine can refresh its internal queue snapshot immediately.
+    // BUG 5 FIX: Called after items are added to the player so DualPlayerEngine can
+    // refresh its internal queue snapshot immediately (not waiting for TIMELINE_CHANGED
+    // during an active crossfade).
     private var onQueueItemsAddedCallback: (() -> Unit)? = null
 
     private val playerListener = object : Player.Listener {
@@ -112,52 +100,17 @@ object AutoQueueManager {
                     }
                 }
             }
-            
-            // Check remaining queue depth on track transition.
-            // Top the queue back up to targetQueueSize whenever the upcoming count has dropped below the target.
-            // If the user deliberately jumped / seeked to a new song, force-refresh the seed so radio recommendations
-            // adapt directly to the newly playing track.
             if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
-                scheduleAdaptiveRefill(forceRefresh = true)
+                scheduleAdaptiveRefill(delayMs = null, forceRefresh = true)
             } else {
-                val player = playerRef
-                if (player != null) {
-                    val remaining = computeRemainingUpcoming(player)
-                    if (remaining < targetQueueSize) {
-                        val adaptiveDelay = computeAdaptiveDebounceMs(player)
-                        scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
-                    }
-                } else {
-                    scheduleAdaptiveRefill(forceRefresh = false)
-                }
+                checkAndRefillQueue()
             }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
-            when (playbackState) {
-                Player.STATE_ENDED -> {
-                    scheduleAdaptiveRefill(forceRefresh = false)
-                }
-                Player.STATE_READY -> {
-                    // Playback stream established. If queue is critically low (<= 1 item),
-                    // trigger an immediate adaptive top-up now that audio is playing smoothly.
-                    val player = playerRef
-                    if (player != null) {
-                        val remaining = computeRemainingUpcoming(player)
-                        if (remaining <= 1) {
-                            val adaptiveDelay = computeAdaptiveDebounceMs(player)
-                            scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
-                        }
-                    }
-                }
+            if (playbackState == Player.STATE_ENDED) {
+                checkAndRefillQueue()
             }
-        }
-
-        override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
-            if (reason != Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) return
-            val player = playerRef
-            val adaptiveDelay = computeAdaptiveDebounceMs(player)
-            scheduleAdaptiveRefill(adaptiveDelay, forceRefresh = false)
         }
     }
 
@@ -170,8 +123,6 @@ object AutoQueueManager {
         engagementDao: com.unshoo.pixelmusic.data.database.EngagementDao,
         onQueueItemsAdded: (() -> Unit)? = null
     ) {
-        playerRef?.removeListener(playerListener)
-        player.removeListener(playerListener) // Ensure idempotent attachment
         scope = coroutineScope
         contextRef = context.applicationContext
         datastoreRepository = datastoreRepo
@@ -187,7 +138,6 @@ object AutoQueueManager {
         val oldPlayer = playerRef
         if (oldPlayer !== newPlayer) {
             oldPlayer?.removeListener(playerListener)
-            newPlayer.removeListener(playerListener)
             playerRef = newPlayer
             newPlayer.addListener(playerListener)
             printd("AutoQueueManager player updated")
@@ -196,9 +146,8 @@ object AutoQueueManager {
 
     fun detach(player: Player?) {
         player?.removeListener(playerListener)
-        playerRef?.removeListener(playerListener)
         playerRef = null
-        reset()
+        fetchJob?.cancel()
         scope = null
         contextRef = null
         datastoreRepository = null
@@ -210,25 +159,22 @@ object AutoQueueManager {
         lastFetchedVideoId = null
         continuationToken = null
         currentWatchEndpoint = null
-        pendingRefillAfterCurrent = false
         synchronized(addedVideoIds) {
             addedVideoIds.clear()
         }
         synchronized(sessionPlayHistory) {
             sessionPlayHistory.clear()
         }
-        synchronized(this) {
-            debounceJob?.cancel()
-            debounceJob = null
+        synchronized(sessionSkippedArtists) {
+            sessionSkippedArtists.clear()
         }
         fetchJob?.cancel()
         fetchJob = null
-        fetchStartTimeMs = 0L
     }
 
     /**
-     * Called when auto-queue is disabled (toggle ON→OFF). Cancels any in-flight refill
-     * and safely trims out auto-added songs while strictly preserving user-initiated queue items.
+     * Called when auto-queue is disabled (toggle ON→OFF).
+     * Only removes auto-added tracks, preventing user playlist deletion and fixing shuffle mode behavior.
      */
     fun disableAndTrimQueue() {
         val autoAddedSnapshot = synchronized(addedVideoIds) { addedVideoIds.toSet() }
@@ -240,7 +186,7 @@ object AutoQueueManager {
             val currentIndex = player.currentMediaItemIndex
             if (totalCount <= 1) return@launch
 
-            // Remove backwards so indices stay stable. Only remove tracks that were auto-added by AutoQueueManager.
+            // Remove backwards so indices stay stable. Only remove tracks that were auto-added.
             for (i in totalCount - 1 downTo 0) {
                 if (i == currentIndex) continue
                 val item = player.getMediaItemAt(i)
@@ -256,8 +202,8 @@ object AutoQueueManager {
 
     /**
      * Called when auto-queue is re-enabled (toggle OFF→ON).
-     * Resets tracking state and re-seeds from the currently playing song, appending fresh
-     * related songs on top of whatever is already queued.
+     * Fully resets state and re-seeds from the currently playing song so that
+     * a fresh related-songs queue is built from scratch.
      */
     fun resetAndReseedFromCurrentSong() {
         reset()
@@ -266,60 +212,51 @@ object AutoQueueManager {
         currentScope.launch(Dispatchers.IO) {
             val settings = datastoreRepository?.settings?.first() ?: return@launch
             if (!settings.autoQueueEnabled) return@launch
-            val (currentId, videoId, currentTitle, currentArtist) = withContext(Dispatchers.Main) {
+            val currentInfo = withContext(Dispatchers.Main) {
                 val item = player.currentMediaItem ?: return@withContext null
                 val mediaId = item.mediaId
                 val playbackUri = item.localConfiguration?.uri?.toString()
                 val metaUri = item.mediaMetadata.extras?.getString("com.unshoo.pixelmusic.external.CONTENT_URI")
                 val contentUri = metaUri ?: playbackUri
+                val title = item.mediaMetadata.title?.toString()
+                val artist = item.mediaMetadata.artist?.toString()
                 val vid = when {
                     mediaId.startsWith("youtube_") -> mediaId.substringAfter("youtube_")
                     contentUri?.startsWith("youtube://") == true -> contentUri.removePrefix("youtube://")
                     else -> null
                 }
-                val title = item.mediaMetadata.title?.toString().orEmpty()
-                val artist = item.mediaMetadata.artist?.toString().orEmpty()
-                listOf(mediaId, vid, title, artist)
+                Triple(mediaId, vid, Pair(title, artist))
             } ?: return@launch
 
-            val cleanCurrentId = currentId as String
-            var resolvedVideoId = videoId
-            val songTitle = currentTitle as String
-            val songArtist = currentArtist as String
+            val (currentId, videoId, meta) = currentInfo
+            val (title, artist) = meta
 
-            // Resolve YouTube ID via local DB or cache if not already found
-            if (resolvedVideoId == null) {
-                resolvedVideoId = localToYoutubeIdMap[cleanCurrentId]
-            }
-            if (resolvedVideoId == null) {
-                val longId = cleanCurrentId.toLongOrNull()
+            // Resolve YouTube ID for local songs via DB or automatic search fallback
+            val resolvedVideoId = videoId ?: run {
+                val longId = currentId.toLongOrNull()
                 if (longId != null) {
                     val dbSong = musicDaoRef?.getSongByIdOnce(longId)
-                    if (dbSong?.contentUriString?.startsWith("youtube://") == true) {
-                        resolvedVideoId = dbSong.contentUriString.removePrefix("youtube://")
+                    dbSong?.contentUriString?.removePrefix("youtube://")?.takeIf {
+                        dbSong.contentUriString.startsWith("youtube://")
                     }
-                }
-            }
+                } else null
+            } ?: resolveOrSearchVideoId(currentId, title, artist)
 
-            // Fallback YouTube search for local / unmapped songs when online
-            if (resolvedVideoId == null && isDeviceOnline() && songTitle.isNotBlank() && songArtist.isNotBlank()) {
-                resolvedVideoId = tryResolveOnlineVideoId(songTitle, songArtist)?.also {
-                    localToYoutubeIdMap[cleanCurrentId] = it
-                }
-            }
-
-            val seedId = resolvedVideoId ?: cleanCurrentId
+            val seedId = resolvedVideoId ?: currentId
             synchronized(addedVideoIds) { addedVideoIds.add(seedId) }
             lastFetchedVideoId = seedId
 
             if (resolvedVideoId != null) {
+                // Online song — create a fresh endpoint and pre-fetch first batch
                 val endpoint = WatchEndpoint(videoId = resolvedVideoId, playlistId = "RDAMVM$resolvedVideoId")
                 currentWatchEndpoint = endpoint
                 continuationToken = null
             }
-
-            // Trigger deferred refill with dynamic adaptive debounce
-            scheduleAdaptiveRefill(delayMs = computeAdaptiveDebounceMsAsync(playerRef), forceRefresh = false)
+            // Trigger deferred refill (allows 1.5s for initial audio buffer to stream cleanly)
+            fetchJob = currentScope.launch(Dispatchers.IO) {
+                kotlinx.coroutines.delay(1500)
+                refillQueueLoop(currentId, forceRefresh = false)
+            }
         }
     }
 
@@ -333,24 +270,55 @@ object AutoQueueManager {
         }
     }
 
-    fun registerSkip(songId: String) {
-        val cleanId = extractYtId(songId) ?: songId
-        val ctx = contextRef ?: return
-        try {
-            val sharedPrefs = ctx.getSharedPreferences("auto_queue_skips", Context.MODE_PRIVATE)
-            val currentCount = sharedPrefs.getInt(cleanId + "_skip_count", 0)
-            val now = System.currentTimeMillis()
-            sharedPrefs.edit()
-                .putLong(cleanId + "_last_skip_time", now)
-                .putInt(cleanId + "_skip_count", currentCount + 1)
-                .apply()
-            printd("AutoQueueManager: Registered skip for $cleanId (count = ${currentCount + 1})")
-        } catch (e: Exception) {
-            printe("AutoQueueManager: Error saving skip to SharedPreferences: ${e.message}")
+    fun scheduleAdaptiveRefill(delayMs: Long? = null, forceRefresh: Boolean = false) {
+        val currentScope = scope ?: return
+        currentScope.launch(Dispatchers.IO) {
+            if (delayMs != null && delayMs > 0L) {
+                kotlinx.coroutines.delay(delayMs)
+            }
+            forceRefill(forceRefresh = forceRefresh)
         }
     }
 
-    private suspend fun getActiveSkippedSongIds(engagementsMap: Map<String, Int>? = null): Set<String> {
+    fun scheduleRefill(delayMs: Long = 0L, forceRefresh: Boolean = false) {
+        scheduleAdaptiveRefill(delayMs = if (delayMs > 0L) delayMs else null, forceRefresh = forceRefresh)
+    }
+
+    fun registerSkip(songId: String, artistName: String? = null) {
+        val cleanId = extractYtId(songId) ?: songId
+        val ctx = contextRef
+        if (ctx != null) {
+            try {
+                val sharedPrefs = ctx.getSharedPreferences("auto_queue_skips", Context.MODE_PRIVATE)
+                val currentCount = sharedPrefs.getInt(cleanId + "_skip_count", 0)
+                val now = System.currentTimeMillis()
+                sharedPrefs.edit()
+                    .putLong(cleanId + "_last_skip_time", now)
+                    .putInt(cleanId + "_skip_count", currentCount + 1)
+                    .apply()
+                printd("AutoQueueManager: Registered skip for $cleanId (count = ${currentCount + 1})")
+            } catch (e: Exception) {
+                printe("AutoQueueManager: Error saving skip to SharedPreferences: ${e.message}")
+            }
+        }
+
+        // Session-level artist skip learning: pause artist for session if skipped >= 2 times
+        val resolvedArtist = artistName ?: runBlocking {
+            val longId = songId.toLongOrNull() ?: getDatabaseIdForYoutubeId(cleanId)
+            musicDaoRef?.getSongByIdOnce(longId)?.artistName
+        }
+        if (!resolvedArtist.isNullOrBlank()) {
+            val cleanArtist = resolvedArtist.lowercase().trim()
+            val count = synchronized(sessionSkippedArtists) {
+                val c = (sessionSkippedArtists[cleanArtist] ?: 0) + 1
+                sessionSkippedArtists[cleanArtist] = c
+                c
+            }
+            printd("AutoQueueManager: Session artist skip count for '$cleanArtist': $count")
+        }
+    }
+
+    private suspend fun getActiveSkippedSongIds(): Set<String> {
         val ctx = contextRef ?: return emptySet()
         val activeIds = mutableSetOf<String>()
         try {
@@ -361,6 +329,7 @@ object AutoQueueManager {
             val editor = sharedPrefs.edit()
             var modified = false
 
+            // Extract all unique song IDs from keys ending with _last_skip_time
             val skippedSongs = allEntries.keys
                 .filter { it.endsWith("_last_skip_time") }
                 .map { it.removeSuffix("_last_skip_time") }
@@ -370,28 +339,22 @@ object AutoQueueManager {
                 if (now - lastSkipTime < FOUR_HOURS_MS) {
                     val skipCount = sharedPrefs.getInt(songId + "_skip_count", 0)
 
-                    val dbSongId = if (songId.toLongOrNull() == null && !songId.startsWith("youtube_")) {
-                        getDatabaseIdForYoutubeId(songId).toString()
-                    } else {
-                        songId
-                    }
-
-                    // Use preloaded engagementsMap when available to eliminate N+1 DB queries
-                    val playCount = if (engagementsMap != null) {
-                        val p1 = engagementsMap[songId] ?: 0
-                        val p2 = engagementsMap[dbSongId] ?: 0
-                        kotlin.math.max(p1, p2)
-                    } else {
-                        try {
-                            val p1 = engagementDaoRef?.getPlayCount(songId) ?: 0
-                            val p2 = engagementDaoRef?.getPlayCount(dbSongId) ?: 0
-                            kotlin.math.max(p1, p2)
-                        } catch (e: Exception) {
-                            0
+                    // Retrieve database playCount without runBlocking (we are already in a suspend context)
+                    val playCount = try {
+                        val dbSongId = if (songId.toLongOrNull() == null && !songId.startsWith("youtube_")) {
+                            getDatabaseIdForYoutubeId(songId).toString()
+                        } else {
+                            songId
                         }
+                        val p1 = engagementDaoRef?.getPlayCount(songId) ?: 0
+                        val p2 = engagementDaoRef?.getPlayCount(dbSongId) ?: 0
+                        kotlin.math.max(p1, p2)
+                    } catch (e: Exception) {
+                        0
                     }
 
                     if (playCount > 3 && skipCount < 2) {
+                        // High-play favorite bypassed for single skip
                         printd("AutoQueueManager: Skip bypass triggered for favorite $songId (plays = $playCount, skips = $skipCount)")
                     } else {
                         activeIds.add(songId)
@@ -412,13 +375,10 @@ object AutoQueueManager {
     }
 
     private fun getActiveSessionMood(): Mood {
-        val history = synchronized(sessionPlayHistory) {
-            sessionPlayHistory.toList()
-        }
-        if (history.isEmpty()) return Mood.DEFAULT
+        if (sessionPlayHistory.isEmpty()) return Mood.DEFAULT
         var chillCount = 0
         var upbeatCount = 0
-        for (genre in history) {
+        for (genre in sessionPlayHistory) {
             val norm = genre.lowercase().trim()
             if (CHILL_GENRES.any { norm.contains(it) }) chillCount++
             else if (UPBEAT_GENRES.any { norm.contains(it) }) upbeatCount++
@@ -430,112 +390,39 @@ object AutoQueueManager {
         }
     }
 
-    private fun isDeviceOnline(): Boolean {
-        val ctx = contextRef ?: return true
-        return try {
-            val entryPoint = dagger.hilt.android.EntryPointAccessors.fromApplication(
-                ctx,
-                YoutubeHelperEntryPoint::class.java
-            )
-            entryPoint.connectivityStateHolder().isOnline.value
-        } catch (e: Exception) {
-            true
-        }
+    private fun checkAndRefillQueue() {
+        forceRefill(forceRefresh = false)
     }
 
     /**
-     * Dynamically computes the debounce delay (200ms – 2500ms) based on queue urgency and player state.
-     * Uses in-memory connectivity state without synchronous Main-thread Binder IPC.
+     * Accurate count of upcoming items from current playback position.
+     * When shuffle is active, walks the next-window chain in shuffle order.
      */
-    fun computeAdaptiveDebounceMs(
-        remaining: Int,
-        playbackState: Int = Player.STATE_IDLE,
-        isPlaying: Boolean = false
-    ): Long {
-        val baseDelay = when (remaining.coerceAtLeast(0)) {
-            0 -> 200L
-            1 -> 400L
-            2 -> 400L
-            3, 4 -> 400L
-            else -> 1000L
-        }
-
-        var networkModifier = 0L
-        if (!isDeviceOnline()) {
-            return 300L // Local DB query is instantaneous; no network contention
-        }
-
-        var playerModifier = 0L
-        if (playbackState == Player.STATE_BUFFERING) {
-            playerModifier = 800L // Give stream chunks top network priority
-        } else if (playbackState == Player.STATE_READY && isPlaying) {
-            playerModifier = -150L
-        }
-
-        return (baseDelay + networkModifier + playerModifier).coerceIn(200L, 2500L)
-    }
-
-    /**
-     * Accurate count of upcoming items from the current playback position respecting active shuffle order.
-     * Must be called on the Main thread.
-     */
-    private fun computeRemainingUpcoming(player: Player): Int {
+    fun computeRemainingUpcoming(player: Player): Int {
         val timeline = player.currentTimeline
-        val timelineCount = timeline.windowCount
-        if (timelineCount == 0) return 0
-        val startIndex = player.currentMediaItemIndex
-        if (startIndex == androidx.media3.common.C.INDEX_UNSET) return 0
+        val count = timeline.windowCount
+        if (count == 0) return 0
+        val currentIndex = player.currentMediaItemIndex
+        if (currentIndex == androidx.media3.common.C.INDEX_UNSET) return 0
+        val isShuffleActive = player.shuffleModeEnabled
+        if (!isShuffleActive) {
+            return (count - currentIndex - 1).coerceAtLeast(0)
+        }
         var remaining = 0
         var windowIndex = timeline.getNextWindowIndex(
-            startIndex,
+            currentIndex,
             Player.REPEAT_MODE_OFF,
-            player.shuffleModeEnabled
+            true
         )
-        while (windowIndex != androidx.media3.common.C.INDEX_UNSET && remaining < timelineCount) {
+        while (windowIndex != androidx.media3.common.C.INDEX_UNSET && remaining < count) {
             remaining++
             windowIndex = timeline.getNextWindowIndex(
                 windowIndex,
                 Player.REPEAT_MODE_OFF,
-                player.shuffleModeEnabled
+                true
             )
         }
         return remaining
-    }
-
-    fun computeAdaptiveDebounceMs(player: Player?): Long {
-        if (player == null) return computeAdaptiveDebounceMs(0)
-        val remaining = computeRemainingUpcoming(player)
-        return computeAdaptiveDebounceMs(remaining, player.playbackState, player.isPlaying)
-    }
-
-    suspend fun computeAdaptiveDebounceMsAsync(player: Player?): Long {
-        return withContext(Dispatchers.Main) {
-            computeAdaptiveDebounceMs(player)
-        }
-    }
-
-    fun scheduleAdaptiveRefill(delayMs: Long? = null, forceRefresh: Boolean = false) {
-        val currentScope = scope ?: return
-        synchronized(this) {
-            val isStuck = fetchJob?.isActive == true && (System.currentTimeMillis() - fetchStartTimeMs > 25_000L)
-            if (!forceRefresh && fetchJob?.isActive == true && !isStuck) {
-                pendingRefillAfterCurrent = true
-                return
-            }
-            // Cancel previous in-flight debounce timer to prevent multiple parallel refill jobs
-            debounceJob?.cancel()
-            debounceJob = currentScope.launch(Dispatchers.IO) {
-                val actualDelay = delayMs ?: computeAdaptiveDebounceMsAsync(playerRef)
-                if (actualDelay > 0L) {
-                    kotlinx.coroutines.delay(actualDelay)
-                }
-                forceRefill(forceRefresh = forceRefresh)
-            }
-        }
-    }
-
-    fun scheduleRefill(delayMs: Long = 0L, forceRefresh: Boolean = false) {
-        scheduleAdaptiveRefill(delayMs = if (delayMs > 0L) delayMs else null, forceRefresh = forceRefresh)
     }
 
     fun forceRefill(forceRefresh: Boolean) {
@@ -562,56 +449,28 @@ object AutoQueueManager {
             val isLocalOrFile = playerState[3] as Boolean
             if (currentId == null) return@launch
 
-            refillGate.withLock {
-                val isStuck = fetchJob?.isActive == true && (System.currentTimeMillis() - fetchStartTimeMs > 25_000L)
-                if (forceRefresh || isStuck) {
-                    fetchJob?.cancel()
-                    fetchJob = null
-                    if (forceRefresh) {
-                        val currentClean = normalizeSongId(currentId)
-                        val isSameAsSeeded = lastFetchedVideoId?.let { isSameSong(it, currentClean) } == true
-                        synchronized(addedVideoIds) {
-                            addedVideoIds.retainAll { isSameSong(it, currentClean) }
-                            addedVideoIds.add(currentClean)
-                        }
-                        // Only clear endpoint and continuation if not explicitly pre-seeded for this current track
-                        if (!isSameAsSeeded || currentWatchEndpoint == null) {
-                            continuationToken = null
-                            currentWatchEndpoint = null
-                        }
-                    }
-                } else {
-                    if (fetchJob?.isActive == true) {
-                        pendingRefillAfterCurrent = true
-                        return@withLock
-                    }
-                }
+            val ctx = contextRef ?: return@launch
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            val activeNet = cm?.activeNetwork
+            val caps = cm?.getNetworkCapabilities(activeNet)
+            val hasInternet = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
 
-                fetchStartTimeMs = System.currentTimeMillis()
-                fetchJob = launch(Dispatchers.IO) {
-                    try {
-                        withTimeoutOrNull(20_000L) {
-                            refillQueueLoopWithFollowUp(currentId, forceRefresh)
-                        }
-                    } finally {
-                        fetchStartTimeMs = 0L
-                        fetchJob = null
-                    }
+            if (isLocalOrFile || !hasInternet) return@launch
+
+            if (forceRefresh) {
+                fetchJob?.cancel()
+                synchronized(addedVideoIds) {
+                    val currentClean = normalizeSongId(currentId)
+                    addedVideoIds.retainAll { isSameSong(it, currentClean) }
+                    addedVideoIds.add(currentClean)
                 }
+                continuationToken = null
+            } else {
+                if (fetchJob?.isActive == true) return@launch
             }
-        }
-    }
 
-    private suspend fun tryResolveOnlineVideoId(title: String, artist: String): String? {
-        return withContext(Dispatchers.IO) {
-            try {
-                val query = "$title $artist".trim()
-                if (query.isBlank()) return@withContext null
-                val searchResult = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
-                val songItem = searchResult?.items?.firstOrNull { it is unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem } as? unshoo.ianshulyadav.pixelmusic.innertube.models.SongItem
-                songItem?.id
-            } catch (e: Exception) {
-                null
+            fetchJob = launch(Dispatchers.IO) {
+                refillQueueLoop(currentId, forceRefresh)
             }
         }
     }
@@ -623,7 +482,9 @@ object AutoQueueManager {
         if (songId.startsWith("youtube://")) {
             return songId.substringAfter("youtube://")
         }
-        val cached = localToYoutubeIdMap[songId]
+        val cached = synchronized(localToYoutubeIdMap) {
+            localToYoutubeIdMap[songId]
+        }
         if (cached != null) return cached
 
         val longId = songId.toLongOrNull()
@@ -631,8 +492,41 @@ object AutoQueueManager {
             val songEntity = musicDaoRef?.getSongByIdOnce(longId)
             if (songEntity?.contentUriString?.startsWith("youtube://") == true) {
                 val vidId = songEntity.contentUriString.removePrefix("youtube://")
-                localToYoutubeIdMap[songId] = vidId
+                synchronized(localToYoutubeIdMap) {
+                    localToYoutubeIdMap[songId] = vidId
+                }
                 return vidId
+            }
+        }
+        return null
+    }
+
+    /**
+     * Automatic online search fallback ("$title $artist") for local or unmapped playlist tracks
+     * to resolve YouTube video IDs and seed online radio (RDAMVM$videoId).
+     */
+    private suspend fun resolveOrSearchVideoId(songId: String, title: String?, artist: String?): String? {
+        getYoutubeVideoId(songId)?.let { return it }
+
+        if (!title.isNullOrBlank() && !artist.isNullOrBlank()) {
+            val cacheKey = "$title|$artist"
+            val cached = synchronized(localToYoutubeIdMap) { localToYoutubeIdMap[cacheKey] }
+            if (cached != null) return cached
+
+            try {
+                val query = "$title $artist"
+                val searchResult = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+                val foundVideoId = searchResult?.items?.firstOrNull()?.id
+                if (!foundVideoId.isNullOrBlank()) {
+                    synchronized(localToYoutubeIdMap) {
+                        localToYoutubeIdMap[songId] = foundVideoId
+                        localToYoutubeIdMap[cacheKey] = foundVideoId
+                    }
+                    printd("AutoQueueManager: Resolved YouTube videoId $foundVideoId for query '$query'")
+                    return foundVideoId
+                }
+            } catch (e: Exception) {
+                printd("AutoQueueManager: Search fallback failed for '$title $artist': ${e.message}")
             }
         }
         return null
@@ -673,6 +567,8 @@ object AutoQueueManager {
         s2Title: String, s2Artist: String, s2Genre: String?
     ): Double {
         var score = 0.0
+        
+        // Artist similarity
         val a1 = s1Artist.lowercase().trim()
         val a2 = s2Artist.lowercase().trim()
         if (a1 == a2) {
@@ -681,8 +577,10 @@ object AutoQueueManager {
             score += 6.0
         }
         
+        // Title keyword similarity
         score += getTitleSimilarityScore(s1Title, s2Title)
         
+        // Genre similarity (exclude generic YouTube genre placeholders)
         val g1 = s1Genre?.lowercase()?.trim().orEmpty()
         val g2 = s2Genre?.lowercase()?.trim().orEmpty()
         if (g1.isNotEmpty() && g2.isNotEmpty() && 
@@ -721,11 +619,16 @@ object AutoQueueManager {
             }
         }
 
-        // 2. Resolve cached YouTube IDs if mapped (lock-free via ConcurrentHashMap)
-        val ytId1 = localToYoutubeIdMap[id1] ?: localToYoutubeIdMap[clean1]
-        val ytId2 = localToYoutubeIdMap[id2] ?: localToYoutubeIdMap[clean2]
+        // 2. Resolve cached YouTube IDs if mapped
+        val (ytId1, ytId2) = synchronized(localToYoutubeIdMap) {
+            Pair(
+                localToYoutubeIdMap[id1] ?: localToYoutubeIdMap[clean1],
+                localToYoutubeIdMap[id2] ?: localToYoutubeIdMap[clean2]
+            )
+        }
         if (ytId1 != null && ytId2 != null && ytId1 == ytId2) return true
         
+        // If one is already a YouTube ID, check against resolved YT ID of the other
         val raw1 = clean1.removePrefix("youtube_").removePrefix("youtube://")
         val raw2 = clean2.removePrefix("youtube_").removePrefix("youtube://")
         if (raw1.length == 11 && raw1 == ytId2) return true
@@ -740,6 +643,25 @@ object AutoQueueManager {
             id.startsWith("youtube://") -> id.substringAfter("youtube://")
             else -> id
         }
+    }
+
+    /**
+     * Canonical Title Deduplication (SongFingerprint):
+     * Normalizes titles by stripping remaster years (e.g. 2011 Remaster, 2020 Remastered),
+     * (Live), (Acoustic), (Remix), (feat. ...), [feat. ...] to guarantee zero duplicate versions.
+     */
+    fun canonicalFingerprint(title: String, artist: String): String {
+        val cleanTitle = title.lowercase()
+            .replace(Regex("""\s*[\(\[](?:feat\.?|ft\.?|remaster(?:ed)?(?:\s*\d{4})?|\d{4}\s*remaster(?:ed)?|live|acoustic|remix|version|deluxe|bonus|edit).*?[\)\]]""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""\s*[-–—]\s*(?:feat\.?|ft\.?|remaster(?:ed)?(?:\s*\d{4})?|\d{4}\s*remaster(?:ed)?|live|acoustic|remix|version|deluxe|bonus|edit).*""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""[^a-z0-9 ]"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+        val cleanArtist = artist.lowercase()
+            .replace(Regex("""[^a-z0-9 ]"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+        return if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) "$cleanTitle|$cleanArtist" else ""
     }
 
     private suspend fun addToAddedVideoIds(songId: String) {
@@ -767,8 +689,7 @@ object AutoQueueManager {
     private suspend fun getContextualFamiliarSongs(
         currentSong: SongEntity?,
         currentQueueIds: Set<String>,
-        avoidIds: Set<String>,
-        engagements: List<SongEngagementEntity>? = null
+        avoidIds: Set<String>
     ): List<Song> {
         val dao = musicDaoRef ?: return emptyList()
         val engagementDao = engagementDaoRef
@@ -779,24 +700,23 @@ object AutoQueueManager {
             emptyList()
         }
 
-        val allEngs = engagements ?: try {
-            engagementDao?.getAllEngagements() ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-
         val playedMultipleTimesSongs = mutableListOf<Song>()
-        val engagementsMap = allEngs.associateBy { it.songId }
-        val idsPlayedMultiple = allEngs.filter { it.playCount >= 2 }.map { it.songId }.toSet()
-
-        val multipleLongIds = idsPlayedMultiple.mapNotNull { idStr ->
-            idStr.toLongOrNull() ?: if (idStr.startsWith("youtube_")) {
-                getDatabaseIdForYoutubeId(idStr.substringAfter("youtube_"))
-            } else null
-        }
-        if (multipleLongIds.isNotEmpty()) {
-            val batchSongs = dao.getSongsByIdsListSimple(multipleLongIds).map { it.toSong() }
-            playedMultipleTimesSongs.addAll(batchSongs)
+        val engagementsMap = if (engagementDao != null) {
+            val engagements = try {
+                engagementDao.getAllEngagements()
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val idsPlayedMultiple = engagements.filter { it.playCount >= 2 }.map { it.songId }.toSet()
+            for (idStr in idsPlayedMultiple) {
+                val dbSong = getDbSongByIdString(idStr)
+                if (dbSong != null) {
+                    playedMultipleTimesSongs.add(dbSong)
+                }
+            }
+            engagements.associateBy { it.songId }
+        } else {
+            emptyMap()
         }
 
         val combined = (favoriteSongs + playedMultipleTimesSongs).distinctBy { it.id }
@@ -850,29 +770,41 @@ object AutoQueueManager {
         val dislikedSongIds = try { dao.getDislikedSongIds().toSet() } catch (_: Exception) { emptySet() }
         val dislikedYoutubeIds = try { dao.getDislikedYoutubeIds().toSet() } catch (_: Exception) { emptySet() }
 
+        val highlyRotatedIds = mutableSetOf<String>()
         val engagements = try {
-            engagementDao?.getAllEngagements() ?: emptyList()
+            engagementDao?.getAllEngagements()
         } catch (e: Exception) {
-            emptyList()
+            null
         }
-        val engagementsMap = engagements.associate { it.songId to it.playCount }
-        val highlyRotatedIds = engagements.filter { it.playCount > 40 }.map { it.songId }.toSet()
+        if (engagements != null) {
+            for (eng in engagements) {
+                if (eng.playCount > 40) {
+                    highlyRotatedIds.add(eng.songId)
+                }
+            }
+        }
 
+        val recentlyPlayedIds = mutableSetOf<String>()
         val recents = try {
-            engagementDao?.getRecentlyPlayedSongs(100) ?: emptyList()
+            engagementDao?.getRecentlyPlayedSongs(100)
         } catch (e: Exception) {
-            emptyList()
+            null
         }
-        val recentlyPlayedIds = recents.map { it.songId }.toSet()
+        if (recents != null) {
+            for (eng in recents) {
+                recentlyPlayedIds.add(eng.songId)
+            }
+        }
 
         val settings = datastoreRepository?.settings?.first() ?: return (listOf(seedSong) + onlineRelated).distinctBy { it.id }
-        val activeSkips = getActiveSkippedSongIds(engagementsMap)
+        val activeSkips = getActiveSkippedSongIds()
         val avoidIds = if (settings.avoidRepetitiveSongs) {
             highlyRotatedIds + recentlyPlayedIds + activeSkips
         } else {
             highlyRotatedIds + activeSkips
         }
 
+        // Batch resolve title & artist keys for all avoid IDs to ensure strict title/artist deduplication!
         val avoidLongIds = avoidIds.mapNotNull { id ->
             id.toLongOrNull() ?: getDatabaseIdForYoutubeId(normalizeSongId(id))
         }
@@ -882,20 +814,19 @@ object AutoQueueManager {
             emptyList()
         }
         val avoidKeys = avoidSongs.mapNotNull { s ->
-            val title = s.title.lowercase().trim()
-            val artist = s.artistName.lowercase().trim()
-            if (title.isNotEmpty() && artist.isNotEmpty()) "$title|$artist" else null
+            val fp = canonicalFingerprint(s.title, s.artistName)
+            if (fp.isNotEmpty()) fp else null
         }.toSet()
 
-        val seedTitleKey = seedSong.title.lowercase().trim()
-        val seedArtistKey = seedSong.artist.lowercase().trim()
-        val currentQueueKeys = if (seedTitleKey.isNotEmpty() && seedArtistKey.isNotEmpty()) {
-            setOf("$seedTitleKey|$seedArtistKey")
+        val seedFp = canonicalFingerprint(seedSong.title, seedSong.artist)
+        val currentQueueKeys = if (seedFp.isNotEmpty()) {
+            setOf(seedFp)
         } else {
             emptySet()
         }
         val currentQueueIds = setOf(seedSong.id)
 
+        // 1. Resolve current playing song information
         val seedLongId = seedSong.id.toLongOrNull()
         val currentSongEntity = if (seedLongId != null) dao.getSongByIdOnce(seedLongId) else null
         
@@ -907,12 +838,14 @@ object AutoQueueManager {
             }
         }
 
+        // 2. Related candidates from online/offline
         val discovered = if (onlineRelated.isNotEmpty()) {
             onlineRelated
         } else {
             fetchLocalRelated(seedSong.id, currentQueueIds)
         }
 
+        // 3. Extract same-artist and same-genre local pools
         val sameArtistSongs = if (currentSongEntity?.artistName != null || seedSong.artist.isNotBlank()) {
             val artistToQuery = currentSongEntity?.artistName ?: seedSong.artist
             dao.getSongsByArtistName(artistToQuery, 20).map { it.toSong() }
@@ -926,19 +859,22 @@ object AutoQueueManager {
             emptyList()
         }
 
-        val familiarSongs = getContextualFamiliarSongs(currentSongEntity, currentQueueIds, avoidIds, engagements)
+        // 4. Extract familiar contextual songs (favorites or playCount >= 2 matching genre/artist)
+        val familiarSongs = getContextualFamiliarSongs(currentSongEntity, currentQueueIds, avoidIds)
 
+        // 5. Interleave pools with strict capping (max 2 per artist)
         val finalSongsToAdd = mutableListOf<Song>()
-        finalSongsToAdd.add(seedSong)
+        finalSongsToAdd.add(seedSong) // seed song is first!
 
         val addedArtists = mutableMapOf<String, Int>()
         addedArtists[seedSong.artist.lowercase().trim()] = 1
 
         val addedKeys = mutableSetOf<String>()
-        if (seedTitleKey.isNotEmpty() && seedArtistKey.isNotEmpty()) {
-            addedKeys.add("$seedTitleKey|$seedArtistKey")
+        if (seedFp.isNotEmpty()) {
+            addedKeys.add(seedFp)
         }
 
+        // Helper to check artist limits and session mood to ensure acoustic consistency & diversity
         val activeMood = getActiveSessionMood()
         fun canAddSong(song: Song): Boolean {
             val songIdStr = song.id
@@ -951,15 +887,20 @@ object AutoQueueManager {
             val isAlreadyAdded = finalSongsToAdd.any { isSameSong(it.id, songIdStr) }
             if (isInQueue || isAvoid || isAlreadyAdded) return false
 
-            val cleanTitle = song.title.lowercase().trim()
-            val cleanArtist = song.artist.lowercase().trim()
-            if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                val key = "$cleanTitle|$cleanArtist"
-                if (currentQueueKeys.contains(key) || avoidKeys.contains(key) || addedKeys.contains(key)) {
+            // Canonical title deduplication to prevent duplicate versions (remaster, live, acoustic, remix)
+            val fp = canonicalFingerprint(song.title, song.artist)
+            if (fp.isNotEmpty()) {
+                if (currentQueueKeys.contains(fp) || avoidKeys.contains(fp) || addedKeys.contains(fp)) {
                     return false
                 }
             }
 
+            // Session-level skip learning: paused if artist skipped >= 2 times in session
+            val artistKey = song.artist.lowercase().trim()
+            val sessionSkips = synchronized(sessionSkippedArtists) { sessionSkippedArtists[artistKey] ?: 0 }
+            if (sessionSkips >= 2) return false
+
+            // Active Mood Protection
             val songGenre = song.genre?.lowercase()?.trim().orEmpty()
             if (activeMood == Mood.CHILL) {
                 if (UPBEAT_GENRES.any { songGenre.contains(it) }) return false
@@ -967,39 +908,42 @@ object AutoQueueManager {
                 if (CHILL_GENRES.any { songGenre.contains(it) }) return false
             }
 
-            val artistKey = song.artist.lowercase().trim()
             val artistCount = addedArtists[artistKey] ?: 0
-            return artistCount < 2
+            return artistCount < 2 // Max 2 songs per artist in the added batch
         }
 
+        // Separate same-genre into popular and discovery (playCount = 0)
         val discoveryCandidates = sameGenreSongs.filter { song ->
-            (engagementsMap[song.id] ?: 0) == 0 && !song.isFavorite
+            val playCount = engagementDao?.getPlayCount(song.id) ?: 0
+            playCount == 0 && !song.isFavorite
         }.filter { canAddSong(it) }.shuffled().toMutableList()
 
         val popularGenreCandidates = sameGenreSongs.filter { song ->
-            (engagementsMap[song.id] ?: 0) > 0 || song.isFavorite
+            val playCount = engagementDao?.getPlayCount(song.id) ?: 0
+            playCount > 0 || song.isFavorite
         }.filter { canAddSong(it) }.shuffled().toMutableList()
 
         val sameArtistCandidates = sameArtistSongs.filter { canAddSong(it) }.shuffled().toMutableList()
         val relatedCandidates = discovered.filter { canAddSong(it) }.toMutableList()
         val familiarCandidates = familiarSongs.filter { canAddSong(it) }.toMutableList()
 
-        var addedCount = 1
-        val targetBatchSize = 50
+        var addedCount = 1 // we added the seed song
+        val targetBatchSize = 50 // Mix of 50 songs
 
         while (addedCount < targetBatchSize) {
             var addedInThisRound = false
 
+            // 1. YouTube / Local Related gets HIGHEST PRIORITY (First Priority - Vibe Match)
+            // We pull up to 2 related songs to anchor the vibe
             for (i in 0 until 2) {
                 if (relatedCandidates.isNotEmpty()) {
                     val s = relatedCandidates.removeAt(0)
                     if (canAddSong(s)) {
                         finalSongsToAdd.add(s)
                         addedArtists[s.artist.lowercase().trim()] = (addedArtists[s.artist.lowercase().trim()] ?: 0) + 1
-                        val cleanTitle = s.title.lowercase().trim()
-                        val cleanArtist = s.artist.lowercase().trim()
-                        if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                            addedKeys.add("$cleanTitle|$cleanArtist")
+                        val fp = canonicalFingerprint(s.title, s.artist)
+                        if (fp.isNotEmpty()) {
+                            addedKeys.add(fp)
                         }
                         addedCount++
                         addedInThisRound = true
@@ -1009,16 +953,16 @@ object AutoQueueManager {
 
             if (addedCount >= targetBatchSize) break
 
+            // 2. Discovery Candidates (Never played before - New Discoveries)
             for (i in 0 until 2) {
                 if (discoveryCandidates.isNotEmpty()) {
                     val s = discoveryCandidates.removeAt(0)
                     if (canAddSong(s)) {
                         finalSongsToAdd.add(s)
                         addedArtists[s.artist.lowercase().trim()] = (addedArtists[s.artist.lowercase().trim()] ?: 0) + 1
-                        val cleanTitle = s.title.lowercase().trim()
-                        val cleanArtist = s.artist.lowercase().trim()
-                        if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                            addedKeys.add("$cleanTitle|$cleanArtist")
+                        val fp = canonicalFingerprint(s.title, s.artist)
+                        if (fp.isNotEmpty()) {
+                            addedKeys.add(fp)
                         }
                         addedCount++
                         addedInThisRound = true
@@ -1028,15 +972,15 @@ object AutoQueueManager {
 
             if (addedCount >= targetBatchSize) break
 
+            // 3. Same Artist / Vibe Exploration
             if (sameArtistCandidates.isNotEmpty()) {
                 val s = sameArtistCandidates.removeAt(0)
                 if (canAddSong(s)) {
                     finalSongsToAdd.add(s)
                     addedArtists[s.artist.lowercase().trim()] = (addedArtists[s.artist.lowercase().trim()] ?: 0) + 1
-                    val cleanTitle = s.title.lowercase().trim()
-                    val cleanArtist = s.artist.lowercase().trim()
-                    if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                        addedKeys.add("$cleanTitle|$cleanArtist")
+                    val fp = canonicalFingerprint(s.title, s.artist)
+                    if (fp.isNotEmpty()) {
+                        addedKeys.add(fp)
                     }
                     addedCount++
                     addedInThisRound = true
@@ -1045,15 +989,15 @@ object AutoQueueManager {
 
             if (addedCount >= targetBatchSize) break
 
+            // 4. Same Genre Popular Exploration
             if (popularGenreCandidates.isNotEmpty()) {
                 val s = popularGenreCandidates.removeAt(0)
                 if (canAddSong(s)) {
                     finalSongsToAdd.add(s)
                     addedArtists[s.artist.lowercase().trim()] = (addedArtists[s.artist.lowercase().trim()] ?: 0) + 1
-                    val cleanTitle = s.title.lowercase().trim()
-                    val cleanArtist = s.artist.lowercase().trim()
-                    if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                        addedKeys.add("$cleanTitle|$cleanArtist")
+                    val fp = canonicalFingerprint(s.title, s.artist)
+                    if (fp.isNotEmpty()) {
+                        addedKeys.add(fp)
                     }
                     addedCount++
                     addedInThisRound = true
@@ -1062,15 +1006,15 @@ object AutoQueueManager {
 
             if (addedCount >= targetBatchSize) break
 
+            // 5. Familiar Contextual (Favorites/Popular matching context - lower priority)
             if (familiarCandidates.isNotEmpty()) {
                 val s = familiarCandidates.removeAt(0)
                 if (canAddSong(s)) {
                     finalSongsToAdd.add(s)
                     addedArtists[s.artist.lowercase().trim()] = (addedArtists[s.artist.lowercase().trim()] ?: 0) + 1
-                    val cleanTitle = s.title.lowercase().trim()
-                    val cleanArtist = s.artist.lowercase().trim()
-                    if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                        addedKeys.add("$cleanTitle|$cleanArtist")
+                    val fp = canonicalFingerprint(s.title, s.artist)
+                    if (fp.isNotEmpty()) {
+                        addedKeys.add(fp)
                     }
                     addedCount++
                     addedInThisRound = true
@@ -1080,6 +1024,7 @@ object AutoQueueManager {
             if (!addedInThisRound) break
         }
 
+        // Fallback: If we couldn't build at least targetBatchSize songs, relax constraints
         if (finalSongsToAdd.size < targetBatchSize) {
             val remainingCandidates = (discovered + sameGenreSongs + familiarSongs).distinctBy { it.id }
             for (s in remainingCandidates) {
@@ -1088,15 +1033,14 @@ object AutoQueueManager {
                 val isAlreadyAdded = finalSongsToAdd.any { isSameSong(it.id, songIdStr) }
                 val isAvoid = avoidIds.any { isSameSong(it, songIdStr) }
                 if (!isInQueue && !isAlreadyAdded && !isAvoid) {
-                    val cleanTitle = s.title.lowercase().trim()
-                    val cleanArtist = s.artist.lowercase().trim()
-                    val isDuplicateTitleArtist = cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty() && 
-                        (currentQueueKeys.contains("$cleanTitle|$cleanArtist") || avoidKeys.contains("$cleanTitle|$cleanArtist") || addedKeys.contains("$cleanTitle|$cleanArtist"))
+                    val fp = canonicalFingerprint(s.title, s.artist)
+                    val isDuplicateTitleArtist = fp.isNotEmpty() && 
+                        (currentQueueKeys.contains(fp) || avoidKeys.contains(fp) || addedKeys.contains(fp))
                     
                     if (!isDuplicateTitleArtist) {
                         finalSongsToAdd.add(s)
-                        if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                            addedKeys.add("$cleanTitle|$cleanArtist")
+                        if (fp.isNotEmpty()) {
+                            addedKeys.add(fp)
                         }
                         if (finalSongsToAdd.size >= targetBatchSize) break
                     }
@@ -1107,36 +1051,33 @@ object AutoQueueManager {
         return finalSongsToAdd
     }
 
-    /**
-     * Runs [refillQueueLoop] and, if another refill request arrived while this one was running,
-     * schedules a follow-up pass asynchronously so track-change refills are never dropped.
-     */
-    private suspend fun refillQueueLoopWithFollowUp(currentId: String, forceRefresh: Boolean) {
-        try {
-            refillQueueLoop(currentId, forceRefresh)
-        } finally {
-            val shouldFollowUp = pendingRefillAfterCurrent
-            pendingRefillAfterCurrent = false
-            if (shouldFollowUp) {
-                scope?.launch(Dispatchers.IO) {
-                    forceRefill(forceRefresh = false)
-                }
-            }
-        }
-    }
-
     private suspend fun refillQueueLoop(currentId: String, forceRefresh: Boolean) {
         val player = playerRef ?: return
         val dao = musicDaoRef ?: return
+        val context = contextRef ?: return
         val engagementDao = engagementDaoRef
 
         val dislikedSongIds = try { dao.getDislikedSongIds().toSet() } catch (_: Exception) { emptySet() }
         val dislikedYoutubeIds = try { dao.getDislikedYoutubeIds().toSet() } catch (_: Exception) { emptySet() }
 
-        // 1. Identify if current song is YouTube or local/offline, and resolve video ID
-        val currentMediaItem = withContext(Dispatchers.Main) { player.currentMediaItem }
-        val currentTitle = currentMediaItem?.mediaMetadata?.title?.toString().orEmpty()
-        val currentArtist = currentMediaItem?.mediaMetadata?.artist?.toString().orEmpty()
+        val entryPoint = try {
+            dagger.hilt.android.EntryPointAccessors.fromApplication(
+                context,
+                YoutubeHelperEntryPoint::class.java
+            )
+        } catch (e: Exception) {
+            null
+        }
+        val connectivityStateHolder = entryPoint?.connectivityStateHolder()
+        connectivityStateHolder?.initialize()
+
+        // 1. Identify if current song is YouTube or local/offline
+        val (currentMediaItem, currentTitle, currentArtist) = withContext(Dispatchers.Main) {
+            val item = player.currentMediaItem
+            val t = item?.mediaMetadata?.title?.toString().orEmpty()
+            val a = item?.mediaMetadata?.artist?.toString().orEmpty()
+            Triple(item, t, a)
+        }
         val playbackUriStr = currentMediaItem?.localConfiguration?.uri?.toString()
         val metadataUriStr = currentMediaItem?.mediaMetadata?.extras?.getString("com.unshoo.pixelmusic.external.CONTENT_URI")
         val contentUriStr = metadataUriStr ?: playbackUriStr
@@ -1150,119 +1091,52 @@ object AutoQueueManager {
         }
 
         if (rawVideoId == null) {
-            rawVideoId = localToYoutubeIdMap[currentId]
-        }
-
-        if (rawVideoId == null) {
             val songId = currentId.toLongOrNull()
             if (songId != null) {
                 val dbSong = dao.getSongByIdOnce(songId)
                 if (dbSong?.contentUriString?.startsWith("youtube://") == true) {
                     rawVideoId = dbSong.contentUriString.removePrefix("youtube://")
-                    localToYoutubeIdMap[currentId] = rawVideoId
                 }
             }
         }
 
-        val isOnline = isDeviceOnline()
-
-        // Online search fallback for local/playlist songs without a known YouTube video ID
-        if (rawVideoId == null && isOnline && currentTitle.isNotBlank() && currentArtist.isNotBlank()) {
-            rawVideoId = tryResolveOnlineVideoId(currentTitle, currentArtist)?.also {
-                localToYoutubeIdMap[currentId] = it
-            }
+        // Automatic online search fallback for local or unmapped playlist tracks
+        val isOnline = connectivityStateHolder?.isOnline?.value ?: true
+        if (rawVideoId == null && isOnline) {
+            rawVideoId = resolveOrSearchVideoId(currentId, currentTitle, currentArtist)
         }
 
         val isLocal = rawVideoId == null
         val resolvedVideoId = rawVideoId ?: ""
-        val activeId = if (isLocal) currentId else resolvedVideoId
 
+        // NOTE: On forceRefresh, forceRefill() already pruned addedVideoIds and cleared
+        // continuationToken. We just update lastFetchedVideoId and set currentWatchEndpoint
+        // only if it was not already set by resetAndReseedFromCurrentSong().
+        val activeId = if (isLocal) currentId else resolvedVideoId
         if (forceRefresh) {
             lastFetchedVideoId = activeId
+            // Only reset endpoint if not already seeded by resetAndReseedFromCurrentSong()
             if (currentWatchEndpoint == null && !isLocal && resolvedVideoId.isNotBlank()) {
                 currentWatchEndpoint = WatchEndpoint(videoId = resolvedVideoId, playlistId = "RDAMVM$resolvedVideoId")
             }
             synchronized(addedVideoIds) {
+                // Add current song — forceRefill() already pruned the set
                 addedVideoIds.add(activeId)
             }
         } else {
             if (lastFetchedVideoId == null) {
                 lastFetchedVideoId = activeId
-                if (currentWatchEndpoint == null && !isLocal && resolvedVideoId.isNotBlank()) {
-                    currentWatchEndpoint = WatchEndpoint(videoId = resolvedVideoId, playlistId = "RDAMVM$resolvedVideoId")
-                }
                 synchronized(addedVideoIds) {
                     addedVideoIds.add(activeId)
                 }
             }
-        }
-
-        // Hoist expensive static database queries OUTSIDE the loop to prevent SQLite connection pool thrashing
-        val settings = datastoreRepository?.settings?.first() ?: return
-        val engagements = try {
-            engagementDao?.getAllEngagements() ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-        val engagementsMap = engagements.associate { it.songId to it.playCount }
-        val highlyRotatedIds = engagements.filter { it.playCount > 40 }.map { it.songId }.toSet()
-
-        val recents = try {
-            engagementDao?.getRecentlyPlayedSongs(100) ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-        val recentlyPlayedIds = recents.map { it.songId }.toSet()
-
-        val activeSkips = getActiveSkippedSongIds(engagementsMap)
-        val avoidIds = if (settings.avoidRepetitiveSongs) {
-            highlyRotatedIds + recentlyPlayedIds + activeSkips
-        } else {
-            highlyRotatedIds + activeSkips
-        }
-
-        val avoidLongIds = avoidIds.mapNotNull { id ->
-            id.toLongOrNull() ?: getDatabaseIdForYoutubeId(normalizeSongId(id))
-        }
-        val avoidSongs = if (avoidLongIds.isNotEmpty()) {
-            dao.getSongsByIdsListSimple(avoidLongIds)
-        } else {
-            emptyList()
-        }
-        val avoidKeys = avoidSongs.mapNotNull { s ->
-            val title = s.title.lowercase().trim()
-            val artist = s.artistName.lowercase().trim()
-            if (title.isNotEmpty() && artist.isNotEmpty()) "$title|$artist" else null
-        }.toSet()
-
-        // Resolve current playing song information once
-        val currentSongLongId = currentId.toLongOrNull()
-        val currentSongEntity = if (currentSongLongId != null) dao.getSongByIdOnce(currentSongLongId) else null
-        
-        var resolvedGenre = currentSongEntity?.genre
-        if (resolvedGenre.isNullOrBlank() && currentTitle.isNotBlank() && currentArtist.isNotBlank()) {
-            val dbMatch = dao.getSongsByArtistName(currentArtist, 1).firstOrNull()
-            if (dbMatch != null) {
-                resolvedGenre = dbMatch.genre
+            if (currentWatchEndpoint == null && !isLocal && resolvedVideoId.isNotBlank()) {
+                currentWatchEndpoint = WatchEndpoint(videoId = resolvedVideoId, playlistId = "RDAMVM$resolvedVideoId")
             }
         }
 
-        val sameArtistSongs = if (currentSongEntity?.artistName != null || currentArtist.isNotBlank()) {
-            val artistToQuery = currentSongEntity?.artistName ?: currentArtist
-            dao.getSongsByArtistName(artistToQuery, 20).map { it.toSong() }
-        } else {
-            emptyList()
-        }
-
-        val sameGenreSongs = if (!resolvedGenre.isNullOrBlank() && !resolvedGenre.equals("YouTube", ignoreCase = true)) {
-            dao.getSongsByGenre(resolvedGenre, currentSongLongId ?: 0L, 50).map { it.toSong() }
-        } else {
-            emptyList()
-        }
-
         var loopCount = 0
-        var emptyFetchCount = 0
-
+        var emptyFetchCount = 0 // Count of consecutive loop iterations that added 0 songs
         while (true) {
             val playerState = withContext(Dispatchers.Main) {
                 if (playerRef == null) null
@@ -1273,100 +1147,190 @@ object AutoQueueManager {
             } ?: break
 
             val (remaining, totalCount) = playerState
-            if (remaining >= targetQueueSize) {
-                printd("AutoQueueManager: Queue is full. Current remaining: $remaining (>= $targetQueueSize)")
+            if (remaining >= TARGET_QUEUE_SIZE) {
+                printd("AutoQueueManager: Queue is full. Current remaining: $remaining (>= $TARGET_QUEUE_SIZE)")
                 break
             }
 
+            // Hard cap on total iterations; also break after 3 consecutive empty fetches
             if (loopCount >= 15 || emptyFetchCount >= 3) {
                 printd("AutoQueueManager: Breaking — loopCount=$loopCount, emptyFetchCount=$emptyFetchCount")
                 break
             }
             loopCount++
 
-            printd("AutoQueueManager: Refilling queue. Remaining: $remaining, Target: $targetQueueSize, Loop: $loopCount")
+            printd("AutoQueueManager: Refilling queue. Remaining: $remaining, Target: $TARGET_QUEUE_SIZE, Loop: $loopCount")
 
-            val currentQueueIds = withContext(Dispatchers.Main) {
-                if (playerRef == null) emptySet()
-                else (0 until player.mediaItemCount).mapNotNull { player.getMediaItemAt(it).mediaId }.toSet()
+            val (currentQueueIds, currentQueueKeys) = withContext(Dispatchers.Main) {
+                if (playerRef == null) Pair(emptySet<String>(), emptySet<String>())
+                else {
+                    val ids = mutableSetOf<String>()
+                    val keys = mutableSetOf<String>()
+                    val timeline = player.currentTimeline
+                    val count = timeline.windowCount
+                    val window = androidx.media3.common.Timeline.Window()
+                    val isShuffleActive = player.shuffleModeEnabled
+
+                    if (isShuffleActive && count > 0) {
+                        var windowIndex = timeline.getFirstWindowIndex(true)
+                        var processed = 0
+                        while (windowIndex != androidx.media3.common.C.INDEX_UNSET && processed < count) {
+                            val mediaItem = timeline.getWindow(windowIndex, window).mediaItem
+                            ids.add(mediaItem.mediaId)
+                            val t = mediaItem.mediaMetadata.title?.toString().orEmpty()
+                            val a = mediaItem.mediaMetadata.artist?.toString().orEmpty()
+                            val fp = canonicalFingerprint(t, a)
+                            if (fp.isNotEmpty()) keys.add(fp)
+                            processed++
+                            if (processed % 500 == 0) kotlinx.coroutines.yield()
+                            windowIndex = timeline.getNextWindowIndex(
+                                windowIndex,
+                                Player.REPEAT_MODE_OFF,
+                                true
+                            )
+                        }
+                    } else {
+                        for (i in 0 until count) {
+                            val item = player.getMediaItemAt(i)
+                            ids.add(item.mediaId)
+                            val t = item.mediaMetadata.title?.toString().orEmpty()
+                            val a = item.mediaMetadata.artist?.toString().orEmpty()
+                            val fp = canonicalFingerprint(t, a)
+                            if (fp.isNotEmpty()) keys.add(fp)
+                            if (i % 500 == 0) kotlinx.coroutines.yield()
+                        }
+                    }
+                    Pair(ids, keys)
+                }
             }
 
-            val currentQueueKeys = withContext(Dispatchers.Main) {
-                if (playerRef == null) emptySet()
-                else (0 until player.mediaItemCount).mapNotNull { index ->
-                    val item = player.getMediaItemAt(index)
-                    val title = item.mediaMetadata.title?.toString()?.lowercase()?.trim() ?: ""
-                    val artist = item.mediaMetadata.artist?.toString()?.lowercase()?.trim() ?: ""
-                    if (title.isNotEmpty() && artist.isNotEmpty()) "$title|$artist" else null
-                }.toSet()
+            val highlyRotatedIds = mutableSetOf<String>()
+            val engagements = try {
+                engagementDao?.getAllEngagements()
+            } catch (e: Exception) {
+                null
+            }
+            if (engagements != null) {
+                for (eng in engagements) {
+                    if (eng.playCount > 40) {
+                        highlyRotatedIds.add(eng.songId)
+                    }
+                }
             }
 
-            // Discover related tracks (first priority is online YouTube Music for online tracks, and local related for offline tracks)
+            val recentlyPlayedIds = mutableSetOf<String>()
+            val recents = try {
+                engagementDao?.getRecentlyPlayedSongs(100)
+            } catch (e: Exception) {
+                null
+            }
+            if (recents != null) {
+                for (eng in recents) {
+                    recentlyPlayedIds.add(eng.songId)
+                }
+            }
+
+            val settings = datastoreRepository?.settings?.first() ?: return
+            val activeSkips = getActiveSkippedSongIds()
+            val avoidIds = if (settings.avoidRepetitiveSongs) {
+                highlyRotatedIds + recentlyPlayedIds + activeSkips
+            } else {
+                highlyRotatedIds + activeSkips
+            }
+
+            // Batch resolve title & artist keys for all avoid IDs to ensure strict title/artist deduplication!
+            val avoidLongIds = avoidIds.mapNotNull { id ->
+                id.toLongOrNull() ?: getDatabaseIdForYoutubeId(normalizeSongId(id))
+            }
+            val avoidSongs = if (avoidLongIds.isNotEmpty()) {
+                dao.getSongsByIdsListSimple(avoidLongIds)
+            } else {
+                emptyList()
+            }
+            val avoidKeys = avoidSongs.mapNotNull { s ->
+                val fp = canonicalFingerprint(s.title, s.artistName)
+                if (fp.isNotEmpty()) fp else null
+            }.toSet()
+
+            // 1. Resolve current playing song information
+            val currentSongLongId = currentId.toLongOrNull()
+            val currentSongEntity = if (currentSongLongId != null) dao.getSongByIdOnce(currentSongLongId) else null
+            
+            var resolvedGenre = currentSongEntity?.genre
+            if (resolvedGenre.isNullOrBlank() && currentTitle.isNotBlank() && currentArtist.isNotBlank()) {
+                val dbMatch = dao.getSongsByArtistName(currentArtist, 1).firstOrNull()
+                if (dbMatch != null) {
+                    resolvedGenre = dbMatch.genre
+                }
+            }
+
+            // 2. Discover related tracks (first priority is online YouTube Music for online tracks, and local related for offline tracks)
             var discovered = emptyList<Song>()
             
             if (isOnline && !isLocal && resolvedVideoId.isNotBlank()) {
                 val related = fetchOnlineRelated(resolvedVideoId)
                 if (related.isNotEmpty()) {
                     saveRelatedSongsToDb(resolvedVideoId, related, player)
-                    val needed = (targetQueueSize - remaining).coerceAtLeast(1)
-                    val batchKeys = mutableSetOf<String>()
-                    val batchIds = mutableSetOf<String>()
-                    val filteredRelated = related.filter { song ->
-                        val songIdStr = song.id
-                        val isInQueue = currentQueueIds.any { isSameSong(it, songIdStr) }
-                        val isAvoid = avoidIds.any { isSameSong(it, songIdStr) }
-                        val alreadyTracked = synchronized(addedVideoIds) {
-                            addedVideoIds.any { isSameSong(it, songIdStr) }
-                        }
-                        val cleanTitle = song.title.lowercase().trim()
-                        val cleanArtist = song.artist.lowercase().trim()
-                        val key = if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) "$cleanTitle|$cleanArtist" else null
-                        val isDuplicateTitleArtist = key != null &&
-                            (currentQueueKeys.contains(key) || avoidKeys.contains(key) || batchKeys.contains(key))
-                        val isDuplicateInBatch = batchIds.any { isSameSong(it, songIdStr) }
+                    discovered = related
+                    // Deduplicate against active queue, avoids, session skips, and dislikes
+                    val filteredRelated = mutableListOf<Song>()
+                    val seenBatchFp = mutableSetOf<String>()
+                    for (song in related) {
+                        val ytId = song.youtubeId ?: song.id.substringAfter("youtube_")
+                        if (dislikedYoutubeIds.contains(ytId)) continue
 
-                        val canAdd = !isInQueue && !isAvoid && !alreadyTracked && !isDuplicateTitleArtist && !isDuplicateInBatch
-                        if (canAdd) {
-                            batchIds.add(songIdStr)
-                            if (key != null) batchKeys.add(key)
+                        val artistKey = song.artist.lowercase().trim()
+                        val sessionSkips = synchronized(sessionSkippedArtists) { sessionSkippedArtists[artistKey] ?: 0 }
+                        if (sessionSkips >= 2) continue
+
+                        val fp = canonicalFingerprint(song.title, song.artist)
+                        val isDup = fp.isNotEmpty() && (currentQueueKeys.contains(fp) || avoidKeys.contains(fp) || seenBatchFp.contains(fp))
+                        val isQueue = currentQueueIds.any { isSameSong(it, song.id) }
+                        if (!isDup && !isQueue) {
+                            if (fp.isNotEmpty()) seenBatchFp.add(fp)
+                            filteredRelated.add(song)
                         }
-                        canAdd
-                    }.take(needed)
-                    discovered = filteredRelated
+                    }
+
                     if (filteredRelated.isNotEmpty()) {
                         val mediaItems = filteredRelated.map { MediaItemBuilder.build(it) }
                         withContext(Dispatchers.Main) {
                             player.addMediaItems(mediaItems)
                             onQueueItemsAddedCallback?.invoke()
                         }
-                        for (song in filteredRelated) {
-                            addToAddedVideoIds(song.id)
-                        }
                         printd("AutoQueueManager: Appended ${mediaItems.size} online mix radio songs directly.")
-                        emptyFetchCount = 0
                         continue
                     }
-                    emptyFetchCount++
-                    if (emptyFetchCount >= 3) {
-                        printd("AutoQueueManager: 3 consecutive duplicate pages — resetting pagination for next refill")
-                        continuationToken = null
-                        currentWatchEndpoint = null
-                    }
-                    continue
-                } else {
-                    discovered = fetchLocalRelated(currentId, currentQueueIds)
                 }
-            } else {
+            }
+
+            if (discovered.isEmpty()) {
                 discovered = fetchLocalRelated(currentId, currentQueueIds)
             }
 
-            // Extract familiar contextual songs using in-memory engagements
-            val familiarSongs = getContextualFamiliarSongs(currentSongEntity, currentQueueIds, avoidIds, engagements)
+            // 3. Extract same-artist and same-genre local pools
+            val sameArtistSongs = if (currentSongEntity?.artistName != null || currentArtist.isNotBlank()) {
+                val artistToQuery = currentSongEntity?.artistName ?: currentArtist
+                dao.getSongsByArtistName(artistToQuery, 20).map { it.toSong() }
+            } else {
+                emptyList()
+            }
 
+            val sameGenreSongs = if (!resolvedGenre.isNullOrBlank() && !resolvedGenre.equals("YouTube", ignoreCase = true)) {
+                dao.getSongsByGenre(resolvedGenre, currentSongLongId ?: 0L, 50).map { it.toSong() }
+            } else {
+                emptyList()
+            }
+
+            // 4. Extract familiar contextual songs (favorites or playCount >= 2 matching genre/artist)
+            val familiarSongs = getContextualFamiliarSongs(currentSongEntity, currentQueueIds, avoidIds)
+
+            // 5. Interleave pools with strict capping (max 2 per artist)
             val finalSongsToAdd = mutableListOf<Song>()
             val addedArtists = mutableMapOf<String, Int>()
             val addedKeys = mutableSetOf<String>()
 
+            // Helper to check artist limits and session mood to ensure acoustic consistency & diversity
             val activeMood = getActiveSessionMood()
             fun canAddSong(song: Song): Boolean {
                 val songIdStr = song.id
@@ -1382,15 +1346,20 @@ object AutoQueueManager {
                 }
                 if (isInQueue || isAvoid || isAlreadyAdded || isAlreadyInAddedVideoIds) return false
 
-                val cleanTitle = song.title.lowercase().trim()
-                val cleanArtist = song.artist.lowercase().trim()
-                if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                    val key = "$cleanTitle|$cleanArtist"
-                    if (currentQueueKeys.contains(key) || avoidKeys.contains(key) || addedKeys.contains(key)) {
+                // Canonical Title Deduplication: normalizes remaster years, live, acoustic, remix, feat
+                val fp = canonicalFingerprint(song.title, song.artist)
+                if (fp.isNotEmpty()) {
+                    if (currentQueueKeys.contains(fp) || avoidKeys.contains(fp) || addedKeys.contains(fp)) {
                         return false
                     }
                 }
 
+                // Session-level skip learning: paused if artist skipped >= 2 times in session
+                val artistKey = song.artist.lowercase().trim()
+                val sessionSkips = synchronized(sessionSkippedArtists) { sessionSkippedArtists[artistKey] ?: 0 }
+                if (sessionSkips >= 2) return false
+
+                // Active Mood Protection
                 val songGenre = song.genre?.lowercase()?.trim().orEmpty()
                 if (activeMood == Mood.CHILL) {
                     if (UPBEAT_GENRES.any { songGenre.contains(it) }) return false
@@ -1398,17 +1367,19 @@ object AutoQueueManager {
                     if (CHILL_GENRES.any { songGenre.contains(it) }) return false
                 }
 
-                val artistKey = song.artist.lowercase().trim()
                 val artistCount = addedArtists[artistKey] ?: 0
-                return artistCount < 2
+                return artistCount < 2 // Max 2 songs per artist in the added batch
             }
 
+            // Separate same-genre into popular and discovery (playCount = 0)
             val discoveryCandidates = sameGenreSongs.filter { song ->
-                (engagementsMap[song.id] ?: 0) == 0 && !song.isFavorite
+                val playCount = engagementDao?.getPlayCount(song.id) ?: 0
+                playCount == 0 && !song.isFavorite
             }.filter { canAddSong(it) }.shuffled().toMutableList()
 
             val popularGenreCandidates = sameGenreSongs.filter { song ->
-                (engagementsMap[song.id] ?: 0) > 0 || song.isFavorite
+                val playCount = engagementDao?.getPlayCount(song.id) ?: 0
+                playCount > 0 || song.isFavorite
             }.filter { canAddSong(it) }.shuffled().toMutableList()
 
             val sameArtistCandidates = sameArtistSongs.filter { canAddSong(it) }.shuffled().toMutableList()
@@ -1421,6 +1392,8 @@ object AutoQueueManager {
             while (addedCount < targetBatchSize) {
                 var addedInThisRound = false
 
+                // 1. YouTube / Local Related gets HIGHEST PRIORITY (First Priority - Vibe Match)
+                // We pull up to 2 related songs to anchor the vibe
                 for (i in 0 until 2) {
                     if (relatedCandidates.isNotEmpty()) {
                         val s = relatedCandidates.removeAt(0)
@@ -1428,10 +1401,9 @@ object AutoQueueManager {
                             finalSongsToAdd.add(s)
                             addToAddedVideoIds(s.id)
                             addedArtists[s.artist.lowercase().trim()] = (addedArtists[s.artist.lowercase().trim()] ?: 0) + 1
-                            val cleanTitle = s.title.lowercase().trim()
-                            val cleanArtist = s.artist.lowercase().trim()
-                            if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                                addedKeys.add("$cleanTitle|$cleanArtist")
+                            val fp = canonicalFingerprint(s.title, s.artist)
+                            if (fp.isNotEmpty()) {
+                                addedKeys.add(fp)
                             }
                             addedCount++
                             addedInThisRound = true
@@ -1441,6 +1413,8 @@ object AutoQueueManager {
 
                 if (addedCount >= targetBatchSize) break
 
+                // 2. Discovery Candidates (Never played before - New Discoveries)
+                // We pull up to 2 songs to encourage exploration of new music
                 for (i in 0 until 2) {
                     if (discoveryCandidates.isNotEmpty()) {
                         val s = discoveryCandidates.removeAt(0)
@@ -1448,10 +1422,9 @@ object AutoQueueManager {
                             finalSongsToAdd.add(s)
                             addToAddedVideoIds(s.id)
                             addedArtists[s.artist.lowercase().trim()] = (addedArtists[s.artist.lowercase().trim()] ?: 0) + 1
-                            val cleanTitle = s.title.lowercase().trim()
-                            val cleanArtist = s.artist.lowercase().trim()
-                            if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                                addedKeys.add("$cleanTitle|$cleanArtist")
+                            val fp = canonicalFingerprint(s.title, s.artist)
+                            if (fp.isNotEmpty()) {
+                                addedKeys.add(fp)
                             }
                             addedCount++
                             addedInThisRound = true
@@ -1461,16 +1434,16 @@ object AutoQueueManager {
 
                 if (addedCount >= targetBatchSize) break
 
+                // 3. Same Artist / Vibe Exploration
                 if (sameArtistCandidates.isNotEmpty()) {
                     val s = sameArtistCandidates.removeAt(0)
                     if (canAddSong(s)) {
                         finalSongsToAdd.add(s)
                         addToAddedVideoIds(s.id)
                         addedArtists[s.artist.lowercase().trim()] = (addedArtists[s.artist.lowercase().trim()] ?: 0) + 1
-                        val cleanTitle = s.title.lowercase().trim()
-                        val cleanArtist = s.artist.lowercase().trim()
-                        if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                            addedKeys.add("$cleanTitle|$cleanArtist")
+                        val fp = canonicalFingerprint(s.title, s.artist)
+                        if (fp.isNotEmpty()) {
+                            addedKeys.add(fp)
                         }
                         addedCount++
                         addedInThisRound = true
@@ -1479,16 +1452,16 @@ object AutoQueueManager {
 
                 if (addedCount >= targetBatchSize) break
 
+                // 4. Same Genre Popular Exploration
                 if (popularGenreCandidates.isNotEmpty()) {
                     val s = popularGenreCandidates.removeAt(0)
                     if (canAddSong(s)) {
                         finalSongsToAdd.add(s)
                         addToAddedVideoIds(s.id)
                         addedArtists[s.artist.lowercase().trim()] = (addedArtists[s.artist.lowercase().trim()] ?: 0) + 1
-                        val cleanTitle = s.title.lowercase().trim()
-                        val cleanArtist = s.artist.lowercase().trim()
-                        if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                            addedKeys.add("$cleanTitle|$cleanArtist")
+                        val fp = canonicalFingerprint(s.title, s.artist)
+                        if (fp.isNotEmpty()) {
+                            addedKeys.add(fp)
                         }
                         addedCount++
                         addedInThisRound = true
@@ -1497,16 +1470,16 @@ object AutoQueueManager {
 
                 if (addedCount >= targetBatchSize) break
 
+                // 5. Familiar Contextual (Favorites/Popular matching context - lower priority)
                 if (familiarCandidates.isNotEmpty()) {
                     val s = familiarCandidates.removeAt(0)
                     if (canAddSong(s)) {
                         finalSongsToAdd.add(s)
                         addToAddedVideoIds(s.id)
                         addedArtists[s.artist.lowercase().trim()] = (addedArtists[s.artist.lowercase().trim()] ?: 0) + 1
-                        val cleanTitle = s.title.lowercase().trim()
-                        val cleanArtist = s.artist.lowercase().trim()
-                        if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                            addedKeys.add("$cleanTitle|$cleanArtist")
+                        val fp = canonicalFingerprint(s.title, s.artist)
+                        if (fp.isNotEmpty()) {
+                            addedKeys.add(fp)
                         }
                         addedCount++
                         addedInThisRound = true
@@ -1516,6 +1489,7 @@ object AutoQueueManager {
                 if (!addedInThisRound) break
             }
 
+            // Fallback: If we couldn't build at least 6 songs due to strict limits, relax constraints
             if (finalSongsToAdd.size < 6) {
                 val remainingCandidates = (discovered + sameGenreSongs + familiarSongs).distinctBy { it.id }
                 for (s in remainingCandidates) {
@@ -1527,16 +1501,15 @@ object AutoQueueManager {
                         addedVideoIds.any { isSameSong(it, songIdStr) }
                     }
                     if (!isInQueue && !isAlreadyAdded && !isAvoid && !isAlreadyInAddedVideoIds) {
-                        val cleanTitle = s.title.lowercase().trim()
-                        val cleanArtist = s.artist.lowercase().trim()
-                        val isDuplicateTitleArtist = cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty() && 
-                            (currentQueueKeys.contains("$cleanTitle|$cleanArtist") || avoidKeys.contains("$cleanTitle|$cleanArtist") || addedKeys.contains("$cleanTitle|$cleanArtist"))
+                        val fp = canonicalFingerprint(s.title, s.artist)
+                        val isDuplicateTitleArtist = fp.isNotEmpty() && 
+                            (currentQueueKeys.contains(fp) || avoidKeys.contains(fp) || addedKeys.contains(fp))
                         
                         if (!isDuplicateTitleArtist) {
                             finalSongsToAdd.add(s)
                             addToAddedVideoIds(s.id)
-                            if (cleanTitle.isNotEmpty() && cleanArtist.isNotEmpty()) {
-                                addedKeys.add("$cleanTitle|$cleanArtist")
+                            if (fp.isNotEmpty()) {
+                                addedKeys.add(fp)
                             }
                             if (finalSongsToAdd.size >= 8) break
                         }
@@ -1547,17 +1520,14 @@ object AutoQueueManager {
             if (finalSongsToAdd.isEmpty()) {
                 printd("AutoQueueManager: No songs to add this loop — emptyFetchCount=$emptyFetchCount")
                 emptyFetchCount++
-                if (emptyFetchCount >= 3) {
-                    continuationToken = null
-                    currentWatchEndpoint = null
-                }
-                continue
+                continue // Count empty loops; break handled at loop top
             }
-            emptyFetchCount = 0
+            emptyFetchCount = 0 // Reset on successful add
 
             val mediaItems = finalSongsToAdd.map { MediaItemBuilder.build(it) }
             withContext(Dispatchers.Main) {
                 player.addMediaItems(mediaItems)
+                // Notify the engine to refresh its queue snapshot immediately.
                 onQueueItemsAddedCallback?.invoke()
             }
             printd("AutoQueueManager: Appended ${mediaItems.size} songs to queue")
@@ -1581,8 +1551,13 @@ object AutoQueueManager {
                     .filter { it.id !in addedVideoIdsLocal }
 
                 if (filteredItems.isEmpty()) {
+                    // All items in this continuation batch are already added.
+                    // If we also have no continuation left, reset addedVideoIds
+                    // (keeping only current song) and try a fresh endpoint so we
+                    // don't get permanently stuck returning 0 songs.
                     if (nextResult.continuation == null) {
                         printd("AutoQueueManager: Continuation exhausted and all items filtered — resetting addedVideoIds for fresh fetch")
+                        // Compute retained set without holding the lock during isSameSong evaluation
                         val retainedSet = synchronized(addedVideoIds) {
                             addedVideoIds.filter { isSameSong(it, videoId) }.toMutableSet()
                         }
@@ -1594,15 +1569,22 @@ object AutoQueueManager {
                         continuationToken = null
                         currentWatchEndpoint = WatchEndpoint(videoId = videoId, playlistId = "RDAMVM$videoId")
                     } else {
+                        // More continuation available — just return empty to try next page
                         printd("AutoQueueManager: All fetched items already added, will try next continuation")
                     }
                     return@onSuccess
                 }
 
+                // Add each to tracking set — must use loop, not forEach, because addToAddedVideoIds is suspend
+                for (item in filteredItems) {
+                    addToAddedVideoIds(item.id)
+                }
                 fetchedSongs = filteredItems.map { it.toNativeSong() }
             }.onFailure { e ->
                 printe("AutoQueueManager: Failed to fetch related online: ${e.message}")
+                // On network failure, reset endpoint to allow retry next time
                 continuationToken = null
+                currentWatchEndpoint = null
             }
             return fetchedSongs
         } catch (e: CancellationException) {
@@ -1610,6 +1592,7 @@ object AutoQueueManager {
         } catch (e: Exception) {
             printe("AutoQueueManager: Exception fetching online related songs: ${e.message}")
             continuationToken = null
+            currentWatchEndpoint = null
             return emptyList()
         }
     }
@@ -1683,6 +1666,7 @@ object AutoQueueManager {
                 }
             }
             
+            // Scarce local related songs fallback improvement!
             if (filtered.size < 12 && currentSong != null) {
                 val artistSongs = dao.getSongsByArtistName(currentSong.artistName, 30)
                 val genreSongs = if (!currentSong.genre.isNullOrBlank() && !currentSong.genre.equals("YouTube", ignoreCase = true)) {
@@ -1748,6 +1732,7 @@ object AutoQueueManager {
             val relatedMaps = mutableListOf<RelatedSongMap>()
 
             withContext(Dispatchers.IO) {
+                // Check if source song exists in DB, if not, insert it first!
                 val exists = dao.getSongByIdOnce(sourceLongId) != null
                 if (!exists) {
                     val (currentMediaItem, playerDuration) = withContext(Dispatchers.Main) {
@@ -1756,7 +1741,6 @@ object AutoQueueManager {
                     if (currentMediaItem != null) {
                         val title = currentMediaItem.mediaMetadata.title?.toString() ?: ""
                         val artist = currentMediaItem.mediaMetadata.artist?.toString() ?: ""
-                        // Standardized negative ID offsets matching Mappers.kt to avoid collision with positive local MediaStore IDs
                         val artistLongId = -(17_000_000_000_000L + kotlin.math.abs(artist.lowercase().hashCode().toLong()))
                         val album = currentMediaItem.mediaMetadata.albumTitle?.toString() ?: "YouTube Music"
                         val albumLongId = -(16_000_000_000_000L + kotlin.math.abs(album.lowercase().hashCode().toLong()))
@@ -1880,6 +1864,7 @@ object AutoQueueManager {
                     )
                 }
 
+                // Strictly insert artist/album first due to Foreign Key constraints referenced in SongEntity
                 dao.insertArtists(artistEntities.distinctBy { it.id })
                 dao.insertAlbums(albumEntities.distinctBy { it.id })
                 dao.insertSongs(songEntities.distinctBy { it.id })
